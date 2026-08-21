@@ -1,0 +1,100 @@
+{
+  "entities": [
+    {
+      "name": "deals",
+      "grain": "one row per deal/opportunity",
+      "fields": [
+        {
+          "name": "deal_id",
+          "type": "int"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "values": [
+            "won",
+            "lost"
+          ]
+        },
+        {
+          "name": "discount",
+          "type": "decimal"
+        },
+        {
+          "name": "revenue",
+          "type": "decimal"
+        },
+        {
+          "name": "margin",
+          "type": "decimal"
+        },
+        {
+          "name": "quarter_id",
+          "type": "int"
+        },
+        {
+          "name": "region_id",
+          "type": "int"
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "quarters",
+      "grain": "one row per fiscal quarter",
+      "fields": [
+        {
+          "name": "quarter_id",
+          "type": "int"
+        },
+        {
+          "name": "quarter_name",
+          "type": "string",
+          "values": [
+            "FY26 Q1",
+            "FY26 Q2",
+            "FY26 Q3",
+            "FY26 Q4"
+          ]
+        },
+        {
+          "name": "fiscal_year",
+          "type": "int"
+        },
+        {
+          "name": "quarter_number",
+          "type": "int"
+        },
+        {
+          "name": "start_date",
+          "type": "date"
+        },
+        {
+          "name": "end_date",
+          "type": "date"
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "regions",
+      "grain": "one row per region",
+      "fields": [
+        {
+          "name": "region_id",
+          "type": "int"
+        },
+        {
+          "name": "region_name",
+          "type": "string",
+          "values": [
+            "AMER",
+            "EMEA",
+            "APAC"
+          ]
+        }
+      ],
+      "references": null
+    }
+  ]
+}

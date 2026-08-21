@@ -1,0 +1,129 @@
+{
+  "entities": [
+    {
+      "name": "opportunities",
+      "grain": "one row per opportunity/deal",
+      "fields": [
+        {
+          "name": "opportunity_id",
+          "type": "int"
+        },
+        {
+          "name": "account_id",
+          "type": "int"
+        },
+        {
+          "name": "stage",
+          "type": "string",
+          "values": [
+            "Prospecting",
+            "Qualification",
+            "Proposal",
+            "Negotiation",
+            "Closed Won",
+            "Closed Lost"
+          ]
+        },
+        {
+          "name": "close_status",
+          "type": "string",
+          "values": [
+            "Won",
+            "Lost",
+            "Open"
+          ]
+        },
+        {
+          "name": "close_date",
+          "type": "date"
+        },
+        {
+          "name": "deal_value",
+          "type": "decimal"
+        },
+        {
+          "name": "discount",
+          "type": "decimal"
+        }
+      ],
+      "references": "accounts"
+    },
+    {
+      "name": "accounts",
+      "grain": "one row per account",
+      "fields": [
+        {
+          "name": "account_id",
+          "type": "int"
+        },
+        {
+          "name": "account_name",
+          "type": "string"
+        },
+        {
+          "name": "segment",
+          "type": "string",
+          "values": [
+            "SMB",
+            "Mid-Market",
+            "Enterprise"
+          ]
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "values": [
+            "AMER",
+            "EMEA",
+            "APAC"
+          ]
+        },
+        {
+          "name": "industry",
+          "type": "string",
+          "values": [
+            "Technology",
+            "Healthcare",
+            "Financial Services",
+            "Manufacturing",
+            "Retail",
+            "Energy",
+            "Telecommunications",
+            "Education",
+            "Government",
+            "Other"
+          ]
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "fiscal_calendar",
+      "grain": "one row per day",
+      "fields": [
+        {
+          "name": "date",
+          "type": "date"
+        },
+        {
+          "name": "fiscal_year",
+          "type": "int",
+          "values": [
+            2026
+          ]
+        },
+        {
+          "name": "fiscal_quarter",
+          "type": "string",
+          "values": [
+            "Q1",
+            "Q2",
+            "Q3",
+            "Q4"
+          ]
+        }
+      ],
+      "references": null
+    }
+  ]
+}

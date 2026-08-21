@@ -1,0 +1,51 @@
+Intro:
+This project is called SynGen. The purpose of this is to create high quality tabular synthetic datasets replicating business scenarios. Think Revops, Finance, etc. The use case is to demonstrate BI tools, Planning tools or any other analytical prowess. The one different caveat is this is not going to generate random data. User will provide a story and the dataset should match the story. In Analytics teams, they tell a story in slides from raw data after so many digging through, we are doing reverse. We will have story, we have to generate the dataset.
+
+Vision:
+- I want this to be like an agentic harness rather than a deterministic software. 
+- Now what does harness mean? There will be multiple agents that is purposed for something. 
+- What are agents: planning, tool use, memory, and validation. 
+- Where does our Harness fit in? It is the orchestration Engine.
+- Think Claude Code but for synthetic tabular datasets. 
+
+Initially I am thinking CLI based tool. User works along with the SynGen to get the Dataset generated. Let me give you an example story:
+
+> **Pipeline coverage remained healthy at 3.5x, but next-quarter revenue risk increased.** Coverage was concentrated in a small number of large Enterprise opportunities, creating significant dependency on fewer deals. Deal concentration increased forecast volatility even though aggregate coverage looked sufficient. The underlying issue was **pipeline concentration and forecast intelligence**, not simply pipeline quantity.
+
+Now the harness is supposed to decompose the given task, understand the intent and generate the dataset that lands the story. 
+
+This story is something happens in real time in revops. So we also need to generate a dataset that emulates real world. 
+
+This needs to be done in phases due to its complexity. Here's what I am thinking.
+
+Phase 1: Plan 
+- Interpret the story, decompose the story.
+- Capture domain objective, name a persona who works on those type of problems.
+- Capture domain specific data semantics
+
+Phase 2: Spec evaluation
+This is a tricky phase. Here we use Phase 1's output as reasoning to enter Phase 2. We will try to generate these items. 
+- Entities & dimensions
+- Relationships
+- Measures
+- Time model
+- Distributions
+- Correlations
+- Temporal behavior
+- Business constraints
+- Assumptions
+- Validation criteria
+However to generate this, we need a reasoning layer. I am thinking we have 3 persona's: 1. Domain expert who works day to day on these kind of contexts, 2. Business Intelligence Engineer and 3. Domain but outsider's take. From the above example prompt, you can see they never mentioned how many regions or how many quarters needed, what kind of industry, etc. These things are sorted here.
+
+Phase 3: Harness
+Here's what I think is a good idea. we should generate python script to generate random data with right schema. then there is also a simulator.json which is the constraint engine. Think Anaplan, we can only to planning if we have the data and arrive at base case, best case, etc. We tweak the parameters to arrive at the base case, best case, etc. This is somewhat similar. 
+Here three things happen
+- Schema builder
+- Script generation to get dataset
+- simulator json.
+
+Phase 4: Simulation
+Now we have the script, we have the simulator, this will be like a reinforcement learning. tweak the knobs in simulator until we land the story.
+
+Phase 5: Validation and Testing
+End to End testing

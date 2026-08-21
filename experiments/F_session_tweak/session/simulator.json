@@ -1,0 +1,49 @@
+{
+  "seed": 42,
+  "time_model": {
+    "fiscal_year": "FY26",
+    "quarter_labels": ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"],
+    "quarter_end_dates": ["2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31"]
+  },
+  "output": {
+    "workbook": "../F_session_tweak/output/tweaked.xlsx"
+  },
+  "accounts": {
+    "count": 60,
+    "regions": { "AMER": 0.45, "EMEA": 0.30, "APAC": 0.25 },
+    "segments": { "Enterprise": 0.22, "Mid-Market": 0.40, "SMB": 0.26, "CSB": 0.12 },
+    "industries": [
+      "Software", "Manufacturing", "Healthcare", "Financial Services",
+      "Retail", "Logistics", "Energy", "Telecom"
+    ]
+  },
+  "opportunities": {
+    "per_quarter": 400,
+    "win_rate": 0.27,
+    "win_rate_jitter": 0.005,
+    "owners": [
+      "Jordan Lee", "Priya Patel", "Marcus Webb", "Sofia Reyes",
+      "Daniel Kim", "Anna Novak", "Tom Okafor", "Elena Petrova"
+    ],
+    "deal_duration_days": [20, 90],
+    "close_clustering": {
+      "share_in_end_of_quarter_window": 0.30
+    },
+    "deal_size_lognormal": {
+      "median_usd": 45000,
+      "sigma": 0.8
+    },
+    "discount": {
+      "base_by_quarter": {
+        "AMER": [11.5, 14, 15.5, 17.5],
+        "APAC": [11.5, 14, 15.5, 17.5],
+        "EMEA": [11.5, 13.5, 21, 24]
+      },
+      "noise_sd_pp": 3,
+      "end_of_quarter_boost_pp": 6.5,
+      "end_of_quarter_window_days": 14,
+      "min_pct": 0,
+      "max_pct": 40
+    }
+  }
+}

@@ -1,0 +1,70 @@
+Forecast & Pipeline
+-------------------
+Domain: RevOps / Forecast Accuracy
+5 regions, 3 segments, 4 products, 6 quarters. Pipeline coverage is stable at ~3.2x, but forecast accuracy has fallen from 87% to 68% over the last 3 quarters, concentrated in Enterprise. Reps are increasingly pushing deals between quarters, with ~22% of late-stage 
+pipeline slipping at least once.
+
+Domain: RevOps / Pipeline Quality
+4 regions, 3 segments, 3 products, 8 quarters. Pipeline has grown 35%, but bookings have grown only 8%, with conversion from qualified opportunity to closed-won falling from 24% to 15%. The deterioration is concentrated in two high-volume inbound channels that now represent ~40% of pipeline.
+
+Domain: RevOps / Deal Inspection
+3 regions, 4 segments, 5 products, 6 quarters. Deals entering Negotiation have increased 50%, but average time in Negotiation has doubled from 18 to 37 days. Enterprise accounts represent only 25% of opportunities but 60% of the stuck pipeline, suggesting a late-stage execution bottleneck.
+
+Domain: RevOps / Forecast + Pipeline Aging
+6 regions, 3 segments, 3 products, 7 quarters. The company consistently forecasts ~15% above actual bookings despite maintaining 3x+ pipeline coverage. Nearly 30% of forecasted pipeline is more than 90 days old, and stale opportunities are disproportionately owned by mid-tenure reps.
+
+Capacity & Productivity
+-------------------
+Domain: RevOps / Sales Capacity
+4 regions, 3 segments, 4 products, 6 quarters. Headcount increased 28% while bookings grew only 9%. The bottom 35% of reps account for ~18% of bookings but carry 32% of quota capacity, with the largest productivity gap appearing in newly created territories.
+
+Domain: RevOps / Rep Productivity
+5 regions, 3 segments, 3 products, 8 quarters. Rep attainment varies from 62% to 118% despite similar quotas and tenure. High-performing reps generate ~2.5x more pipeline per rep, while low performers spend ~35% more time on non-selling activities.
+
+Domain: RevOps / Ramp Management
+3 regions, 3 segments, 4 products, 6 quarters. New-rep headcount doubled over the last 4 quarters, but average time-to-productivity increased from 5 to 8 months. Enterprise reps ramp significantly slower than SMB reps, and ~40% of new hires fail to reach 75% of quota within their first year.
+
+Domain: RevOps / Capacity Planning
+4 regions, 4 segments, 3 products, 6 quarters. The company plans to add 60 reps next year, but current territory-level pipeline suggests capacity is already mismatched to demand. 20% of territories have more than 4x pipeline coverage while 30% have less than 1.5x, creating a question of whether to hire, redistribute, or redesign capacity.
+
+Territory Design & Alignment
+-------------------
+Domain: RevOps / Territory Alignment
+5 regions, 3 segments, 4 products, 6 quarters. Territory assignments have remained unchanged for 2 years despite major account growth and contraction. The top 15% of territories now contain ~40% of addressable ARR, while 25% of territories have less than half the average opportunity potential.
+
+Domain: RevOps / Account Coverage
+4 regions, 3 segments, 3 products, 8 quarters. Enterprise accounts are increasingly concentrated in a small number of territories, with the largest territories carrying ~3x the account potential of the smallest. Reps covering overloaded territories have 20% lower activity per account and significantly longer response times.
+
+Domain: RevOps / Territory + Performance
+6 regions, 3 segments, 5 products, 6 quarters. Two regions consistently outperform quota while three regions underperform despite comparable rep experience. After adjusting for account potential, the performance gap narrows substantially, suggesting territory quality may explain more of the variance than rep productivity.
+
+Domain: RevOps / Ownership & Routing
+4 regions, 4 segments, 3 products, 5 quarters. ~12% of inbound leads are being reassigned at least once before reaching a rep, and ~4% are reassigned three or more times. Lead-to-opportunity conversion is 40% lower for reassigned leads, with most routing conflicts occurring around strategic and enterprise accounts.
+
+Quote, Pricing & Deal Management
+-------------------
+Domain: RevOps / Quote Management
+4 regions, 3 segments, 4 products, 6 quarters. Quote volume has increased 45%, but quote-to-close conversion has fallen from 38% to 29%. Deals requiring more than two quote revisions take ~18 days longer to close, with discounting and product configuration changes accounting for most revisions.
+
+Domain: RevOps / Pricing & Discounting
+5 regions, 3 segments, 3 products, 7 quarters. Average discount increased from 11% to 19% while win rate improved only 2 percentage points. Enterprise deals receive the deepest discounts, but ~35% of heavily discounted deals still have below-average win rates, suggesting discounting may not be driving incremental conversion.
+
+Domain: RevOps / Quote-to-Cash
+3 regions, 4 segments, 4 products, 6 quarters. Closed-won volume is healthy, but the median time from opportunity close to signed order increased from 4 to 11 days. ~15% of deals require commercial or legal rework, concentrated in multi-product Enterprise deals and a small number of regions.
+
+Domain: RevOps / Product Mix + Deal Economics
+4 regions, 3 segments, 5 products, 8 quarters. Bookings are up 12%, but average ARR per deal is down 17% as sales mix shifts toward a lower-priced product. The premium product has a 2x higher win rate in Enterprise but is increasingly being displaced by bundled discounts.
+
+GTM / Attribution / Expansion
+-------------------
+Domain: RevOps / Marketing Attribution
+5 regions, 3 segments, 4 products, 6 quarters. Marketing-sourced pipeline increased 60%, but marketing-sourced bookings increased only 12%. Paid channels generate ~50% of new opportunities but only ~20% of closed-won ARR, while partner-sourced opportunities have the highest conversion and ACV.
+
+Domain: RevOps / Lead Routing + SLA
+4 regions, 3 segments, 3 products, 6 quarters. Inbound lead volume increased 40% while SDR headcount increased only 10%. Leads contacted within 4 hours convert at ~2.2x the rate of leads contacted after 24 hours, but ~28% of qualified leads currently miss the response SLA.
+
+Domain: RevOps / Customer Expansion
+4 regions, 3 segments, 4 products, 8 quarters. New-logo ARR is growing 15%, but net revenue retention has fallen from 118% to 104%. Expansion opportunities are increasingly concentrated among Enterprise customers, yet only ~35% of eligible accounts receive a documented expansion motion each quarter.
+
+Domain: RevOps / Cross-functional GTM
+5 regions, 3 segments, 4 products, 6 quarters. Sales, Marketing, and Customer Success each report healthy performance, but overall revenue growth has stalled at ~6%. Marketing-generated pipeline is up 30%, Sales win rates are stable, and retention is above 90%; however, handoffs between teams have deteriorated, with ~20% of qualified opportunities lacking a clear owner or next action for more than 14 days.

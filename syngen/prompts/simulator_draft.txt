@@ -1,0 +1,42 @@
+You are a Business Intelligence engineer designing a synthetic dataset config. Given a story, acceptance criteria, and a spec, produce a simulator.json that can generate a dataset satisfying all criteria.
+
+The generator engine supports EXACTLY this schema (do not invent fields):
+{
+  "seed": <int>,
+  "time_model": {"fiscal_year": "FY26", "quarter_labels": [...], "quarter_end_dates": [...]},
+  "output": {"workbook": "output/dataset.xlsx"},
+  "accounts": {
+    "count": <int>, "regions": {name: weight}, "segments": {name: weight}, "industries": [...]
+  },
+  "opportunities": {
+    "per_quarter": <int>,
+    "win_rate": <0-1>, "win_rate_jitter": <small fraction>,
+    "owners": [names...],
+    "deal_duration_days": [lo, hi],
+    "close_clustering": {"share_in_end_of_quarter_window": <0-1>},
+    "deal_size_lognormal": {"median_usd": <num>, "sigma": <num>},
+    "discount": {
+      "base_by_quarter": {"<region>": [<one value per quarter>], ...},
+      "noise_sd_pp": <num>, "end_of_quarter_boost_pp": <num>,
+      "end_of_quarter_window_days": <int>, "min_pct": 0, "max_pct": 40
+    }
+  }
+}
+
+Calibration guidance from prior experiments:
+- Won-deal average discount per quarter ~= blend(base curves by region mix) + share_in_window * boost
+- Realized/list pct ~= 100 - won avg discount + ~1.8pp revenue-weighting bonus
+- Win rate noise at n deals/quarter has std = sqrt(p*(1-p)/n): pick per_quarter large enough that win-rate criteria are reachable
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Assumptions to use unless criteria say otherwise: fiscal year FY26 with 4 quarters; regions AMER/EMEA/APAC; seed 42.
+
+Respond with ONLY the JSON object for simulator.json.

@@ -1,0 +1,95 @@
+{
+    "definitions":  {
+                        "discount_scope":  "closed_won_only",
+                        "win_rate":  "closed_won / (closed_won + closed_lost), per quarter",
+                        "end_of_quarter_window_days":  14,
+                        "mid_quarter_days":  [
+                                                 15,
+                                                 74
+                                             ]
+                    },
+    "criteria":  [
+                     {
+                         "id":  "AC1",
+                         "name":  "Win rate flat across quarters",
+                         "check":  "win_rate_flat",
+                         "params":  {
+                                        "band_pp":  3.0
+                                    }
+                     },
+                     {
+                         "id":  "AC2",
+                         "name":  "Q1 avg discount ~12%",
+                         "check":  "avg_discount_quarter",
+                         "params":  {
+                                        "quarter":  "FY26-Q1",
+                                        "target_pct":  12.0,
+                                        "tolerance_pp":  2.0
+                                    }
+                     },
+                     {
+                         "id":  "AC3",
+                         "name":  "Q4 avg discount ~21% (amended story)",
+                         "check":  "avg_discount_quarter",
+                         "params":  {
+                                        "quarter":  "FY26-Q4",
+                                        "target_pct":  21,
+                                        "tolerance_pp":  2.0
+                                    }
+                     },
+                     {
+                         "id":  "AC4",
+                         "name":  "Discount trend rises without dips \u003e1pp",
+                         "check":  "discount_trend_monotonic",
+                         "params":  {
+                                        "max_dip_pp":  1.0
+                                    }
+                     },
+                     {
+                         "id":  "AC5",
+                         "name":  "EMEA premium \u003e= +5pp in H2",
+                         "check":  "region_discount_premium",
+                         "params":  {
+                                        "region":  "EMEA",
+                                        "vs":  [
+                                                   "AMER",
+                                                   "APAC"
+                                               ],
+                                        "min_premium_pp":  5.0,
+                                        "quarters":  [
+                                                         "FY26-Q3",
+                                                         "FY26-Q4"
+                                                     ]
+                                    }
+                     },
+                     {
+                         "id":  "AC6",
+                         "name":  "End-of-quarter discount effect \u003e= +5pp",
+                         "check":  "end_of_quarter_effect",
+                         "params":  {
+                                        "window_days":  14,
+                                        "min_gap_pp":  5.0
+                                    }
+                     },
+                     {
+                         "id":  "AC7",
+                         "name":  "Realized/list declines 88% -\u003e 79% (amended: follows from AC3)",
+                         "check":  "realized_vs_list",
+                         "params":  {
+                                        "quarter_start":  "FY26-Q1",
+                                        "target_start_pct":  88.0,
+                                        "quarter_end":  "FY26-Q4",
+                                        "target_end_pct":  79,
+                                        "tolerance_pp":  2.0
+                                    }
+                     },
+                     {
+                         "id":  "AC8",
+                         "name":  "Data sanity constraints",
+                         "check":  "data_sanity",
+                         "params":  {
+                                        "max_discount_pct":  40.0
+                                    }
+                     }
+                 ]
+}

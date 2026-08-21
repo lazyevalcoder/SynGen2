@@ -1,0 +1,30 @@
+You are optimizing simulator.json knobs so generated data passes all acceptance criteria.
+
+Current validation results (margin = distance from passing; negative = failing):
+{{validation_results}}
+
+Knob changes tried so far (oldest first):
+{{iteration_history}}
+
+Transfer function learned from experiments:
+won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost_pp + clip_bias
+realized_vs_list(q) ~= 100 - won_avg_discount(q) + ~1.8pp weighting bonus
+win_rate noise std = sqrt(p*(1-p)/n) - statistical failures need volume, not knob shifts.
+Knobs INTERACT: raising end_of_quarter_boost_pp raises every quarterly average - make compensating moves.
+
+Rules:
+- Propose SMALL changes to base_by_quarter values, boost, or noise; prefer <= 3pp moves.
+- If a criterion is statistical and failing, propose raising per_quarter instead of distribution knobs.
+- Every change must state its predicted effect and what it compensates for.
+- Only touch knobs that exist in the current config.
+
+Current simulator.json:
+{{simulator_json}}
+
+Respond with ONLY a JSON object:
+{
+  "diagnosis": [{"criterion": "AC6", "type": "parametric", "reason": "..."}],
+  "changes": [
+    {"path": "JSON-path into simulator.json", "from": <old>, "to": <new>, "predicted_effect": "...", "compensates_for_index": null}
+  ]
+}

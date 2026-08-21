@@ -1,0 +1,138 @@
+{
+  "entities": [
+    {
+      "name": "Segment",
+      "grain": "one row per sales segment",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "values": [
+            "Enterprise",
+            "Mid-Market",
+            "SMB"
+          ]
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "Region",
+      "grain": "one row per geographic region",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "values": [
+            "AMER",
+            "EMEA",
+            "APAC"
+          ]
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "Period",
+      "grain": "one row per day",
+      "fields": [
+        {
+          "name": "date",
+          "type": "date"
+        },
+        {
+          "name": "quarter",
+          "type": "string",
+          "values": [
+            "Q1",
+            "Q2",
+            "Q3",
+            "Q4"
+          ]
+        },
+        {
+          "name": "fiscal_year",
+          "type": "string",
+          "values": [
+            "FY26"
+          ]
+        },
+        {
+          "name": "half",
+          "type": "string",
+          "values": [
+            "H1",
+            "H2"
+          ]
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "Deal",
+      "grain": "one row per deal/opportunity",
+      "fields": [
+        {
+          "name": "deal_date",
+          "type": "date"
+        },
+        {
+          "name": "segment_id",
+          "type": "string"
+        },
+        {
+          "name": "region_id",
+          "type": "string"
+        },
+        {
+          "name": "period_id",
+          "type": "string"
+        },
+        {
+          "name": "pipeline_value",
+          "type": "decimal"
+        },
+        {
+          "name": "revenue",
+          "type": "decimal"
+        },
+        {
+          "name": "discount_pct",
+          "type": "decimal"
+        },
+        {
+          "name": "discount_amount",
+          "type": "decimal"
+        }
+      ],
+      "references": "Segment, Region, Period"
+    },
+    {
+      "name": "PipelineTarget",
+      "grain": "one row per segment x region x period allocation",
+      "fields": [
+        {
+          "name": "segment_id",
+          "type": "string"
+        },
+        {
+          "name": "region_id",
+          "type": "string"
+        },
+        {
+          "name": "period_id",
+          "type": "string"
+        },
+        {
+          "name": "target_pipeline",
+          "type": "decimal"
+        },
+        {
+          "name": "target_deals",
+          "type": "int"
+        }
+      ],
+      "references": "Segment, Region, Period"
+    }
+  ]
+}

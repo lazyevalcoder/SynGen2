@@ -1,0 +1,83 @@
+{
+  "entities": [
+    {
+      "name": "region",
+      "grain": "one row per region",
+      "fields": [
+        {
+          "name": "region_name",
+          "type": "string",
+          "values": [
+            "AMER",
+            "EMEA",
+            "APAC"
+          ]
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "rep",
+      "grain": "one row per sales rep",
+      "fields": [
+        {
+          "name": "rep_name",
+          "type": "string"
+        }
+      ],
+      "references": "region"
+    },
+    {
+      "name": "fiscal_period",
+      "grain": "one row per fiscal quarter",
+      "fields": [
+        {
+          "name": "fiscal_year",
+          "type": "string"
+        },
+        {
+          "name": "fiscal_quarter",
+          "type": "string",
+          "values": [
+            "Q1",
+            "Q2",
+            "Q3",
+            "Q4"
+          ]
+        },
+        {
+          "name": "quarter_start_date",
+          "type": "date"
+        }
+      ],
+      "references": null
+    },
+    {
+      "name": "deal",
+      "grain": "one row per deal",
+      "fields": [
+        {
+          "name": "deal_amount",
+          "type": "decimal"
+        },
+        {
+          "name": "discount_pct",
+          "type": "decimal"
+        },
+        {
+          "name": "win_loss",
+          "type": "string",
+          "values": [
+            "won",
+            "lost"
+          ]
+        },
+        {
+          "name": "close_date",
+          "type": "date"
+        }
+      ],
+      "references": "rep"
+    }
+  ]
+}
