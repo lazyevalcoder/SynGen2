@@ -1,6 +1,8 @@
 # SynGen — Roadmap
 
-> **Status:** v1. Milestone-based (no dates — solo/asynchronous cadence). Each milestone: scope, exit criteria, and which open gaps (G1–G12 from `GAPS_AND_RISKS.md`) it retires. A milestone is done when its exit criteria pass, not when its code exists.
+> **Status:** v1. Milestone-based (no dates — solo/asynchronous cadence). Each milestone: scope, exit criteria, and which open gaps (G1–G14 from `GAPS_AND_RISKS.md`) it retires. A milestone is done when its exit criteria pass, not when its code exists.
+>
+> **V1 completion bar:** v1 is not "done" at M5 — it is done when all 25 narratives in `V1_SCENARIO_REQUIREMENTS.md` land end-to-end. M4/M5 below are the vehicle; the scenario doc is the requirements list and sequencing guide (its workstreams WS1–WS8 slot into M4/M5 as sized).
 
 ---
 
@@ -49,27 +51,29 @@
 
 ## M4 — Generalization
 
-**Scope:** Prove it's not a one-trick harness.
+**Scope:** Prove it's not a one-trick harness, guided by `V1_SCENARIO_REQUIREMENTS.md`.
 - Second story domain (candidate: sales-cycle slowdown or renewal/churn — both scoped during experiments)
 - Persona critique A/B: criteria quality with vs without persona pass (FR3)
-- Engine extensions only if the second domain demands them (open-pipeline state machine G5, multi-fact ordering G6)
+- Scenario-driven workstreams begin: WS3 (aggregate targets/raking), WS1 (planning entity layer: quotas/territories/capacity), WS8 (distribution extensions) — these alone make 11 of the 25 v1 scenarios landable
+- Engine extensions only if the second domain demands them beyond that (open-pipeline state machine G5 → WS6, multi-fact ordering G6)
 
-**Exit criteria:** Second domain lands end-to-end via M2's bar. Persona A/B verdict recorded — keep, rework, or cut.
+**Exit criteria:** Second domain lands end-to-end via M2's bar; first WS1/WS3-powered scenario lands. Persona A/B verdict recorded — keep, rework, or cut.
 
-**Retires:** G1 (personas), G5/G6 (or explicit re-scope), advances G12 (new-domain lint rules).
+**Retires:** G1 (personas), G5/G6 progress (or explicit re-scope), advances G12 (new-domain lint rules).
 
 ---
 
 ## M5 — Automation & Polish
 
-**Scope:** Make the loop genuinely hands-off.
+**Scope:** Make the loop genuinely hands-off, then complete the scenario surface.
 - Knob-delta proposer agent using transfer-function notes + iteration history (G3)
 - Margin-aware convergence targeting mid-band by default (G4)
 - Packaging: installable CLI, docs site-ready README, prompt library externalized
+- Remaining v1 workstreams: WS2 (products), WS4 (correlation), WS6 (open-pipeline state machine), WS7 (temporal entities) — completing all 25 scenarios per `V1_SCENARIO_REQUIREMENTS.md`
 
-**Exit criteria:** All PRD success metrics green. Fresh story → landed dataset with zero human touches between Gate 1 and Gate 2 on ≥80% of attempts.
+**Exit criteria:** All PRD success metrics green AND all 25 scenarios landable end-to-end. Fresh story → landed dataset with zero human touches between Gate 1 and Gate 2 on ≥80% of attempts.
 
-**Retires:** G2, G3, G4, G8 (token-budget auto-retry), remaining G12 items.
+**Retires:** G2, G3, G4, G8 (token-budget auto-retry), G14 (proposal allowlist), remaining G12/G13 items.
 
 ---
 

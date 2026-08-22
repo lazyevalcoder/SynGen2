@@ -61,6 +61,8 @@ From ARCHITECTURE §6: no multi-agent orchestration frameworks, no web UI, no se
 
 ## 7. Success Metrics
 
+**Breadth target (v1):** all 25 RevOps narratives in `V1_SCENARIO_REQUIREMENTS.md` landable end-to-end — this is the definition of v1 completion (see ROADMAP).
+
 | Metric | Target |
 |--------|--------|
 | Fresh story of a known template lands unattended | ≤10 iterations, ≥80% of attempts |
