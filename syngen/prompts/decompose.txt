@@ -13,7 +13,7 @@ Story:
 {{story}}
 
 Context you may assume:
-- Data model: accounts table + opportunities table (list price, realized price, discount pct, close date, stage, region, segment, owner)
+- Data model: accounts table + opportunities table (list price, realized price, discount pct, close date, stage, region, segment, owner). When the story references plans/quotas, a quota_plan sheet (per-segment quarterly revenue targets) is generated too and revenue_vs_plan measures attainment against it.
 
 Respond with ONLY a JSON object:
 {
@@ -48,6 +48,7 @@ Available checks and their params:
 - end_of_quarter_effect: {window_days, min_gap_pp}
 - realized_vs_list: {quarter_start, target_start_pct, quarter_end, target_end_pct, tolerance_pp}
 - data_sanity: {max_discount_pct}
+- revenue_vs_plan: {segment, target_pct, band_pct} - attainment of that segment's quarterly revenue plan. Use when the story references quotas/plans or "missed/exceeded plan by X%" for a NAMED segment. target_pct is the story's expected attainment: missed plan by ~5% -> target_pct=95; beat by ~4% -> target_pct=104. band_pct is tolerance (2 is a good default). IMPORTANT: only reference segments the story names; NEVER invent aggregate segments like "Total" or "Overall" - if the story makes an overall claim, express it as criteria on the named segments that compose it.
 
 IMPORTANT semantics:
 - realized_vs_list measures REVENUE RETAINED as a percentage of list price. Its targets are approximately 100 minus the discount percentages (e.g., discounts rising 12% to 18% means realized/list falls ~88% to ~82%), NOT the discount values themselves.

@@ -192,6 +192,52 @@ def check_data_sanity(opp, accounts, params):
     return _result(ok, "clean" if ok else "violations", "no violations", detail, margin)
 
 
+def check_revenue_vs_plan(opp, accounts, params):
+    """Attainment of a segment's quarterly revenue plan (WS3).
+
+    Reads the workbook's quota_plan sheet (injected into params by the
+    runner as '_quota_df'). Attainment = closed-won realized / target * 100
+    per quarter; worst quarter decides. The criterion carries the story's
+    expected attainment (e.g., missed plan by 5% -> target_pct 95).
+    """
+    plan = params.get("_quota_df")
+    seg = params["segment"]
+    band = float(params["band_pct"])
+    target_pct = float(params.get("target_pct", 100.0))
+    if plan is None or not len(plan):
+        r = _result(False, "no quota_plan sheet",
+                    f"{target_pct}% +/-{band:g}pp",
+                    "criterion requires a quota block in simulator.json",
+                    -band)
+        r["structural"] = True
+        return r
+    seg_plan = plan[plan["segment"] == seg]
+    if not len(seg_plan):
+        known = sorted(plan["segment"].unique())
+        r = _result(False, f"segment '{seg}' absent from plan",
+                    f"{target_pct}% +/-{band:g}pp",
+                    f"criterion segment '{seg}' not found; "
+                    f"plan covers segments: {known}", -band)
+        r["structural"] = True
+        return r
+    won = won_deals(opp)
+    attainments = {}
+    for _, row in seg_plan.iterrows():
+        label = row["fiscal_quarter"]
+        actual = won[(won["fiscal_quarter"] == label)
+                     & (won["segment"] == seg)]["realized_price"].sum()
+        plan_target = float(row["target_realized_usd"])
+        attainments[label] = (actual / plan_target * 100) if plan_target else float("nan")
+    worst_label = min(attainments,
+                      key=lambda k: abs(attainments[k] - target_pct))
+    worst_dev = abs(attainments[worst_label] - target_pct)
+    detail = "; ".join(f"{k}: {v:.2f}% of plan" for k, v in attainments.items())
+    display = f"{attainments[worst_label]:.1f}% ({worst_label})"
+    target_disp = f"{target_pct:g}% +/-{band:g}pp"
+    return _result(worst_dev <= band, display, target_disp,
+                   detail, band - worst_dev)
+
+
 CHECKS = {
     "win_rate_flat": check_win_rate_flat,
     "avg_discount_quarter": check_avg_discount_quarter,
@@ -200,4 +246,5 @@ CHECKS = {
     "end_of_quarter_effect": check_end_of_quarter_effect,
     "realized_vs_list": check_realized_vs_list,
     "data_sanity": check_data_sanity,
+    "revenue_vs_plan": check_revenue_vs_plan,
 }

@@ -21,6 +21,15 @@ def run_validation(workbook_path, criteria_path):
     doc = load_criteria(criteria_path)
 
     calendar = doc.get("definitions", {}).get("quarter_end_dates")
+    # quota_plan is read only when some criterion needs it (black-box rule:
+    # everything still comes from the workbook, nothing from the config)
+    quota_df = None
+    try:
+        sheets = pd.ExcelFile(workbook_path).sheet_names
+        if "quota_plan" in sheets:
+            quota_df = pd.read_excel(workbook_path, sheet_name="quota_plan")
+    except Exception:
+        quota_df = None
 
     results = []
     for c in doc["criteria"]:
@@ -35,14 +44,19 @@ def run_validation(workbook_path, criteria_path):
         params = dict(c["params"])
         if calendar:
             params.setdefault("quarter_ends", calendar)
+        if quota_df is not None:
+            params.setdefault("_quota_df", quota_df)
         try:
             r = fn(opp, accounts, params)
-            results.append({
+            entry = {
                 "id": c["id"], "name": c["name"],
                 "verdict": "PASS" if r["ok"] else "FAIL",
                 "actual": r["actual"], "target": r["target"],
                 "margin": r["margin"], "detail": r["detail"],
-            })
+            }
+            if r.get("structural"):
+                entry["structural"] = True
+            results.append(entry)
         except Exception as e:
             results.append({
                 "id": c["id"], "name": c["name"], "verdict": "ERROR",

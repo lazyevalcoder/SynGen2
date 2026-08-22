@@ -134,6 +134,11 @@ The proven shape (Experiment B/D), formalized:
         "share_in_window": 0.30 }
     ],
     "bounds": { "discount_pct": [0, 40] }
+  },
+  "quota": {                                   // OPTIONAL - WS3 aggregate targets
+    "by_segment": {                            // segment -> per-period revenue targets
+      "Enterprise": [1200000, 1250000, 1300000, 1400000]
+    }
   }
 }
 ```
@@ -142,6 +147,11 @@ The proven shape (Experiment B/D), formalized:
 - Generator NEVER contains business numbers — all live here (B's zero-code-change result)
 - Adding a new effect type = generator code change (versioned, tested); adding a new value = config change only
 - BOM-free UTF-8 enforced by tooling (D's PowerShell lesson)
+
+**Quota block & raking (WS3, M4):**
+- When `quota` is present the engine emits a `quota_plan` sheet and runs a deterministic **monetary raking pass**: per segment x period stratum, `list_price` is scaled so closed-won realized revenue hits the target; `realized_price` is then recomputed from the scaled list, preserving the derived-field identity exactly
+- Raking touches ONLY monetary fields — discounts, win rates, dates, and counts are untouched, so it is orthogonal to every distribution-level check
+- Attainment criteria (`revenue_vs_plan`) therefore verify configuration intent against generated data black-box; they should not fail on converged configs unless segments/quota keys mismatch
 
 ---
 
@@ -154,9 +164,10 @@ Multi-sheet Excel. Sheet contract:
 | `<entity>` sheets (e.g., `accounts`) | yes | One row per entity instance; `*_id` primary keys |
 | `<fact>` sheet (e.g., `opportunities`) | yes | FK columns valid, dates typed, derived fields present |
 | `quarterly_summary` (or period summary) | yes | Derived from fact rows ONLY — never authored independently |
+| `quota_plan` | when `quota` block present | One row per segment x period: target revenue; the plan actuals are measured against |
 | `_synngen_meta` | yes | seed, config hash, generation timestamp, criteria version |
 
-Validator reads entity+fact sheets only (black-box); `_synngen_meta` is for humans/repros.
+Validator reads entity+fact sheets only for distribution checks (black-box); `revenue_vs_plan` additionally reads `quota_plan` when a criterion references it. `_synngen_meta` is for humans/repros.
 
 ---
 

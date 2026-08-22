@@ -168,15 +168,18 @@ EXPECTED_SHEETS = {
         "fiscal_quarter", "created_date", "close_date", "stage",
         "list_price", "discount_pct", "realized_price"],
     "quarterly_summary": None,  # derived view; presence checked, columns free
+    "quota_plan": ["segment", "fiscal_quarter", "target_realized_usd"],
     "_synngen_meta": None,
 }
+OPTIONAL_SHEETS = {"quota_plan"}  # present only when the config has quotas
 
 
 def structure_findings(xl_file):
     """Workbook must match the engine's sheet/column contract exactly.
 
     Extra or missing sheets mean someone hand-edited output or the generator
-    drifted from its contract - both are gate-blocking.
+    drifted from its contract - both are gate-blocking. Optional sheets are
+    column-checked only when present.
     """
     import pandas as pd
 
@@ -185,6 +188,8 @@ def structure_findings(xl_file):
     present = set(xl.sheet_names)
     for sheet, columns in EXPECTED_SHEETS.items():
         if sheet not in present:
+            if sheet in OPTIONAL_SHEETS:
+                continue
             findings.append(("S1", "FAIL", f"missing required sheet '{sheet}'"))
             continue
         if columns is not None:

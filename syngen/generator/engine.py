@@ -118,7 +118,70 @@ def build_opportunities(cfg, accounts_df, rng):
     return pd.DataFrame(rows)
 
 
+def build_quota_plan(cfg):
+    """quota_plan sheet from the optional config quota block (WS3)."""
+    by_segment = cfg.get("quota", {}).get("by_segment")
+    if not by_segment:
+        return None
+    quarters = cfg["time_model"]["quarter_labels"]
+    rows = [
+        {"segment": seg, "fiscal_quarter": label, "target_realized_usd": float(t)}
+        for seg, curve in by_segment.items()
+        for label, t in zip(quarters, curve)
+    ]
+    return pd.DataFrame(rows)
+
+
+def apply_raking(opp_df, cfg):
+    """Deterministic monetary raking pass (WS3 aggregate targets).
+
+    Per segment x quarter stratum: scale list_price so closed-won realized
+    revenue hits the quota target TIMES the segment's configured attainment
+    (default 1.0). This is what lets a story say "Enterprise missed plan by
+    5%" - the plan stays the plan, and actuals land at 95% of it. realized
+    is recomputed from the scaled list, preserving the derived-field
+    identity exactly.
+
+    All rows in a stratum scale together (won and lost), keeping the
+    stratum's price distribution coherent.
+    """
+    if not cfg.get("quota"):
+        return opp_df
+    quarters = cfg["time_model"]["quarter_labels"]
+    targets = cfg["quota"]["by_segment"]
+    attainment = cfg["quota"].get("attainment_by_segment", {})
+    df = opp_df.copy()
+    for seg, curve in targets.items():
+        ratio = float(attainment.get(seg, 1.0))
+        for qi, label in enumerate(quarters):
+            target = float(curve[qi]) * ratio
+            mask = (df["segment"] == seg) & (df["fiscal_quarter"] == label)
+            won_mask = mask & (df["stage"] == "Closed Won")
+            won_sum = df.loc[won_mask, "realized_price"].sum()
+            if target <= 0 or won_sum <= 0:
+                continue  # cannot rake an empty or unsellable stratum
+            k = target / won_sum
+            keep = 1 - df.loc[mask, "discount_pct"] / 100
+            df.loc[mask, "list_price"] = (df.loc[mask, "list_price"] * k).round(2)
+            # recompute from the scaled list so realized == list*(1-d) exactly
+            df.loc[mask, "realized_price"] = (
+                df.loc[mask, "list_price"] * keep
+            ).round(2)
+            # absorb rounding drift into the largest won deal so attainment
+            # is exact to the cent while keeping the identity intact
+            residual = round(target - df.loc[won_mask, "realized_price"].sum(), 2)
+            if residual:
+                idx = df.loc[won_mask, "realized_price"].idxmax()
+                kf = 1 - df.at[idx, "discount_pct"] / 100
+                df.loc[idx, "list_price"] = round(
+                    df.loc[idx, "list_price"] + residual / kf, 2)
+                df.loc[idx, "realized_price"] = round(
+                    df.loc[idx, "list_price"] * kf, 2)
+    return df
+
+
 def build_summary(opp_df, quarters):
+    """Derived view over fact rows ONLY - never authored independently."""
     won = opp_df[opp_df["stage"] == "Closed Won"]
     records = []
     for label in quarters:
@@ -148,12 +211,18 @@ def generate(cfg_or_path):
     rng = np.random.default_rng(cfg["seed"])
     accounts_df = build_accounts(cfg, rng)
     opp_df = build_opportunities(cfg, accounts_df, rng)
+    quota_df = build_quota_plan(cfg)
+    if quota_df is not None:
+        opp_df = apply_raking(opp_df, cfg)
     summary_df = build_summary(opp_df, cfg["time_model"]["quarter_labels"])
-    return {
+    frames = {
         "accounts": accounts_df,
         "opportunities": opp_df,
         "quarterly_summary": summary_df,
     }
+    if quota_df is not None:
+        frames["quota_plan"] = quota_df
+    return frames
 
 
 def _meta_frame(cfg):
@@ -169,11 +238,13 @@ def _meta_frame(cfg):
 def write_workbook(frames, workbook_path, meta=None):
     out_path = Path(workbook_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet_order = ["accounts", "opportunities", "quarterly_summary",
+                   "quota_plan", "_synngen_meta"]
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-        frames["accounts"].to_excel(writer, sheet_name="accounts", index=False)
-        frames["opportunities"].to_excel(writer, sheet_name="opportunities", index=False)
-        frames["quarterly_summary"].to_excel(writer, sheet_name="quarterly_summary", index=False)
-        if meta is not None:
+        for name in sheet_order:
+            if name in frames:
+                frames[name].to_excel(writer, sheet_name=name, index=False)
+        if meta is not None and "_synngen_meta" not in frames:
             meta.to_excel(writer, sheet_name="_synngen_meta", index=False)
     return out_path
 

@@ -89,6 +89,16 @@ def run_convergence(session, client, sim_path, criteria_path,
             return summary
 
         failing = [r["id"] for r in results if r["verdict"] == "FAIL"]
+        # Live M4 lesson: a criterion that references something the data
+        # model cannot express (absent segment, missing sheet) is not
+        # fixable by knob turns - looping just burns proposals (G14 family).
+        structural = [r["id"] for r in results if r.get("structural")
+                      and r["verdict"] == "FAIL"]
+        if structural:
+            raise LoopEscalation(
+                f"structural failure(s) {structural} - criteria reference "
+                "something outside the data model; re-enter design phases",
+                results, history_lines)
         if llm_proposals >= max_llm_proposals:
             raise LoopEscalation(
                 f"LLM proposal cap ({max_llm_proposals}) reached; still failing: {failing}",

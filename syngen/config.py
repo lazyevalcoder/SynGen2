@@ -76,6 +76,37 @@ def validate_simulator_doc(cfg, source="simulator"):
     if not (0 <= lo < hi):
         raise ConfigError("discount bounds must satisfy 0 <= min_pct < max_pct")
 
+    # optional WS3 aggregate-targets block (M4)
+    quota = cfg.get("quota")
+    if quota is not None:
+        by_segment = quota.get("by_segment")
+        if not isinstance(by_segment, dict) or not by_segment:
+            raise ConfigError("quota.by_segment must define at least one segment curve")
+        segments = cfg["accounts"].get("segments", {})
+        for seg, curve in by_segment.items():
+            if seg not in segments:
+                raise ConfigError(
+                    f"quota.by_segment['{seg}'] is not a known account segment "
+                    f"(known: {sorted(segments)})")
+            if len(curve) != len(labels):
+                raise ConfigError(
+                    f"quota.by_segment['{seg}'] needs one target per quarter "
+                    f"({len(labels)} expected, got {len(curve)})")
+            if any(float(t) <= 0 for t in curve):
+                raise ConfigError(f"quota targets must be positive ('{seg}')")
+        ratios = quota.get("attainment_by_segment", {})
+        if not isinstance(ratios, dict):
+            raise ConfigError("quota.attainment_by_segment must be a dict")
+        for seg, ratio in ratios.items():
+            if seg not in by_segment:
+                raise ConfigError(
+                    f"quota.attainment_by_segment['{seg}'] has no matching "
+                    "by_segment entry")
+            if not (0 < float(ratio) < 3):
+                raise ConfigError(
+                    f"quota.attainment_by_segment['{seg}'] must be a sane "
+                    "ratio (0 < r < 3)")
+
     return cfg
 
 

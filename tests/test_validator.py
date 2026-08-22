@@ -19,11 +19,17 @@ CRITERIA_PARAMS = {
         "quarter_end": "FY26-Q4", "target_end_pct": 82.0, "tolerance_pp": 2.0,
     },
     "data_sanity": {"max_discount_pct": 40.0},
+    # plan targets injected at runtime from the data itself (see run_check)
+    "revenue_vs_plan": {"segment": "Enterprise", "band_pct": 2.0},
 }
 
 
-def make_opp(n_per_q=300, seed=1):
-    """Synthetic workbook rows with controllable pathologies."""
+def make_opp(n_per_q=300, seed=1, account_segments=None):
+    """Synthetic workbook rows with controllable pathologies.
+
+    account_segments: optional {account_id: segment} mapping - the engine
+    denormalizes segment onto facts, so checks may rely on it.
+    """
     nprng = np.random.default_rng(seed)
     quarters = ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]
     q_ends = {"FY26-Q1": "2026-03-31", "FY26-Q2": "2026-06-30",
@@ -44,10 +50,13 @@ def make_opp(n_per_q=300, seed=1):
                 disc += 6.5
             disc = float(np.clip(disc, 0, 40))
             list_price = round(float(nprng.lognormal(10.7, 0.8)), 2)
+            account_id = f"ACC-{nprng.integers(1, 61):04d}"
             rows.append({
                 "fiscal_quarter": label,
                 "region": region,
-                "account_id": f"ACC-{nprng.integers(1, 61):04d}",
+                "account_id": account_id,
+                "segment": (account_segments or {}).get(account_id,
+                                                        "Enterprise"),
                 "close_date": q_start + pd.Timedelta(days=day - 1),
                 "stage": "Closed Won" if nprng.random() < 0.27 else "Closed Lost",
                 "list_price": list_price,
@@ -70,12 +79,23 @@ def make_accounts():
 @pytest.fixture(scope="module")
 def good_data():
     accounts = make_accounts()
-    opp = make_opp()
+    seg_map = dict(zip(accounts["account_id"], accounts["segment"]))
+    opp = make_opp(account_segments=seg_map)
     return opp, accounts
 
 
 def run_check(name, opp, accounts):
-    return CHECKS[name](opp, accounts, CRITERIA_PARAMS[name])
+    params = dict(CRITERIA_PARAMS[name])
+    if name == "revenue_vs_plan":
+        # plan targets derived from the data itself: the fixture proves the
+        # check's arithmetic, not raking (covered in test_planning.py).
+        # opp already carries denormalized segment (engine contract).
+        won = opp[opp["stage"] == "Closed Won"]
+        agg = (won.groupby(["segment", "fiscal_quarter"])["realized_price"]
+               .sum().reset_index())
+        agg.columns = ["segment", "fiscal_quarter", "target_realized_usd"]
+        params["_quota_df"] = agg
+    return CHECKS[name](opp, accounts, params)
 
 
 def test_good_data_passes_all_checks(good_data):

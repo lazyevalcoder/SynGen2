@@ -20,14 +20,23 @@ The generator engine supports EXACTLY this schema (do not invent fields):
       "noise_sd_pp": <num>, "end_of_quarter_boost_pp": <num>,
       "end_of_quarter_window_days": <int>, "min_pct": 0, "max_pct": 40
     }
+  },
+  "quota": {
+    "by_segment": {"<segment>": [<revenue target per quarter>], ...}
   }
 }
+
+The optional quota block: include it when the story or criteria reference plans, quotas, or attainment. Two parts:
+- "by_segment": the PLAN - what each segment was targeted to earn per quarter (authoritative numbers, sized near natural expected revenue).
+- "attainment_by_segment": OPTIONAL map of how actuals land RELATIVE to plan (default 1.0). The story defines these: Enterprise missed plan by ~5% -> "Enterprise": 0.95; Mid-Market beat by ~4% -> "Mid-Market": 1.04. The engine rakes deal sizes so closed-won revenue lands exactly at attainment x plan.
+Size by_segment targets near naturally expected revenue: per_quarter * win_rate * median_usd * (1 - avg_discount/100), split across segments by weight. revenue_vs_plan criteria need NO further calibration: raking makes attainment exact.
 
 Calibration guidance from prior experiments - USE THIS RECIPE, do not re-derive it:
 - won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost
 - realized/list pct(q) ~= 100 - won_avg_discount(q) + ~1.8pp revenue-weighting bonus
 - win rate noise std at n deals/quarter = sqrt(p*(1-p)/n): pick per_quarter >= 300 so statistical criteria are reachable
 - noise_sd_pp of 2.5-3.5 is a good default; it does not shift averages
+- revenue_vs_plan criteria need NO calibration: raking makes attainment exact; just include a sensible quota block covering every segment the criteria name
 
 Worked example (for criteria: Q1 avg discount 10% +/-2, Q4 avg 16% +/-2, premium region APAC >= +3pp all year, regions AMER 0.45 / EMEA 0.30 / APAC 0.25, boost 6.5 with share 0.25):
 - contribution of boost to every quarterly average = 0.25 * 6.5 = 1.6pp
