@@ -66,7 +66,6 @@ def build_opportunities(cfg, accounts_df, rng):
     owners = spec["owners"]
     window_days = dspec["end_of_quarter_window_days"]
     eoq_share = spec["close_clustering"]["share_in_end_of_quarter_window"]
-    dur_lo, dur_hi = spec["deal_duration_days"]
     median_usd = spec["deal_size_lognormal"]["median_usd"]
     sigma = spec["deal_size_lognormal"]["sigma"]
 
@@ -76,7 +75,9 @@ def build_opportunities(cfg, accounts_df, rng):
         q_end = pd.Timestamp(q_end_str)
         q_start = q_end - pd.DateOffset(months=3) + pd.Timedelta(days=1)
         q_len_days = (q_end - q_start).days + 1
-        n = spec["per_quarter"]
+        multipliers = spec.get("volume_multipliers")
+        n = int(round(spec["per_quarter"] *
+                      (multipliers[qi] if multipliers else 1.0)))
 
         acct_idx = rng.integers(0, len(accounts_df), size=n)
         accts = accounts_df.iloc[acct_idx].reset_index(drop=True)
@@ -92,7 +93,16 @@ def build_opportunities(cfg, accounts_df, rng):
         offsets = np.where(in_eoq, eoq_offsets, early_offsets)
         close_dates = q_start + pd.to_timedelta(offsets, unit="D")
 
-        durations = rng.integers(dur_lo, dur_hi, size=n)
+        # durations: legacy [lo, hi] uniform, or per-quarter normal curve
+        # (M4 domain B: sales-cycle slowdown)
+        dur_spec = spec["deal_duration_days"]
+        if isinstance(dur_spec, dict):
+            mean = dur_spec["means"][qi]
+            spread = dur_spec.get("spread", 10)
+            durations = np.clip(np.round(rng.normal(mean, spread, size=n)),
+                                1, None).astype(int)
+        else:
+            durations = rng.integers(dur_spec[0], dur_spec[1], size=n)
         created_dates = close_dates - pd.to_timedelta(durations, unit="D")
 
         base = np.array(

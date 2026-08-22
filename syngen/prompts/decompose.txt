@@ -48,6 +48,8 @@ Available checks and their params:
 - end_of_quarter_effect: {window_days, min_gap_pp}
 - realized_vs_list: {quarter_start, target_start_pct, quarter_end, target_end_pct, tolerance_pp}
 - data_sanity: {max_discount_pct}
+- cycle_length_trend: {min_increase_pct} - average won-deal cycle time (close minus created, days) must grow from first to last quarter by at least this percent. Use for "deals are taking longer to close".
+- creation_volume_trend: {target_decline_pct, tolerance_pp} - opportunity creation change from first to last quarter lands within tolerance of the claimed decline (story says pipeline slowed ~20% -> target_decline_pct=20, tolerance_pp=8).
 - revenue_vs_plan: {segment, target_pct, band_pct} - attainment of that segment's quarterly revenue plan. Use when the story references quotas/plans or "missed/exceeded plan by X%" for a NAMED segment. target_pct is the story's expected attainment: missed plan by ~5% -> target_pct=95; beat by ~4% -> target_pct=104. band_pct is tolerance (2 is a good default). IMPORTANT: only reference segments the story names; NEVER invent aggregate segments like "Total" or "Overall" - if the story makes an overall claim, express it as criteria on the named segments that compose it.
 
 IMPORTANT semantics:

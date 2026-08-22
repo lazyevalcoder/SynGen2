@@ -21,6 +21,9 @@ CRITERIA_PARAMS = {
     "data_sanity": {"max_discount_pct": 40.0},
     # plan targets injected at runtime from the data itself (see run_check)
     "revenue_vs_plan": {"segment": "Enterprise", "band_pct": 2.0},
+    # fixture uses near-flat durations/counts, so zero-growth bands pass
+    "cycle_length_trend": {"min_increase_pct": 0.0},
+    "creation_volume_trend": {"target_decline_pct": 0.0, "tolerance_pp": 1.0},
 }
 
 
@@ -31,6 +34,9 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
     denormalizes segment onto facts, so checks may rely on it.
     """
     nprng = np.random.default_rng(seed)
+    # separate stream so adding durations doesn't shift the fixture's
+    # established randomness (win-rate bands etc.)
+    dur_rng = np.random.default_rng(seed + 999)
     quarters = ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]
     q_ends = {"FY26-Q1": "2026-03-31", "FY26-Q2": "2026-06-30",
               "FY26-Q3": "2026-09-30", "FY26-Q4": "2026-12-31"}
@@ -51,13 +57,17 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
             disc = float(np.clip(disc, 0, 40))
             list_price = round(float(nprng.lognormal(10.7, 0.8)), 2)
             account_id = f"ACC-{nprng.integers(1, 61):04d}"
+            close_date = q_start + pd.Timedelta(days=day - 1)
+            created_date = close_date - pd.Timedelta(
+                days=int(dur_rng.integers(30, 60)))
             rows.append({
                 "fiscal_quarter": label,
                 "region": region,
                 "account_id": account_id,
                 "segment": (account_segments or {}).get(account_id,
                                                         "Enterprise"),
-                "close_date": q_start + pd.Timedelta(days=day - 1),
+                "close_date": close_date,
+                "created_date": created_date,
                 "stage": "Closed Won" if nprng.random() < 0.27 else "Closed Lost",
                 "list_price": list_price,
                 "discount_pct": round(disc, 2),

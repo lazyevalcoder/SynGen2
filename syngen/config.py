@@ -69,6 +69,30 @@ def validate_simulator_doc(cfg, source="simulator"):
             raise ConfigError(
                 "accounts.market_potential_usd must be {min, max} with 0 <= min < max")
 
+    # M4 domain B: deal_duration_days is [lo, hi] or {means: [...], spread}
+    dur = cfg["opportunities"]["deal_duration_days"]
+    if isinstance(dur, dict):
+        means = dur.get("means")
+        if not isinstance(means, list) or not means:
+            raise ConfigError(
+                "deal_duration_days.means must be a non-empty per-quarter list")
+        if len(means) != len(labels):
+            raise ConfigError(
+                f"deal_duration_days.means needs one value per quarter "
+                f"({len(labels)} expected, got {len(means)})")
+        spread = dur.get("spread", 10)
+        if not (isinstance(spread, (int, float)) and spread > 0):
+            raise ConfigError("deal_duration_days.spread must be positive")
+
+    mult = cfg["opportunities"].get("volume_multipliers")
+    if mult is not None:
+        if not isinstance(mult, list) or len(mult) != len(labels):
+            raise ConfigError(
+                f"volume_multipliers needs one value per quarter "
+                f"({len(labels)} expected)")
+        if any(float(m) <= 0 for m in mult):
+            raise ConfigError("volume_multipliers must be positive")
+
     curves = discount["base_by_quarter"]
     if not curves:
         raise ConfigError("discount.base_by_quarter must define at least one region curve")

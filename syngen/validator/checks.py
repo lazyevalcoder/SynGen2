@@ -238,6 +238,49 @@ def check_revenue_vs_plan(opp, accounts, params):
                    detail, band - worst_dev)
 
 
+def check_cycle_length_trend(opp, accounts, params):
+    """M4 domain B: average won-deal cycle (close - created) must grow by
+    at least min_increase_pct from first to last quarter."""
+    labels = list(resolve_quarter_ends(params))
+    won = won_deals(opp).copy()
+    won["cycle_days"] = (won["close_date"] - won["created_date"]).dt.days
+    avgs = {label: won[won["fiscal_quarter"] == label]["cycle_days"].mean()
+            for label in labels}
+    first, last = labels[0], labels[-1]
+    if pd.isna(avgs[first]) or pd.isna(avgs[last]):
+        return _result(False, "no won deals in boundary quarters",
+                       f">= +{params['min_increase_pct']}%",
+                       f"cycle avgs: {avgs}", -params["min_increase_pct"])
+    growth = (avgs[last] / avgs[first] - 1) * 100
+    needed = params["min_increase_pct"]
+    trend = " -> ".join(f"{avgs[l]:.0f}d" for l in labels)
+    return _result(growth >= needed, f"{growth:+.1f}% cycle growth",
+                   f">= +{needed}%", f"avg cycle: {trend}", growth - needed)
+
+
+def check_creation_volume_trend(opp, accounts, params):
+    """M4 domain B: opportunity creation change from first to last quarter
+    must land within tolerance of the story's claimed decline."""
+    labels = list(resolve_quarter_ends(params))
+    counts = {label: int((opp["fiscal_quarter"] == label).sum())
+              for label in labels}
+    first, last = labels[0], labels[-1]
+    if not counts[first]:
+        return _result(False, "no opportunities in first quarter",
+                       "decline within band", str(counts),
+                       -float(params["tolerance_pp"]))
+    change = (counts[last] / counts[first] - 1) * 100  # negative = decline
+    target_decline = float(params["target_decline_pct"])
+    tol = float(params["tolerance_pp"])
+    deviation = abs(change + target_decline)  # +20% decline -> change=-20
+    detail = (f"created per quarter: "
+              + ", ".join(f"{k}: {v}" for k, v in counts.items()))
+    display = f"{change:+.1f}% ({first} -> {last})"
+    target_disp = f"decline ~{target_decline:g}% +/-{tol:g}pp"
+    return _result(deviation <= tol, display, target_disp, detail,
+                   tol - deviation)
+
+
 CHECKS = {
     "win_rate_flat": check_win_rate_flat,
     "avg_discount_quarter": check_avg_discount_quarter,
@@ -247,4 +290,6 @@ CHECKS = {
     "realized_vs_list": check_realized_vs_list,
     "data_sanity": check_data_sanity,
     "revenue_vs_plan": check_revenue_vs_plan,
+    "cycle_length_trend": check_cycle_length_trend,
+    "creation_volume_trend": check_creation_volume_trend,
 }
