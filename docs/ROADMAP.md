@@ -53,6 +53,8 @@
 
 ## M4 — Generalization
 
+> **Status:** COMPLETE (2026-08-22). Second domain (sales-cycle slowdown) landed iteration 1 live; scenario #6 landed via WS3 raking + revenue_vs_plan (Enterprise 95% / Mid-Market 104% of plan, exact); persona A/B verdict recorded — G1 resolved, personas demoted to opt-in. v1 scorecard: 1 of 25 scenarios LANDED. See `experiments/M4_persona_ab/` and `V1_SCENARIO_REQUIREMENTS.md`.
+
 **Scope:** Prove it's not a one-trick harness, guided by `V1_SCENARIO_REQUIREMENTS.md`.
 - Second story domain (candidate: sales-cycle slowdown or renewal/churn — both scoped during experiments)
 - Persona critique A/B: criteria quality with vs without persona pass (FR3)

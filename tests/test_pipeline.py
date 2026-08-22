@@ -114,10 +114,11 @@ class SilentIO:
 
 
 def make_fake_client():
+    # personas OFF by default (M4 A/B): script is precheck, criteria, sim,
+    # fix proposal
     return FakeLLM([
         llm_json(PRECHECK),
         llm_json(CRITERIA),
-        llm_json(PERSONAS),
         llm_json(BROKEN_SIM),
         llm_json(FIX_PROPOSAL),
     ])
@@ -179,12 +180,27 @@ def test_overrides_reject_unknown_criterion():
         apply_criterion_overrides(json.loads(json.dumps(CRITERIA)), "AC99.x=1")
 
 
+def test_personas_opt_in_path_still_works(run_in_tmp):
+    """M4 A/B demoted personas to opt-in; the flag must keep functioning."""
+    client = FakeLLM([
+        llm_json(PRECHECK),
+        llm_json(CRITERIA),
+        llm_json(PERSONAS),          # consumed only in this arm
+        llm_json(BROKEN_SIM),
+        llm_json(FIX_PROPOSAL),
+    ])
+    io = SilentIO()
+    result = run_new_story(client, "Q4 discounts deepened, worst in EMEA.",
+                           io, sessions_dir="sessions", slug="personas",
+                           use_personas=True)
+    assert result["status"] == "converged"
+
+
 def test_bad_llm_criteria_shape_is_rejected(run_in_tmp):
     client = FakeLLM([
         llm_json(PRECHECK),
         llm_json({"oops": "no criteria here"}),
         llm_json(CRITERIA),
-        llm_json(PERSONAS),
         llm_json(BROKEN_SIM),
     ])
     io = SilentIO()

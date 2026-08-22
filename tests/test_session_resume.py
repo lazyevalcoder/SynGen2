@@ -34,7 +34,7 @@ def run_in_tmp(tmp_path, monkeypatch):
 
 def _create_converged_session(run_in_tmp):
     result = run_new_story(
-        FakeLLM([llm_json(PRECHECK), llm_json(CRITERIA), llm_json(PERSONAS),
+        FakeLLM([llm_json(PRECHECK), llm_json(CRITERIA),
                  llm_json(BROKEN_SIM), llm_json(FIX_PROPOSAL)]),
         "Q4 discounts deepened, worst in EMEA.",
         SilentIO(), sessions_dir="sessions", slug="resume")

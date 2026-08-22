@@ -53,7 +53,8 @@ def cmd_new(args):
 
     client = LLMClient(llm_cfg)
     io = ConsoleIO() if not args.batch else _BatchIO()
-    result = run_new_story(client, story, io, slug=args.slug)
+    result = run_new_story(client, story, io, slug=args.slug,
+                           use_personas=args.personas)
     return _finish(result)
 
 
@@ -127,6 +128,9 @@ def main(argv=None):
     n.add_argument("--llm-config", default=None, help="path to llm.config.json")
     n.add_argument("--batch", action="store_true",
                    help="accept all defaults without interaction")
+    n.add_argument("--personas", action="store_true",
+                   help="enable the persona-critique pass (off by default; "
+                        "M4 A/B found no quality benefit at ~35s cost)")
 
     r = sub.add_parser("resume", help="return to an existing session: "
                                       "regenerate or apply a story tweak")

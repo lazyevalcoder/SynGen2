@@ -8,7 +8,7 @@
 
 | # | Gap / Risk | Source | Impact if ignored | Proposed trigger to address |
 |---|-----------|--------|-------------------|------------------------------|
-| G1 | **Persona critique phase is unvalidated.** Only phase component with no experiment behind it | ARCHITECTURE §4 | Phase 2 may add ceremony without quality; wasted LLM calls | First vertical slice: A/B a story's criteria with vs without persona pass |
+| G1 | **Persona critique phase is unvalidated.** Only phase component with no experiment behind it | ARCHITECTURE §4 | Phase 2 may add ceremony without quality; wasted LLM calls | **RESOLVED in M4 (A/B):** no measurable quality benefit across 3 story classes; control arm equal-or-better on iterations and ~35s faster. Personas demoted to opt-in (`--personas` flag, default off); code path retained for unfamiliar domains. See `experiments/M4_persona_ab/` |
 | G2 | **Who authors simulator.json initially** — Phase 2 personas or Phase 3 step? Lean Phase 3 seeded by spec | ARCHITECTURE §7 | Blurry responsibility → duplicated logic | Decide at first implementation of Phase 3 |
 | G3 | **Knob-proposer context:** explicit transfer function vs learned-from-history. Lean: explicit formula + history refinement | ARCHITECTURE §7 | Agent flails on stacked knobs (D showed greedy fails) | Build knob_deltas.json first; measure proposal hit-rate |
 | G4 | **Thin-margin convergence:** AC5 passed at +0.03pp; seed change could flip it | D learnings | Delivered dataset fails on regeneration | Loop targets mid-band by default; margin threshold configurable |

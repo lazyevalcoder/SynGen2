@@ -1,0 +1,6 @@
+{"slug": "discount_personas", "arm": "personas", "status": "converged", "iterations": 2, "llm_proposals": 1, "elapsed_s": 177.0, "lint_blocking": 0, "lint_advise": 1}
+{"slug": "discount_control", "arm": "control", "status": "converged", "iterations": 2, "llm_proposals": 1, "elapsed_s": 169.2, "lint_blocking": 0, "lint_advise": 1}
+{"slug": "quota_personas", "arm": "personas", "status": "converged", "iterations": 1, "llm_proposals": 0, "elapsed_s": 176.2, "lint_blocking": 0, "lint_advise": 1}
+{"slug": "quota_control", "arm": "control", "status": "converged", "iterations": 1, "llm_proposals": 0, "elapsed_s": 135.2, "lint_blocking": 0, "lint_advise": 1}
+{"slug": "slowdown_personas", "arm": "personas", "status": "converged", "iterations": 2, "llm_proposals": 1, "elapsed_s": 163.3, "lint_blocking": 0, "lint_advise": 1}
+{"slug": "slowdown_control", "arm": "control", "status": "converged", "iterations": 1, "llm_proposals": 0, "elapsed_s": 141.8, "lint_blocking": 0, "lint_advise": 1}

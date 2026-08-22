@@ -186,7 +186,10 @@ def post_generate_structure_gate(workbook_path, log):
 
 
 def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
-                  max_iterations=10, max_llm_proposals=5):
+                  max_iterations=10, max_llm_proposals=5, use_personas=False):
+    """use_personas defaults OFF: the M4 A/B (experiments/M4_persona_ab)
+    found no measurable quality benefit and a consistent ~35s latency cost.
+    Opt in when drafting unfamiliar domains where extra critique may help."""
     session = Session.create(sessions_dir, slug=slug or story[:40])
     log = io.inform
     session.save_story(story)
@@ -194,7 +197,8 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
     return _run_pipeline(session, client, io, story, log,
                          fresh_criteria=True,
                          max_iterations=max_iterations,
-                         max_llm_proposals=max_llm_proposals)
+                         max_llm_proposals=max_llm_proposals,
+                         use_personas=use_personas)
 
 
 def run_resume(session_root, client, io, new_story=None,
@@ -338,7 +342,7 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
 
 
 def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
-                  max_iterations=10, max_llm_proposals=5):
+                  max_iterations=10, max_llm_proposals=5, use_personas=True):
     """Fresh-story flow: pre-check, Gate 1, personas+draft, converge, deliver."""
 
     # --- Pre-check ---
@@ -383,16 +387,22 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
 
     # --- Phase 2: personas (lightweight) + simulator draft ---
     crit_summary = criteria_summary(doc)
-    critique = persona_critique(client, story, crit_summary, log_fn=log)
-    spec_lines = []
-    for persona in ("domain_expert", "bi_engineer", "outsider"):
-        for bullet in critique.get(persona, [])[:5]:
-            spec_lines.append(f"- [{persona}] {bullet}")
+    if use_personas:
+        critique = persona_critique(client, story, crit_summary, log_fn=log)
+        spec_lines = []
+        for persona in ("domain_expert", "bi_engineer", "outsider"):
+            for bullet in critique.get(persona, [])[:5]:
+                spec_lines.append(f"- [{persona}] {bullet}")
+    else:
+        # A/B arm (G1): measure what the persona pass actually contributes
+        log("Personas SKIPPED (A/B control arm)")
+        spec_lines = []
     conflict_notes = io.free_text(
         "Resolve flagged conflicts (one per line, blank to finish):"
     )
-    spec_notes = "\n".join(spec_lines) + f"\n\nUser resolutions:\n{conflict_notes}"
-    session.write_artifact("spec.md", f"# Data Spec\n\n{spec_notes}\n")
+    spec_notes = ("\n".join(spec_lines)
+                  + f"\n\nUser resolutions:\n{conflict_notes}").strip()
+    session.write_artifact("spec.md", f"# Data Spec\n\n{spec_notes or 'none'}\n")
 
     sim_cfg = draft_simulator(client, story, crit_summary, spec_notes)
 
