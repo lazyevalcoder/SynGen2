@@ -3,6 +3,9 @@
 Ported from experiments/B_config_generator/generate.py (Experiment B, gate PASS).
 Business numbers live ONLY in the config - this engine never hardcodes them.
 """
+import hashlib
+import json
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -153,13 +156,25 @@ def generate(cfg_or_path):
     }
 
 
-def write_workbook(frames, workbook_path):
+def _meta_frame(cfg):
+    """_synngen_meta sheet per contracts section 5 (repro info for humans)."""
+    payload = json.dumps(cfg, sort_keys=True).encode("utf-8")
+    return pd.DataFrame([{
+        "seed": cfg["seed"],
+        "config_hash": hashlib.sha256(payload).hexdigest()[:12],
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+    }])
+
+
+def write_workbook(frames, workbook_path, meta=None):
     out_path = Path(workbook_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         frames["accounts"].to_excel(writer, sheet_name="accounts", index=False)
         frames["opportunities"].to_excel(writer, sheet_name="opportunities", index=False)
         frames["quarterly_summary"].to_excel(writer, sheet_name="quarterly_summary", index=False)
+        if meta is not None:
+            meta.to_excel(writer, sheet_name="_synngen_meta", index=False)
     return out_path
 
 
@@ -167,5 +182,6 @@ def generate_to_workbook(cfg_or_path):
     """Convenience: generate and write in one call. Returns (frames, path)."""
     cfg = load_simulator(cfg_or_path) if isinstance(cfg_or_path, (str, Path)) else cfg_or_path
     frames = generate(cfg)
-    path = write_workbook(frames, cfg["output"]["workbook"])
+    path = write_workbook(frames, cfg["output"]["workbook"],
+                          meta=_meta_frame(cfg))
     return frames, path

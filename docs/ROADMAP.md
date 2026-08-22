@@ -37,6 +37,8 @@
 
 ## M3 — Sessions & Quality Gates
 
+> **Status:** COMPLETE (2026-08-22). Exit criteria verified offline (96 tests) and live: Experiment F's tweak flow replayed entirely through `syngen resume` (taxonomy route landed CSB at target share with original value names preserved); E trap stories covered by `tests/test_linter.py`. G10 retired; G11/G12 advanced (see GAPS log F10–F13 for live-caught defects).
+
 **Scope:** Persistence and hardening.
 - Session folder layout per ARTIFACT_CONTRACTS §8; history append-only
 - Schema linter integrated at Gate 1 + post-generation (FR4)

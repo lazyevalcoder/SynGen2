@@ -23,6 +23,9 @@ PROFILES = {
                         "max_attempts": 2},
     "knob_proposal": {"max_tokens": 8192, "reasoning_budget_tokens": 400,
                       "max_attempts": 2},
+    # routing decision: small structured output; deterministic guardrails
+    # double-check the route, so thinking is unnecessary
+    "story_diff": {"max_tokens": 4096, "enable_thinking": False},
 }
 
 

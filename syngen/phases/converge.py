@@ -6,7 +6,7 @@ from syngen.generator.engine import generate_to_workbook
 from syngen.phases.json_task import chat_json
 from syngen.prompts import load_prompt
 from syngen.utils import extract_json, get_at_path, set_at_path
-from syngen.validator.report import render_table, run_validation
+from syngen.validator.report import render_table, run_validation, to_report_dict
 
 
 class LoopEscalation(Exception):
@@ -54,6 +54,10 @@ def run_convergence(session, client, sim_path, criteria_path,
     workbook_path = Path(cfg["output"]["workbook"])
     if not workbook_path.is_absolute():
         workbook_path = Path(sim_path).parent / workbook_path
+    # Live-M3 bug: generate_to_workbook writes to cfg's relative path from
+    # CWD, silently bypassing the session folder. Pin the resolved absolute
+    # path so the workbook always lands in <session>/output/ (contracts §8).
+    cfg = {**cfg, "output": {**cfg["output"], "workbook": str(workbook_path)}}
 
     history_lines = []
     llm_proposals = 0
@@ -64,6 +68,11 @@ def run_convergence(session, client, sim_path, criteria_path,
         table = render_table(results, all_pass)
         log_fn(f"--- Iteration {iteration} ---\n{table}")
         session.log(f"## Iteration {iteration}\n```\n{table}\n```")
+        # history/ is append-only: the exact config + report that produced
+        # this iteration's workbook (contracts section 8)
+        session.archive_iteration(
+            iteration, json.dumps(cfg, indent=2),
+            json.dumps(to_report_dict(results, all_pass, str(wb)), indent=2))
 
         if all_pass:
             margins = {r["id"]: r["margin"] for r in results}

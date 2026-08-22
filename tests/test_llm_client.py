@@ -86,7 +86,7 @@ def test_retry_caps_at_limit_when_empty():
 def test_profiles_cover_all_registered_checks_tasks():
     from syngen.llm.profiles import PROFILES, profile_for
     assert set(PROFILES) == {"decompose", "precheck", "personas",
-                             "simulator_draft", "knob_proposal"}
+                             "simulator_draft", "knob_proposal", "story_diff"}
     for name in PROFILES:
         p = profile_for(name)
         assert p["max_tokens"] <= 16384

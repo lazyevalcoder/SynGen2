@@ -24,6 +24,7 @@ Respond with ONLY a JSON object:
       "check": "one of: win_rate_flat | avg_discount_quarter | discount_trend_monotonic | region_discount_premium | end_of_quarter_effect | realized_vs_list | data_sanity",
       "params": { ... check-specific params with target and tolerance ... },
       "classification": "parametric|statistical",
+      "depends_on": [],
       "source_claim": "the story claim this verifies"
     }
   ],
@@ -31,6 +32,13 @@ Respond with ONLY a JSON object:
     {"issue": "...", "resolution": "..."}
   ]
 }
+
+The optional "depends_on" array lists IDs of criteria whose targets are
+mathematically linked to this criterion's target, such that changing one
+requires re-reviewing the other. Example: realized_vs_list (realized/list
+percentage) is the complement of avg_discount_quarter for the same quarter,
+so it must depend on that criterion. Only add edges you are confident about;
+empty array when none.
 
 Available checks and their params:
 - win_rate_flat: {band_pp}

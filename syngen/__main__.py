@@ -1,4 +1,4 @@
-"""SynGen CLI: python -m syngen <generate|validate> ..."""
+"""SynGen CLI: python -m syngen <generate|validate|new|resume|sessions> ..."""
 import argparse
 import json
 import sys
@@ -33,14 +33,20 @@ def cmd_validate(args):
     return 0 if all_pass else 1
 
 
+def _read_story_arg(args):
+    if args.story:
+        return args.story
+    if args.story_file and Path(args.story_file).exists():
+        return Path(args.story_file).read_text(encoding="utf-8")
+    return None
+
+
 def cmd_new(args):
     from syngen.llm.client import LLMClient, load_llm_config
     from syngen.pipeline import ConsoleIO, run_new_story
 
     llm_cfg = load_llm_config(args.llm_config)
-    story = args.story
-    if not story and Path(args.story_file).exists():
-        story = Path(args.story_file).read_text(encoding="utf-8")
+    story = _read_story_arg(args)
     if not story:
         print("Paste your business story (end with an empty line):")
         story = "\n".join(iter(input, ""))
@@ -48,6 +54,38 @@ def cmd_new(args):
     client = LLMClient(llm_cfg)
     io = ConsoleIO() if not args.batch else _BatchIO()
     result = run_new_story(client, story, io, slug=args.slug)
+    return _finish(result)
+
+
+def cmd_resume(args):
+    from syngen.llm.client import LLMClient, load_llm_config
+    from syngen.pipeline import ConsoleIO, run_resume
+
+    llm_cfg = load_llm_config(args.llm_config)
+    client = LLMClient(llm_cfg)
+    io = ConsoleIO() if not args.batch else _BatchIO()
+    result = run_resume(args.session, client, io,
+                        new_story=_read_story_arg(args))
+    return _finish(result)
+
+
+def cmd_sessions(args):
+    from syngen.session import Session
+
+    sessions = Session.list_all(args.dir)
+    if not sessions:
+        print(f"no sessions found in {args.dir}")
+        return 0
+    for s in sessions:
+        has_criteria = (s / "criteria.json").exists()
+        has_sim = (s / "simulator.json").exists()
+        state = "ready" if (has_criteria and has_sim) else "incomplete"
+        n_versions = len(list(s.glob("story.v*.md")))
+        print(f"{s.name}  [{state}]  story_versions={n_versions}")
+    return 0
+
+
+def _finish(result):
     print(f"\nResult: {result['status']}")
     return 0 if result["status"] in ("converged", "delivered_unaccepted") else 1
 
@@ -90,6 +128,21 @@ def main(argv=None):
     n.add_argument("--batch", action="store_true",
                    help="accept all defaults without interaction")
 
+    r = sub.add_parser("resume", help="return to an existing session: "
+                                      "regenerate or apply a story tweak")
+    r.add_argument("session", help="path to the session folder")
+    r.add_argument("--story", default="",
+                   help="new story text (omit to regenerate as-is)")
+    r.add_argument("--story-file", default="",
+                   help="path to the revised .md/.txt story")
+    r.add_argument("--llm-config", default=None, help="path to llm.config.json")
+    r.add_argument("--batch", action="store_true",
+                   help="accept all defaults without interaction")
+
+    s = sub.add_parser("sessions", help="list session folders and their state")
+    s.add_argument("--dir", default="sessions",
+                   help="sessions directory (default: ./sessions)")
+
     args = parser.parse_args(argv)
     if args.command == "generate":
         return cmd_generate(args)
@@ -97,6 +150,10 @@ def main(argv=None):
         return cmd_validate(args)
     if args.command == "new":
         return cmd_new(args)
+    if args.command == "resume":
+        return cmd_resume(args)
+    if args.command == "sessions":
+        return cmd_sessions(args)
     return 2
 
 

@@ -153,6 +153,11 @@ def test_full_vertical_slice_converges_offline(run_in_tmp):
     emea = sim["opportunities"]["discount"]["base_by_quarter"]["EMEA"]
     assert emea[2:] == [20, 22], "knob patch must persist to simulator.json"
 
+    # Live-M3 regression: the workbook MUST land inside the session folder,
+    # not in <cwd>/output (converge used to ignore its own resolved path)
+    assert (sdir / "output" / "dataset.xlsx").exists(), \
+        "workbook must be written to <session>/output/, contracts section 8"
+
     log_text = (sdir / "session_log.md").read_text(encoding="utf-8")
     assert "GATE 1 passed" in log_text
     assert "GATE 2 passed" in log_text
