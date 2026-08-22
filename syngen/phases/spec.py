@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from syngen.config import validate_simulator_doc
-from syngen.llm.profiles import chat_task
+from syngen.phases.json_task import chat_json
 from syngen.prompts import load_prompt
 from syngen.utils import extract_json
 
@@ -12,8 +12,7 @@ def persona_critique(client, story, criteria_summary, log_fn=print):
     """Lightweight single-call persona pass. Formal A/B is M4 scope (gap G1)."""
     system = load_prompt("persona_critique")
     user = f"Story:\n{story}\n\nAcceptance criteria:\n{criteria_summary}"
-    response = chat_task(client, "personas", system, user)
-    critique = extract_json(response.content)
+    critique = chat_json(client, "personas", system, user)
     n_conflicts = len(critique.get("conflicts", []))
     log_fn(f"Persona critique: {n_conflicts} conflict(s) flagged")
     return critique
@@ -26,9 +25,9 @@ def draft_simulator(client, story, criteria_summary, spec_notes="", sim_path=Non
         "simulator_draft", story=story[:2000], criteria=criteria_summary,
         spec=spec_brief,
     )
-    response = chat_task(client, "simulator_draft", system,
+    response = chat_json(client, "simulator_draft", system,
                          "Produce the simulator.json now.")
-    doc = extract_json(response.content)
+    doc = response
     validated = validate_simulator_doc(_validate_shape(doc))
 
     if sim_path:

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from syngen.generator.engine import generate_to_workbook
-from syngen.llm.profiles import chat_task
+from syngen.phases.json_task import chat_json
 from syngen.prompts import load_prompt
 from syngen.utils import extract_json, get_at_path, set_at_path
 from syngen.validator.report import render_table, run_validation
@@ -38,9 +38,9 @@ def propose_knobs(client, simulator_cfg, results, history_lines):
         iteration_history="\n".join(history_lines) or "none yet",
         simulator_json=json.dumps(simulator_cfg, indent=2),
     )
-    response = chat_task(client, "knob_proposal", system,
+    response = chat_json(client, "knob_proposal", system,
                          "Propose the next knob changes as JSON.")
-    return extract_json(response.content)
+    return response
 
 
 def run_convergence(session, client, sim_path, criteria_path,

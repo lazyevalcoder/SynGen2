@@ -16,6 +16,13 @@ QUARTER_ENDS = {
 }
 
 
+def resolve_quarter_ends(params):
+    """Calendar comes from criteria definitions (injected into params by the
+    runner); hardcoded FY26 dates are only a fallback. Live diagnosis showed a
+    valid-but-different drafted calendar made every check silently wrong."""
+    return params.get("quarter_ends") or QUARTER_ENDS
+
+
 def _result(ok, actual_display, target_display, detail, margin):
     return {
         "ok": bool(ok),
@@ -36,7 +43,7 @@ def won_deals(opp):
 
 def check_win_rate_flat(opp, accounts, params):
     rates = {}
-    for label in QUARTER_ENDS:
+    for label in resolve_quarter_ends(params):
         q = opp[opp["fiscal_quarter"] == label]
         closed = q[q["stage"].isin(["Closed Won", "Closed Lost"])]
         rates[label] = (
@@ -70,7 +77,7 @@ def check_avg_discount_quarter(opp, accounts, params):
 def check_discount_trend_monotonic(opp, accounts, params):
     won_q = won_deals(opp)
     avgs = [won_q[won_q["fiscal_quarter"] == q]["discount_pct"].mean()
-            for q in QUARTER_ENDS]
+            for q in resolve_quarter_ends(params)]
     dips = [avgs[i - 1] - avgs[i] for i in range(1, len(avgs))]
     worst_dip = max(dips)
     limit = params["max_dip_pp"]
@@ -111,7 +118,7 @@ def check_region_discount_premium(opp, accounts, params):
 def check_end_of_quarter_effect(opp, accounts, params):
     window = params["window_days"]
     eoq_disc, mid_disc = [], []
-    for label, end_str in QUARTER_ENDS.items():
+    for label, end_str in resolve_quarter_ends(params).items():
         q_end = pd.Timestamp(end_str)
         q_start = quarter_start(end_str)
         q_won = won_deals(opp)
@@ -120,14 +127,18 @@ def check_end_of_quarter_effect(opp, accounts, params):
         q_len = (q_end - q_start).days + 1
         eoq_disc.append(q_won[day > q_len - window]["discount_pct"])
         mid_disc.append(q_won[(day >= 15) & (day <= 74)]["discount_pct"])
-    eoq_mean = pd.concat(eoq_disc).mean()
-    mid_mean = pd.concat(mid_disc).mean()
-    gap = eoq_mean - mid_mean
+    eoq_mean = pd.concat(eoq_disc).mean() if eoq_disc and sum(len(s) for s in eoq_disc) else float("nan")
+    mid_mean = pd.concat(mid_disc).mean() if mid_disc and sum(len(s) for s in mid_disc) else float("nan")
     needed = params["min_gap_pp"]
-    detail = (
-        f"EOQ avg={eoq_mean:.2f}% (n={sum(len(s) for s in eoq_disc)}), "
-        f"mid-quarter avg={mid_mean:.2f}% (n={sum(len(s) for s in mid_disc)})"
-    )
+    n_eoq = sum(len(s) for s in eoq_disc)
+    n_mid = sum(len(s) for s in mid_disc)
+    detail = f"EOQ avg={eoq_mean:.2f}% (n={n_eoq}), mid-quarter avg={mid_mean:.2f}% (n={n_mid})"
+    if pd.isna(eoq_mean) or pd.isna(mid_mean):
+        empty = "EOQ" if pd.isna(eoq_mean) else "mid-quarter"
+        return _result(False, f"no deals in {empty} window",
+                       f">= +{needed}pp", detail + " - window/calendar mismatch?",
+                       -needed)
+    gap = eoq_mean - mid_mean
     return _result(gap >= needed, f"{gap:+.2f}pp gap", f">= +{needed}pp", detail, gap - needed)
 
 
@@ -167,7 +178,7 @@ def check_data_sanity(opp, accounts, params):
     if invalid_fk.any():
         problems.append(f"{int(invalid_fk.sum())} orphan account_id references")
     out_of_quarter = 0
-    for label, end_str in QUARTER_ENDS.items():
+    for label, end_str in resolve_quarter_ends(params).items():
         q_end = pd.Timestamp(end_str)
         q_start = quarter_start(end_str)
         m = opp["fiscal_quarter"] == label

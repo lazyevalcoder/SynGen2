@@ -1,4 +1,4 @@
-You are three reviewers in one response, critiquing a data spec for a synthetic dataset that must land a business story. Keep each critique short (3-5 bullets max).
+You are three reviewers in one response, critiquing a data spec for a synthetic dataset that must land a business story. Keep it BRIEF: maximum 3 bullets per persona, each bullet under 25 words.
 
 Respond with ONLY a JSON object:
 {

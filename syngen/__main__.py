@@ -56,7 +56,8 @@ class _BatchIO:
     """Non-interactive defaults for scripted runs."""
 
     def inform(self, text):
-        print(text)
+        from syngen.pipeline import ConsoleIO
+        ConsoleIO._safe_print(text)
 
     def confirm(self, prompt, default=True):
         return default

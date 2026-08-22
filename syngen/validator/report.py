@@ -20,6 +20,8 @@ def run_validation(workbook_path, criteria_path):
     opp, accounts = load_workbook(workbook_path)
     doc = load_criteria(criteria_path)
 
+    calendar = doc.get("definitions", {}).get("quarter_end_dates")
+
     results = []
     for c in doc["criteria"]:
         fn = CHECKS.get(c["check"])
@@ -30,8 +32,11 @@ def run_validation(workbook_path, criteria_path):
                 "detail": f"no check function registered for '{c['check']}'",
             })
             continue
+        params = dict(c["params"])
+        if calendar:
+            params.setdefault("quarter_ends", calendar)
         try:
-            r = fn(opp, accounts, c["params"])
+            r = fn(opp, accounts, params)
             results.append({
                 "id": c["id"], "name": c["name"],
                 "verdict": "PASS" if r["ok"] else "FAIL",

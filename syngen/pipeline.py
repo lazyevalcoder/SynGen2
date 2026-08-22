@@ -19,8 +19,16 @@ from syngen.validator.report import render_table
 class ConsoleIO:
     """Interactive terminal I/O."""
 
+    @staticmethod
+    def _safe_print(text):
+        """LLM output can contain any unicode; Windows consoles are cp1252."""
+        try:
+            print(text)
+        except UnicodeEncodeError:
+            print(str(text).encode("ascii", errors="replace").decode("ascii"))
+
     def inform(self, text):
-        print(text)
+        self._safe_print(text)
 
     def confirm(self, prompt, default=True):
         suffix = " (Y/n)" if default else " (y/N)"
@@ -123,6 +131,15 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
         log("Edit session simulator.json manually, then re-run convergence.")
     sim_path = session.write_artifact("simulator.json",
                                       json.dumps(sim_cfg, indent=2))
+
+    # Calendar flows from the generator's config into criteria so validation
+    # stays consistent with what the engine actually generated (live-smoke bug).
+    doc.setdefault("definitions", {})["quarter_end_dates"] = dict(
+        zip(sim_cfg["time_model"]["quarter_labels"],
+            sim_cfg["time_model"]["quarter_end_dates"])
+    )
+    criteria_path = session.write_artifact(
+        "criteria.json", json.dumps(doc, indent=2))
 
     # --- Phase 4: converge ---
     try:

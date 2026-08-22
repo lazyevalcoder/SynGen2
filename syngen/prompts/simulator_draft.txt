@@ -23,10 +23,19 @@ The generator engine supports EXACTLY this schema (do not invent fields):
   }
 }
 
-Calibration guidance from prior experiments:
-- Won-deal average discount per quarter ~= blend(base curves by region mix) + share_in_window * boost
-- Realized/list pct ~= 100 - won avg discount + ~1.8pp revenue-weighting bonus
-- Win rate noise at n deals/quarter has std = sqrt(p*(1-p)/n): pick per_quarter large enough that win-rate criteria are reachable
+Calibration guidance from prior experiments - USE THIS RECIPE, do not re-derive it:
+- won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost
+- realized/list pct(q) ~= 100 - won_avg_discount(q) + ~1.8pp revenue-weighting bonus
+- win rate noise std at n deals/quarter = sqrt(p*(1-p)/n): pick per_quarter >= 300 so statistical criteria are reachable
+- noise_sd_pp of 2.5-3.5 is a good default; it does not shift averages
+
+Worked example (for criteria: Q1 avg discount 10% +/-2, Q4 avg 16% +/-2, premium region APAC >= +3pp all year, regions AMER 0.45 / EMEA 0.30 / APAC 0.25, boost 6.5 with share 0.25):
+- contribution of boost to every quarterly average = 0.25 * 6.5 = 1.6pp
+- target blended Q1 base = 10 - 1.6 = 8.4 -> set AMER=EMEA=APAC Q1 base near 8
+- target blended Q4 base = 16 - 1.6 = 14.4; APAC needs +3pp over others: others 13.5, APAC 17 -> blend = 0.75*13.5 + 0.25*17 = 14.375 ✓
+- so base_by_quarter: AMER [8,10,12,13.5], EMEA [8,10,12,13.5], APAC [8,11,15,17]
+
+Begin your reply with the opening brace { immediately - no preamble, no explanation.
 
 Story:
 {{story}}
@@ -37,6 +46,6 @@ Acceptance criteria:
 Spec notes:
 {{spec}}
 
-Assumptions to use unless criteria say otherwise: fiscal year FY26 with 4 quarters; regions AMER/EMEA/APAC; seed 42.
+Assumptions to use unless criteria say otherwise: fiscal year FY26 with EXACTLY these quarter boundaries (use verbatim): quarter_end_dates = ["2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31"], quarter_labels = ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]; regions AMER/EMEA/APAC; seed 42.
 
 Respond with ONLY the JSON object for simulator.json.

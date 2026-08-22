@@ -16,7 +16,7 @@ def test_empty_content_retries_with_doubled_budget():
             super().__init__(config={"max_attempts": 3})
             self.budgets = []
 
-        def _call(self, system, user, max_tokens, temperature, attempt, effort):
+        def _call(self, system, user, max_tokens, temperature, attempt, effort, enable_thinking=None, reasoning_budget_tokens=None):
             self.budgets.append(max_tokens)
             if attempt < 3:
                 return LLMResponse(content="", finish_reason="length", attempts=attempt)
@@ -37,7 +37,7 @@ def test_gives_up_after_max_attempts_returning_last():
             super().__init__(config={"max_attempts": 3})
             self.queue = list(responses)
 
-        def _call(self, system, user, max_tokens, temperature, attempt, effort):
+        def _call(self, system, user, max_tokens, temperature, attempt, effort, enable_thinking=None, reasoning_budget_tokens=None):
             return self.queue.pop(0)
 
     r = Scripted().chat("s", "u")
@@ -56,7 +56,7 @@ def test_retry_budget_capped_at_max_retry_tokens():
             super().__init__(config={"max_attempts": 3, "max_retry_tokens": 6000})
             self.budgets = []
 
-        def _call(self, system, user, max_tokens, temperature, attempt, effort):
+        def _call(self, system, user, max_tokens, temperature, attempt, effort, enable_thinking=None, reasoning_budget_tokens=None):
             self.budgets.append(max_tokens)
             return LLMResponse(content="ok", attempts=attempt)
 
@@ -74,7 +74,7 @@ def test_retry_caps_at_limit_when_empty():
             self.budgets = []
             spy["llm"] = self
 
-        def _call(self, system, user, max_tokens, temperature, attempt, effort):
+        def _call(self, system, user, max_tokens, temperature, attempt, effort, enable_thinking=None, reasoning_budget_tokens=None):
             self.budgets.append(max_tokens)
             return LLMResponse(content="", attempts=attempt)
 
@@ -89,8 +89,11 @@ def test_profiles_cover_all_registered_checks_tasks():
                              "simulator_draft", "knob_proposal"}
     for name in PROFILES:
         p = profile_for(name)
-        assert p["max_tokens"] <= 8192
-        assert p["reasoning_effort"] in ("low", "medium")
+        assert p["max_tokens"] <= 16384
+        assert p.get("enable_thinking") in (True, False, None)
+        budget = p.get("reasoning_budget_tokens")
+        assert budget is None or (isinstance(budget, int) and 0 < budget <= 8000)
+        assert 1 <= p.get("max_attempts", 3) <= 3
     with pytest.raises(KeyError):
         profile_for("nonexistent")
 

@@ -50,23 +50,33 @@ class LLMClient:
         self.log_fn = log_fn
 
     def chat(self, system, user, max_tokens=None, temperature=None,
-             reasoning_effort=None):
+             reasoning_effort=None, max_attempts=None, enable_thinking=None,
+             reasoning_budget_tokens=None):
         """Send a chat completion.
 
+        Reasoning controls on llama.cpp (measured on b10472 + Ornith-35B):
+        - reasoning_effort: IGNORED by llama.cpp (OpenAI-only param; kept for
+          future OpenAI-compatible endpoints).
+        - enable_thinking=False via chat_template_kwargs: verified working.
+        - reasoning_budget_tokens=N: verified working - caps thinking tokens.
         Empty content triggers retry with doubled budget, capped at
-        config['max_retry_tokens'] - runaway retries were measured burning
-        ~10 min per attempt on a 35B model (see PERFORMANCE_EXPECTATIONS.md).
+        config['max_retry_tokens'].
         """
         tokens = max_tokens or self.config["max_tokens"]
         temp = self.config["temperature"] if temperature is None else temperature
         effort = reasoning_effort or self.config["reasoning_effort"]
+        think = self.config.get("enable_thinking") if enable_thinking is None else enable_thinking
+        budget = self.config.get("reasoning_budget_tokens") if reasoning_budget_tokens is None else reasoning_budget_tokens
+        attempts_allowed = max_attempts if max_attempts else self.config["max_attempts"]
         last = None
-        for attempt in range(1, self.config["max_attempts"] + 1):
+        for attempt in range(1, attempts_allowed + 1):
             if self.log_fn:
                 self.log_fn(f"[llm] attempt {attempt} starting "
-                            f"(budget={tokens}, effort={effort})")
+                            f"(budget={tokens}, effort={effort}, think={think}, "
+                            f"think_budget={budget})")
             started = time.time()
-            last = self._call(system, user, tokens, temp, attempt, effort)
+            last = self._call(system, user, tokens, temp, attempt, effort,
+                              think, budget)
             last.attempts = attempt
             last.elapsed_s = time.time() - started
             if self.log_fn:
@@ -83,7 +93,8 @@ class LLMClient:
                             f"retrying with max_tokens={tokens}")
         return last
 
-    def _call(self, system, user, max_tokens, temperature, attempt, effort):
+    def _call(self, system, user, max_tokens, temperature, attempt, effort,
+              enable_thinking=None, reasoning_budget_tokens=None):
         payload = {
             "messages": [
                 {"role": "system", "content": system},
@@ -93,6 +104,12 @@ class LLMClient:
             "max_tokens": max_tokens,
             "reasoning_effort": effort,
         }
+        if enable_thinking is not None:
+            # llama.cpp honors this for thinking-capable model templates.
+            payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
+        if reasoning_budget_tokens is not None:
+            # verified working on b10472: caps thinking tokens per request
+            payload["reasoning_budget_tokens"] = reasoning_budget_tokens
         req = urllib.request.Request(
             self.config["endpoint"], data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"}, method="POST",
@@ -118,9 +135,11 @@ class FakeLLM(LLMClient):
         self.script = list(script or [])
         self.calls = []
 
-    def _call(self, system, user, max_tokens, temperature, attempt, effort):
+    def _call(self, system, user, max_tokens, temperature, attempt, effort,
+              enable_thinking=None, reasoning_budget_tokens=None):
         self.calls.append({"system": system, "user": user,
-                           "max_tokens": max_tokens, "effort": effort})
+                           "max_tokens": max_tokens, "effort": effort,
+                           "enable_thinking": enable_thinking})
         item = self.script.pop(0) if self.script else LLMResponse(content="")
         if callable(item):
             item = item(self.calls[-1])
