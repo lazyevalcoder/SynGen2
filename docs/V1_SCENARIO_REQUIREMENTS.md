@@ -15,7 +15,7 @@
 | # | Scenario theme | Verdict | Blocking capabilities |
 |----|---------------|---------|----------------------|
 | 3 | SMB beat plan, entry-price mix, discount creep | 🟡 | WS1 quota/plan, WS2 product tiers, WS3 raking |
-| 6 | Ent missed / MM beat via quota-vs-potential mismatch | 🟡 | WS1 quotas × territory potential |
+| 6 | Ent missed / MM beat via quota-vs-potential mismatch | ✅ | **LANDED (M4):** quota block + raking + revenue_vs_plan; market_potential_usd on accounts (WS1-lite) |
 | 7 | Bookings −3%, pipeline creation +12% (low-ICP mix) | 🟡 | WS1 + ICP flag + per-group deal-size curves |
 | 8 | COGS↑, discounts concentrated in high-margin products | 🟡 | WS2 product margins + WS4 correlation |
 | 12 | Comp plan → entry-tier deals + discounting, margin ↓ | 🟡 | WS2 product tiers + margins |

@@ -229,3 +229,30 @@ def test_empty_stratum_is_skipped_not_crashed():
     cfg = base_cfg(**QUOTA)
     df = generate(cfg)["opportunities"]
     assert len(df) > 0  # smoke: the guard path didn't blow up generation
+
+
+# --- WS1-lite: market potential on accounts -----------------------------------
+
+def test_accounts_carry_market_potential():
+    cfg = base_cfg(validate=False)
+    cfg["accounts"]["market_potential_usd"] = {"min": 100_000, "max": 500_000}
+    acc = generate(validate_simulator_doc(cfg))["accounts"]
+    assert "market_potential_usd" in acc.columns
+    assert (acc["market_potential_usd"] >= 100_000).all()
+    assert (acc["market_potential_usd"] <= 500_000).all()
+
+
+def test_accounts_potential_default_range_when_absent():
+    from syngen.generator.engine import DEFAULT_POTENTIAL_RANGE_USD
+    acc = generate(base_cfg())["accounts"]
+    lo, hi = DEFAULT_POTENTIAL_RANGE_USD
+    assert (acc["market_potential_usd"] >= lo).all()
+    assert (acc["market_potential_usd"] <= hi).all()
+
+
+def test_potential_config_validation_rejects_bad_range():
+    bad = base_cfg(validate=False, accounts=dict(
+        base_cfg(validate=False)["accounts"],
+        market_potential_usd={"min": 500, "max": 100}))
+    with pytest.raises(ConfigError, match="0 <= min < max"):
+        validate_simulator_doc(bad)

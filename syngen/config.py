@@ -62,6 +62,13 @@ def validate_simulator_doc(cfg, source="simulator"):
     if len(labels) != len(ends):
         raise ConfigError("time_model: quarter_labels and quarter_end_dates length mismatch")
 
+    potential = cfg["accounts"].get("market_potential_usd")
+    if potential is not None:
+        lo, hi = potential.get("min"), potential.get("max")
+        if lo is None or hi is None or not (0 <= lo < hi):
+            raise ConfigError(
+                "accounts.market_potential_usd must be {min, max} with 0 <= min < max")
+
     curves = discount["base_by_quarter"]
     if not curves:
         raise ConfigError("discount.base_by_quarter must define at least one region curve")

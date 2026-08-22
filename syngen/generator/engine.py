@@ -18,6 +18,11 @@ ACCOUNT_SUFFIXES = [
     "Partners", "Logistics", "Technologies",
 ]
 
+# Engine constant (like suffixes), overridable via config. WS1-lite M4:
+# every account carries a market-potential figure so plan/quota narratives
+# can reason about attainment vs whitespace.
+DEFAULT_POTENTIAL_RANGE_USD = (25_000, 250_000)
+
 
 def build_accounts(cfg, rng):
     spec = cfg["accounts"]
@@ -28,6 +33,16 @@ def build_accounts(cfg, rng):
     segment_p = list(spec["segments"].values())
     industries = rng.choice(spec["industries"], size=n)
     suffixes = rng.choice(ACCOUNT_SUFFIXES, size=n)
+    # separate named stream: drawing potential from the main rng would shift
+    # every downstream draw and silently break reproducibility of existing
+    # seeded sessions (caught live by the M2 pipeline tests)
+    pot_cfg = spec.get("market_potential_usd")
+    if pot_cfg:
+        lo, hi = float(pot_cfg["min"]), float(pot_cfg["max"])
+    else:
+        lo, hi = DEFAULT_POTENTIAL_RANGE_USD
+    pot_rng = np.random.default_rng([int(cfg["seed"]), 1])
+    potential = np.round(pot_rng.uniform(lo, hi, size=n), 2)
     return pd.DataFrame(
         {
             "account_id": [f"ACC-{i + 1:04d}" for i in range(n)],
@@ -38,6 +53,7 @@ def build_accounts(cfg, rng):
             "region": rng.choice(region_names, size=n, p=region_p),
             "segment": rng.choice(segment_names, size=n, p=segment_p),
             "industry": industries,
+            "market_potential_usd": potential,
         }
     )
 

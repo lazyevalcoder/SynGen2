@@ -162,7 +162,8 @@ def has_blocking(findings):
 
 EXPECTED_SHEETS = {
     "accounts": [
-        "account_id", "account_name", "region", "segment", "industry"],
+        "account_id", "account_name", "region", "segment", "industry",
+        "market_potential_usd"],
     "opportunities": [
         "opportunity_id", "account_id", "owner", "region", "segment",
         "fiscal_quarter", "created_date", "close_date", "stage",
