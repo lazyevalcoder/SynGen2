@@ -22,15 +22,40 @@ ACCOUNT_SUFFIXES = [
 # every account carries a market-potential figure so plan/quota narratives
 # can reason about attainment vs whitespace.
 DEFAULT_POTENTIAL_RANGE_USD = (25_000, 250_000)
+# M5 iter 1: ideal-customer-profile flag; neutral default (no ICP accounts)
+# keeps the column present for the static sheet contract without injecting
+# business meaning into unconfigured runs.
+DEFAULT_ICP_SHARE = 0.0
+
+
+def _weight_curve(value, n_quarters):
+    """A categorical weight spec is a float (static) or a dict with
+    weights_by_quarter. Returns the per-quarter list either way."""
+    if isinstance(value, dict):
+        return [float(w) for w in value["weights_by_quarter"]]
+    return [float(value)] * n_quarters
+
+
+def _curve_varies(curve):
+    """True when a per-quarter weight curve actually shifts between
+    quarters - static curves keep the legacy sampling path (and its RNG
+    stream) untouched."""
+    return len(set(curve)) > 1
 
 
 def build_accounts(cfg, rng):
     spec = cfg["accounts"]
     n = spec["count"]
+    quarters_n = len(cfg["time_model"]["quarter_labels"])
     region_names = list(spec["regions"])
-    region_p = list(spec["regions"].values())
+    region_curves = [_weight_curve(v, quarters_n) for v in spec["regions"].values()]
+    # static account mix uses the mean weight of any per-quarter curves
+    region_p = np.array([np.mean(c) for c in region_curves])
+    region_p = region_p / region_p.sum()
     segment_names = list(spec["segments"])
-    segment_p = list(spec["segments"].values())
+    segment_curves = [_weight_curve(v, quarters_n) for v in spec["segments"].values()]
+    segment_p = np.array([np.mean(c) for c in segment_curves])
+    segment_p = segment_p / segment_p.sum()
     industries = rng.choice(spec["industries"], size=n)
     suffixes = rng.choice(ACCOUNT_SUFFIXES, size=n)
     # separate named stream: drawing potential from the main rng would shift
@@ -43,6 +68,9 @@ def build_accounts(cfg, rng):
         lo, hi = DEFAULT_POTENTIAL_RANGE_USD
     pot_rng = np.random.default_rng([int(cfg["seed"]), 1])
     potential = np.round(pot_rng.uniform(lo, hi, size=n), 2)
+    icp_share = float(spec.get("icp_share", DEFAULT_ICP_SHARE))
+    icp_rng = np.random.default_rng([int(cfg["seed"]), 2])
+    icp = icp_rng.random(n) < icp_share
     return pd.DataFrame(
         {
             "account_id": [f"ACC-{i + 1:04d}" for i in range(n)],
@@ -54,6 +82,7 @@ def build_accounts(cfg, rng):
             "segment": rng.choice(segment_names, size=n, p=segment_p),
             "industry": industries,
             "market_potential_usd": potential,
+            "icp": icp,
         }
     )
 
@@ -66,8 +95,42 @@ def build_opportunities(cfg, accounts_df, rng):
     owners = spec["owners"]
     window_days = dspec["end_of_quarter_window_days"]
     eoq_share = spec["close_clustering"]["share_in_end_of_quarter_window"]
-    median_usd = spec["deal_size_lognormal"]["median_usd"]
     sigma = spec["deal_size_lognormal"]["sigma"]
+    size_medians = spec["deal_size_lognormal"].get("medians_by_quarter")
+    outliers = spec.get("outlier_deals")
+
+    # M5 iter 1: per-quarter categorical mix shift - sample WHICH accounts
+    # generate pipeline each quarter using that quarter's weights
+    seg_curves = {s: _weight_curve(v, len(quarters))
+                  for s, v in cfg["accounts"].get("segments", {}).items()}
+    reg_curves = {r: _weight_curve(v, len(quarters))
+                  for r, v in cfg["accounts"].get("regions", {}).items()}
+    mix_shifts = (any(_curve_varies(c) for c in seg_curves.values()) or
+                  any(_curve_varies(c) for c in reg_curves.values()))
+    acct_segments = accounts_df["segment"].to_numpy()
+    acct_regions = accounts_df["region"].to_numpy()
+    acct_icp = accounts_df["icp"].to_numpy()
+    # M5 iter 1 (#7): per-quarter sampling preference for ICP vs non-ICP
+    # accounts - lets stories say pipeline quality shifted over time
+    icp_w = cfg["accounts"].get("icp_sampling_weights_by_quarter")
+
+    def sample_accounts(qi, n):
+        if not mix_shifts and not icp_w:
+            return rng.integers(0, len(accounts_df), size=n)
+        if mix_shifts:
+            w = np.array([seg_curves[s][qi] * reg_curves[r][qi]
+                          for s, r in zip(acct_segments, acct_regions)])
+        else:
+            w = np.ones(len(accounts_df))
+        if icp_w:
+            factors = np.where(acct_icp,
+                               float(icp_w["icp"][qi]),
+                               float(icp_w["non_icp"][qi]))
+            w = w * factors
+        total = w.sum()
+        if total <= 0:
+            return rng.integers(0, len(accounts_df), size=n)
+        return rng.choice(len(accounts_df), size=n, p=w / total)
 
     rows = []
     seq = 0
@@ -79,7 +142,7 @@ def build_opportunities(cfg, accounts_df, rng):
         n = int(round(spec["per_quarter"] *
                       (multipliers[qi] if multipliers else 1.0)))
 
-        acct_idx = rng.integers(0, len(accounts_df), size=n)
+        acct_idx = sample_accounts(qi, n)
         accts = accounts_df.iloc[acct_idx].reset_index(drop=True)
 
         win_rate_q = spec["win_rate"] + rng.uniform(
@@ -117,10 +180,27 @@ def build_opportunities(cfg, accounts_df, rng):
         discount = np.clip(base + noise + boost, dspec["min_pct"], dspec["max_pct"])
 
         discount_pct_rounded = np.round(discount, 2)
+        median_usd = size_medians[qi] if size_medians else \
+            spec["deal_size_lognormal"]["median_usd"]
         list_price = np.round(rng.lognormal(np.log(median_usd), sigma, size=n), 2)
         realized_price = np.round(
             list_price * (1.0 - discount_pct_rounded / 100.0), 2
         )
+
+        # M5 iter 1: whale/mixture deals (#25). Scale list_price then
+        # RECOMPUTE realized from it - scaling both independently and
+        # rounding would break the derived-field identity by up to
+        # multiplier * $0.005 (caught by test).
+        if outliers and n:
+            k = max(1, int(round(n * float(outliers["share"]))))
+            wh_rng = np.random.default_rng([int(cfg["seed"]), 3, qi])
+            whale_local = wh_rng.choice(n, size=k, replace=False)
+            mult = float(outliers["multiplier"])
+            keep_whale = 1 - discount_pct_rounded[whale_local] / 100
+            list_price[whale_local] = np.round(
+                list_price[whale_local] * mult, 2)
+            realized_price[whale_local] = np.round(
+                list_price[whale_local] * keep_whale, 2)
 
         for j in range(n):
             seq += 1
@@ -131,6 +211,7 @@ def build_opportunities(cfg, accounts_df, rng):
                     "owner": str(rng.choice(owners)),
                     "region": accts.loc[j, "region"],
                     "segment": accts.loc[j, "segment"],
+                    "icp": bool(accts.loc[j, "icp"]),
                     "fiscal_quarter": label,
                     "created_date": created_dates[j].date(),
                     "close_date": close_dates[j].date(),
@@ -208,6 +289,12 @@ def apply_raking(opp_df, cfg):
 
 def build_summary(opp_df, quarters):
     """Derived view over fact rows ONLY - never authored independently."""
+    summary_columns = ["fiscal_quarter", "opportunities", "closed_won",
+                       "win_rate_pct", "avg_discount_won_pct",
+                       "realized_vs_list_pct", "total_realized_usd"]
+    if opp_df.empty:
+        # e.g. per_quarter=0: keep the sheet contract, rows are empty
+        return pd.DataFrame(columns=summary_columns)
     won = opp_df[opp_df["stage"] == "Closed Won"]
     records = []
     for label in quarters:

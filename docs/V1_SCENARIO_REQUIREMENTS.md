@@ -16,15 +16,15 @@
 |----|---------------|---------|----------------------|
 | 3 | SMB beat plan, entry-price mix, discount creep | 🟡 | WS1 quota/plan, WS2 product tiers, WS3 raking |
 | 6 | Ent missed / MM beat via quota-vs-potential mismatch | ✅ | **LANDED (M4):** quota block + raking + revenue_vs_plan; market_potential_usd on accounts (WS1-lite) |
-| 7 | Bookings −3%, pipeline creation +12% (low-ICP mix) | 🟡 | WS1 + ICP flag + per-group deal-size curves |
+| 7 | Bookings -3%, pipeline creation +12% (low-ICP mix) | ✅ | **LANDED (M5 iter 1):** icp_share + icp_sampling_weights_by_quarter + deal_size_trend + icp_creation_shift |
 | 8 | COGS↑, discounts concentrated in high-margin products | 🟡 | WS2 product margins + WS4 correlation |
 | 12 | Comp plan → entry-tier deals + discounting, margin ↓ | 🟡 | WS2 product tiers + margins |
 | 15 | Quotas 20–25% above addressable market | 🟡 | WS1 quota/potential ratio entities |
 | 18 | Gap concentrated in bottom-quartile territories | 🟡 | WS1 + WS5 territory hierarchy |
 | 19 | Ramp: effective capacity 85–90% | 🟡 | WS1 capacity table + ramp curves |
-| 20 | Mix shift to higher-margin tiers post-guardrails | 🟡 | WS8 period-varying categorical weights |
-| 23 | Comp change → short-cycle small-deal behavior | 🟡 | WS8 per-period deal-size curves (minor) |
-| 25 | 101% of plan via a few early outlier deals | 🟡 | WS8 mixture/outlier primitive + prior-year history |
+| 20 | Mix shift to higher-margin tiers post-guardrails | 🟡 | weights_by_quarter primitive shipped (M5 iter 1); still needs WS2 product tiers/margins (Iter 2) |
+| 23 | Comp change  short-cycle small-deal behavior | ✅ | **LANDED (M5 iter 1):** medians_by_quarter per-period deal-size curves |
+| 25 | 101% of plan via a few early outlier deals | 🟡 | PARTIAL (M5 iter 1): outlier_deals + revenue_concentration + _all_ attainment land; ex-whale underlying attainment needs mixture-aware raking (Iter 4, with WS8 mixtures) |
 | 1 | Territory design + capacity + pipeline quality combo | 🔴 | WS6 stages/aging + WS1 territories/capacity |
 | 2 | Commit concentrated in no-engagement deals | 🔴 | WS7 engagement signals + forecast snapshots |
 | 4 | Whitespace under-covered after capacity added | 🔴 | WS1 territory/account potential model |

@@ -211,7 +211,13 @@ def check_revenue_vs_plan(opp, accounts, params):
                     -band)
         r["structural"] = True
         return r
-    seg_plan = plan[plan["segment"] == seg]
+    # "_all_" = company-wide attainment: totals across every planned segment
+    if seg == "_all_":
+        seg_plan = plan.groupby("fiscal_quarter")[
+            "target_realized_usd"].sum().reset_index()
+        seg_plan["segment"] = "_all_"
+    else:
+        seg_plan = plan[plan["segment"] == seg]
     if not len(seg_plan):
         known = sorted(plan["segment"].unique())
         r = _result(False, f"segment '{seg}' absent from plan",
@@ -220,12 +226,14 @@ def check_revenue_vs_plan(opp, accounts, params):
                     f"plan covers segments: {known}", -band)
         r["structural"] = True
         return r
-    won = won_deals(opp)
+    won_all = won_deals(opp)
     attainments = {}
     for _, row in seg_plan.iterrows():
         label = row["fiscal_quarter"]
-        actual = won[(won["fiscal_quarter"] == label)
-                     & (won["segment"] == seg)]["realized_price"].sum()
+        won_q = won_all[won_all["fiscal_quarter"] == label]
+        if seg != "_all_":
+            won_q = won_q[won_q["segment"] == seg]
+        actual = won_q["realized_price"].sum()
         plan_target = float(row["target_realized_usd"])
         attainments[label] = (actual / plan_target * 100) if plan_target else float("nan")
     worst_label = min(attainments,
@@ -281,6 +289,70 @@ def check_creation_volume_trend(opp, accounts, params):
                    tol - deviation)
 
 
+def check_deal_size_trend(opp, accounts, params):
+    """M5: average won-deal size change from first to last quarter must
+    land within tolerance of the story's claim (signed; negative = decline)."""
+    labels = list(resolve_quarter_ends(params))
+    won = won_deals(opp)
+    avgs = {label: won[won["fiscal_quarter"] == label]["list_price"].mean()
+            for label in labels}
+    first, last = labels[0], labels[-1]
+    if pd.isna(avgs[first]) or pd.isna(avgs[last]):
+        return _result(False, "no won deals in boundary quarters",
+                       f"~{params['target_change_pct']}% +/-{params['tolerance_pp']}pp",
+                       str(avgs), -float(params["tolerance_pp"]))
+    change = (avgs[last] / avgs[first] - 1) * 100
+    target = float(params["target_change_pct"])
+    tol = float(params["tolerance_pp"])
+    deviation = abs(change - target)
+    trend = " -> ".join(f"${avgs[l]:,.0f}" for l in labels)
+    return _result(deviation <= tol, f"{change:+.1f}% deal size",
+                   f"{target:+g}% +/-{tol:g}pp",
+                   f"avg won deal size: {trend}", tol - deviation)
+
+
+def check_icp_creation_shift(opp, accounts, params):
+    """M5 (#7): share of created pipeline from NON-ICP accounts must rise
+    from the first to the last quarter by at least min_increase_pp."""
+    labels = list(resolve_quarter_ends(params))
+    if "icp" not in opp.columns:
+        r = _result(False, "no icp field", f">= +{params['min_increase_pp']}pp",
+                    "config lacks accounts.icp_share", -params["min_increase_pp"])
+        r["structural"] = True
+        return r
+    shares = {}
+    for label in labels:
+        q = opp[opp["fiscal_quarter"] == label]
+        shares[label] = ((~q["icp"]).mean() * 100) if len(q) else float("nan")
+    first, last = labels[0], labels[-1]
+    shift = shares[last] - shares[first]
+    needed = params["min_increase_pp"]
+    detail = "; ".join(f"{k}: {v:.1f}% low-ICP" for k, v in shares.items())
+    return _result(shift >= needed, f"{shift:+.1f}pp shift",
+                   f">= +{needed:g}pp", detail, shift - needed)
+
+
+def check_revenue_concentration(opp, accounts, params):
+    """M5 (#25): top-N won deals' share of closed-won revenue in the last
+    quarter must be at least min_top_share_pct - concentration signal."""
+    labels = list(resolve_quarter_ends(params))
+    last = labels[-1]
+    won = won_deals(opp)
+    won = won[won["fiscal_quarter"] == last]
+    n_top = int(params.get("top_n", 5))
+    needed = params["min_top_share_pct"]
+    if len(won) < n_top:
+        return _result(False, f"only {len(won)} won deals",
+                       f"top {n_top} >= {needed}% of revenue",
+                       "not enough won deals in last quarter", -needed)
+    rev = won["realized_price"]
+    top = rev.nlargest(n_top).sum() / rev.sum() * 100
+    detail = (f"top {n_top} of {len(won)} won deals = {top:.1f}% of "
+              f"{last} realized revenue")
+    return _result(top >= needed, f"{top:.1f}% top-{n_top}",
+                   f">= {needed}%", detail, top - needed)
+
+
 CHECKS = {
     "win_rate_flat": check_win_rate_flat,
     "avg_discount_quarter": check_avg_discount_quarter,
@@ -292,4 +364,7 @@ CHECKS = {
     "revenue_vs_plan": check_revenue_vs_plan,
     "cycle_length_trend": check_cycle_length_trend,
     "creation_volume_trend": check_creation_volume_trend,
+    "deal_size_trend": check_deal_size_trend,
+    "icp_creation_shift": check_icp_creation_shift,
+    "revenue_concentration": check_revenue_concentration,
 }

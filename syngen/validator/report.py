@@ -11,8 +11,9 @@ def load_workbook(path):
     path = Path(path)
     opp = pd.read_excel(path, sheet_name="opportunities")
     accounts = pd.read_excel(path, sheet_name="accounts")
-    opp["close_date"] = pd.to_datetime(opp["close_date"])
-    opp["created_date"] = pd.to_datetime(opp["created_date"])
+    if not opp.empty:
+        opp["close_date"] = pd.to_datetime(opp["close_date"])
+        opp["created_date"] = pd.to_datetime(opp["created_date"])
     return opp, accounts
 
 

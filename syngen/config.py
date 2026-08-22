@@ -93,6 +93,70 @@ def validate_simulator_doc(cfg, source="simulator"):
         if any(float(m) <= 0 for m in mult):
             raise ConfigError("volume_multipliers must be positive")
 
+    # M5 iter 1 extensions -----------------------------------------------
+
+    medians = cfg["opportunities"]["deal_size_lognormal"].get(
+        "medians_by_quarter")
+    if medians is not None:
+        if not isinstance(medians, list) or len(medians) != len(labels):
+            raise ConfigError(
+                f"deal_size_lognormal.medians_by_quarter needs one value per "
+                f"quarter ({len(labels)} expected)")
+        if any(float(m) <= 0 for m in medians):
+            raise ConfigError("deal_size_lognormal medians must be positive")
+
+    icp_share = cfg["accounts"].get("icp_share")
+    if icp_share is not None and not (0 <= float(icp_share) <= 1):
+        raise ConfigError("accounts.icp_share must be between 0 and 1")
+
+    icp_w = cfg["accounts"].get("icp_sampling_weights_by_quarter")
+    if icp_w is not None:
+        if not isinstance(icp_w, dict) or set(icp_w) != {"icp", "non_icp"}:
+            raise ConfigError(
+                "accounts.icp_sampling_weights_by_quarter must have exactly "
+                "the keys 'icp' and 'non_icp'")
+        for key, curve in icp_w.items():
+            if not isinstance(curve, list) or len(curve) != len(labels):
+                raise ConfigError(
+                    f"icp_sampling_weights_by_quarter['{key}'] needs one "
+                    f"weight per quarter ({len(labels)} expected)")
+            if any(float(w) <= 0 for w in curve):
+                raise ConfigError("icp sampling weights must be positive")
+
+    for dim in ("regions", "segments"):
+        for name, val in cfg["accounts"].get(dim, {}).items():
+            if isinstance(val, dict):
+                curve = val.get("weights_by_quarter")
+                if not isinstance(curve, list) or len(curve) != len(labels):
+                    raise ConfigError(
+                        f"accounts.{dim}['{name}'].weights_by_quarter needs "
+                        f"one weight per quarter ({len(labels)} expected)")
+                if any(float(w) < 0 for w in curve):
+                    raise ConfigError(
+                        f"accounts.{dim}['{name}'] weights must be >= 0")
+        # per-quarter weights across the dimension should sum to ~1
+        curves = [v["weights_by_quarter"] for v in cfg["accounts"].get(dim, {}).values()
+                  if isinstance(v, dict)]
+        if curves:
+            for qi in range(len(labels)):
+                total = sum(float(c[qi]) for c in curves)
+                static = [float(v) for v in cfg["accounts"][dim].values()
+                          if not isinstance(v, dict)]
+                total += sum(static)
+                if abs(total - 1.0) > 0.05:
+                    raise ConfigError(
+                        f"accounts.{dim} weights (incl. by-quarter curves) "
+                        f"sum to {total:.3f} at quarter index {qi}; expected ~1.0")
+
+    out = cfg["opportunities"].get("outlier_deals")
+    if out is not None:
+        share = out.get("share")
+        multiplier = out.get("multiplier")
+        if share is None or not (0 < float(share) < 0.5):
+            raise ConfigError("outlier_deals.share must be between 0 and 0.5")
+        if multiplier is None or float(multiplier) <= 1:
+            raise ConfigError("outlier_deals.multiplier must be > 1")
+
     curves = discount["base_by_quarter"]
     if not curves:
         raise ConfigError("discount.base_by_quarter must define at least one region curve")

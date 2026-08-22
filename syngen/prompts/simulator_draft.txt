@@ -1,6 +1,7 @@
 You are a Business Intelligence engineer designing a synthetic dataset config. Given a story, acceptance criteria, and a spec, produce a simulator.json that can generate a dataset satisfying all criteria.
 
 The generator engine supports EXACTLY this schema (do not invent fields):
+HARD RULE on the quota block: scan the acceptance criteria FIRST. If none of them is a revenue_vs_plan check, you MUST NOT include a quota block at all - not even for phrases like "vs plan" or "below plan" without explicit per-segment plan numbers. Raking overrides deal-size knobs and will break other criteria.
 {
   "seed": <int>,
   "time_model": {"fiscal_year": "FY26", "quarter_labels": [...], "quarter_end_dates": [...]},
@@ -27,7 +28,7 @@ The generator engine supports EXACTLY this schema (do not invent fields):
   }
 }
 
-The optional quota block: include it when the story or criteria reference plans, quotas, or attainment. Two parts:
+The optional quota block: include it ONLY when the acceptance criteria contain revenue_vs_plan checks or the story gives explicit per-segment plan numbers ("Enterprise plan was $2M/quarter"). A vague phrase like "below plan" or "vs plan" WITHOUT numbers or a matching revenue_vs_plan criterion does NOT justify a quota block - omit it, because raking overrides deal-size knobs and would fight other criteria. When included, two parts:
 - "by_segment": the PLAN - what each segment was targeted to earn per quarter (authoritative numbers, sized near natural expected revenue).
 - "attainment_by_segment": OPTIONAL map of how actuals land RELATIVE to plan (default 1.0). The story defines these: Enterprise missed plan by ~5% -> "Enterprise": 0.95; Mid-Market beat by ~4% -> "Mid-Market": 1.04. The engine rakes deal sizes so closed-won revenue lands exactly at attainment x plan.
 Size by_segment targets near naturally expected revenue: per_quarter * win_rate * median_usd * (1 - avg_discount/100), split across segments by weight. revenue_vs_plan criteria need NO further calibration: raking makes attainment exact.
@@ -40,6 +41,10 @@ Calibration guidance from prior experiments - USE THIS RECIPE, do not re-derive 
 - revenue_vs_plan criteria need NO calibration: raking makes attainment exact; just include a sensible quota block covering every segment the criteria name
 - deal_duration_days may instead be {"means": [<per-quarter avg days>], "spread": <days>} for cycle-length stories (e.g., slowdown from ~45 to ~70 days -> means [45,53,62,70], spread 10)
 - volume_multipliers (optional): per-quarter creation scaling, e.g. pipeline slowing ~20% by Q4 -> [1.0, 0.95, 0.88, 0.8]. Omit when volume is flat.
+- deal_size_lognormal may add "medians_by_quarter": [<per-quarter median>] instead of median_usd for shrinking/growing deal-size stories
+- accounts may add "icp_share": <0-1> - fraction of accounts flagged as ICP (drives the icp column on both sheets). Use for pipeline-quality stories.
+- categorical weights (regions/segments) may be {"weights_by_quarter": [...]} for mix-shift stories; per-quarter sums across the dimension must stay ~1.0
+- "outlier_deals": {"share": 0.01, "multiplier": 15} creates a few whale deals (scaled prices) for concentration stories
 
 Worked example (for criteria: Q1 avg discount 10% +/-2, Q4 avg 16% +/-2, premium region APAC >= +3pp all year, regions AMER 0.45 / EMEA 0.30 / APAC 0.25, boost 6.5 with share 0.25):
 - contribution of boost to every quarterly average = 0.25 * 6.5 = 1.6pp

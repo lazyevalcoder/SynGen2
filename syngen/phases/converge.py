@@ -1,4 +1,15 @@
-"""Phase 4: the convergence loop (Experiment D, automated with guardrails)."""
+"""Phase 4: the convergence loop (Experiment D, automated with guardrails).
+
+M5 additions (iteration 1):
+- Proposal allowlist: only accounts/opportunities paths are tunable; edits to
+  time_model/seed/output/quota are rejected at patch time (G14).
+- Measured deltas: each proposal's history records how margins actually moved,
+  so the proposer learns real transfer functions instead of guesses (G3).
+- Margin-aware hardening: after convergence with thin margins, bounded
+  re-centering rounds try to widen them; any round that fails validation or
+  does not improve reverts to the best known-good state (G4).
+"""
+import copy
 import json
 from pathlib import Path
 
@@ -7,6 +18,10 @@ from syngen.phases.json_task import chat_json
 from syngen.prompts import load_prompt
 from syngen.utils import extract_json, get_at_path, set_at_path
 from syngen.validator.report import render_table, run_validation, to_report_dict
+
+# Plan-of-record blocks: proposals may not touch these (G14). quota targets
+# define the plan itself - tuning them to pass attainment would be circular.
+BLOCKED_PATH_ROOTS = {"time_model", "seed", "output", "quota"}
 
 
 class LoopEscalation(Exception):
@@ -17,12 +32,41 @@ class LoopEscalation(Exception):
         self.history = history
 
 
+def _path_root(path):
+    return str(path).split(".")[0].split("[")[0]
+
+
+def _tunable(path):
+    """Allowlist decision for a proposed knob path (G14).
+
+    Tunable: accounts.*, opportunities.*, and quota.attainment_by_segment.*
+    (steering actuals relative to the plan is legitimate; editing the plan
+    itself, the calendar, seed, or output paths is not).
+    """
+    root = _path_root(path)
+    if root in ("accounts", "opportunities"):
+        return True
+    if root == "quota":
+        return str(path).startswith("quota.attainment_by_segment")
+    return False
+
+
 def _apply_changes(cfg, changes):
     applied = []
     for ch in changes:
         path = ch.get("path", "")
+        if not _tunable(path):
+            applied.append({
+                "path": path, "error":
+                    "blocked: not a tunable knob (time_model/seed/output/"
+                    "quota.by_segment are plan-of-record)"})
+            continue
         try:
-            old = get_at_path(cfg, path)
+            try:
+                old = get_at_path(cfg, path)
+            except (KeyError, IndexError, TypeError):
+                # null parents / missing containers: set_at_path creates them
+                old = None
             set_at_path(cfg, path, ch.get("to"))
             applied.append({"path": path, "from": old, "to": ch.get("to"),
                             "predicted_effect": ch.get("predicted_effect", "")})
@@ -31,20 +75,53 @@ def _apply_changes(cfg, changes):
     return applied
 
 
-def propose_knobs(client, simulator_cfg, results, history_lines):
+def propose_knobs(client, simulator_cfg, results, history_lines,
+                  hardening=False):
     system = load_prompt(
         "knob_proposal",
-        validation_results=render_table(results, all_pass=False),
+        validation_results=render_table(results, all_pass=not hardening),
         iteration_history="\n".join(history_lines) or "none yet",
         simulator_json=json.dumps(simulator_cfg, indent=2),
     )
-    response = chat_json(client, "knob_proposal", system,
-                         "Propose the next knob changes as JSON.")
+    user_msg = "Propose the next knob changes as JSON."
+    if hardening:
+        system += (
+            "\n\nMODE: MARGIN HARDENING. Every criterion currently PASSES. "
+            "The thinnest margins are too close to their thresholds - a seed "
+            "change could flip them. Propose MINIMAL knob adjustments that "
+            "move ONLY the thinnest criteria toward band-center while keeping "
+            "every other criterion safely passing. Fewer than 3 changes; tiny "
+            "moves; compensate interactions explicitly."
+        )
+    response = chat_json(client, "knob_proposal", system, user_msg)
     return response
 
 
+def _min_margin(results):
+    vals = [r["margin"] for r in results if r["margin"] is not None]
+    return min(vals) if vals else None
+
+
+def _thin_ids(results, thin_margin_pp):
+    return [r["id"] for r in results
+            if r["margin"] is not None and r["margin"] < thin_margin_pp]
+
+
+def _record_measured_deltas(results, prev_margins, history_lines):
+    """Append actual margin movement to the last history entry (G3): the
+    proposer sees predicted-vs-realized transfer functions."""
+    movements = []
+    for r in results:
+        prior = prev_margins.get(r["id"])
+        if prior is not None and r["margin"] is not None:
+            movements.append(f"{r['id']} margin {prior:+.2f}->{r['margin']:+.2f}")
+    if movements and history_lines:
+        history_lines[-1] += "; measured: " + ", ".join(movements)
+
+
 def run_convergence(session, client, sim_path, criteria_path,
-                    max_iterations=10, max_llm_proposals=5, log_fn=print):
+                    max_iterations=10, max_llm_proposals=5, log_fn=print,
+                    thin_margin_pp=0.5, max_hardening_rounds=2):
     """Generate -> validate -> propose -> patch until story lands.
 
     Guardrails: hard iteration cap; LLM proposal cap; escalates via
@@ -61,6 +138,18 @@ def run_convergence(session, client, sim_path, criteria_path,
 
     history_lines = []
     llm_proposals = 0
+    prev_margins = {}
+    hardening_rounds = 0
+    best = None  # {"cfg", "min_margin", "summary"} of last accepted all-pass
+
+    def finish_with_best():
+        """Ensure disk state matches the best known-good configuration."""
+        Path(sim_path).write_text(json.dumps(best["cfg"], indent=2),
+                                  encoding="utf-8")
+        generate_to_workbook(best["cfg"])
+        log_fn(f"Delivering hardened-best config "
+               f"(min margin {best['min_margin']:.2f}).")
+        return best["summary"]
 
     for iteration in range(1, max_iterations + 1):
         _, wb = generate_to_workbook(cfg)
@@ -74,21 +163,70 @@ def run_convergence(session, client, sim_path, criteria_path,
             iteration, json.dumps(cfg, indent=2),
             json.dumps(to_report_dict(results, all_pass, str(wb)), indent=2))
 
+        _record_measured_deltas(results, prev_margins, history_lines)
+        prev_margins = {r["id"]: r["margin"] for r in results
+                        if r["margin"] is not None}
+
         if all_pass:
-            margins = {r["id"]: r["margin"] for r in results}
-            thin = [i for i, m in margins.items() if m is not None and m < 0.5]
+            mm = _min_margin(results)
             summary = {
                 "status": "converged",
                 "iterations": iteration,
                 "llm_proposals": llm_proposals,
-                "thin_margins": thin,
+                "thin_margins": _thin_ids(results, thin_margin_pp),
                 "workbook": str(wb),
             }
-            if thin:
-                log_fn(f"Converged with THIN margins on: {', '.join(thin)}")
-            return summary
+            if best is None or mm > best["min_margin"]:
+                best = {"cfg": copy.deepcopy(cfg), "min_margin": mm,
+                        "summary": summary}
 
+            thin = summary["thin_margins"]
+            if not thin:
+                if best["cfg"] != cfg:
+                    return finish_with_best()
+                return summary
+            if llm_proposals >= max_llm_proposals:
+                log_fn(f"Thin margins remain ({', '.join(thin)}) but proposal "
+                       "cap reached - delivering as-is.")
+                if best["cfg"] != cfg:
+                    return finish_with_best()
+                return summary
+            if hardening_rounds >= max_hardening_rounds:
+                log_fn(f"Thin margins remain ({', '.join(thin)}) after "
+                       f"{max_hardening_rounds} hardening rounds - delivering.")
+                if best["cfg"] != cfg:
+                    return finish_with_best()
+                return {**best["summary"],
+                        "note": f"hardening budget ({max_hardening_rounds}) spent"}
+
+            # --- G4 hardening round ---
+            log_fn(f"Attempting margin hardening round {hardening_rounds + 1} "
+                   f"(thin: {', '.join(thin)}).")
+            proposal = propose_knobs(client, cfg, results, history_lines,
+                                     hardening=True)
+            llm_proposals += 1
+            hardening_rounds += 1
+            applied = _apply_changes(cfg, proposal.get("changes", []))
+            session.log(f"### Hardening {hardening_rounds}\n"
+                        f"```json\n{json.dumps(applied, indent=2)}\n```")
+            history_lines.append(
+                f"iter {iteration} (hardening): changed="
+                f"{[a['path'] for a in applied if 'error' not in a]}")
+            Path(sim_path).write_text(json.dumps(cfg, indent=2),
+                                      encoding="utf-8")
+            continue  # next iteration validates the hardened config; a FAIL
+            # there hits the best-known-good branch below
+
+        # --- FAIL path ---
         failing = [r["id"] for r in results if r["verdict"] == "FAIL"]
+        if best is not None:
+            # a hardening round broke something: revert, deliver best (G4)
+            log_fn("Hardening round FAILED validation - reverting to "
+                   "best known-good state.")
+            session.log(f"HARDENING REVERTED after iteration {iteration}: "
+                        f"failing={failing}")
+            return finish_with_best()
+
         # Live M4 lesson: a criterion that references something the data
         # model cannot express (absent segment, missing sheet) is not
         # fixable by knob turns - looping just burns proposals (G14 family).

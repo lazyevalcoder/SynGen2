@@ -24,6 +24,11 @@ CRITERIA_PARAMS = {
     # fixture uses near-flat durations/counts, so zero-growth bands pass
     "cycle_length_trend": {"min_increase_pct": 0.0},
     "creation_volume_trend": {"target_decline_pct": 0.0, "tolerance_pp": 1.0},
+    # M5 iter 1 checks (fixture has ~80 won deals/quarter at sigma=0.8 ->
+    # quarterly size averages wobble several %; bands must be honest)
+    "deal_size_trend": {"target_change_pct": 0.0, "tolerance_pp": 25.0},
+    "icp_creation_shift": {"min_increase_pp": 0.0},
+    "revenue_concentration": {"top_n": 50, "min_top_share_pct": 10.0},
 }
 
 
@@ -37,6 +42,7 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
     # separate stream so adding durations doesn't shift the fixture's
     # established randomness (win-rate bands etc.)
     dur_rng = np.random.default_rng(seed + 999)
+    icp_rng = np.random.default_rng(seed + 555)
     quarters = ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]
     q_ends = {"FY26-Q1": "2026-03-31", "FY26-Q2": "2026-06-30",
               "FY26-Q3": "2026-09-30", "FY26-Q4": "2026-12-31"}
@@ -66,6 +72,7 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
                 "account_id": account_id,
                 "segment": (account_segments or {}).get(account_id,
                                                         "Enterprise"),
+                "icp": bool(icp_rng.random() < 0.4),
                 "close_date": close_date,
                 "created_date": created_date,
                 "stage": "Closed Won" if nprng.random() < 0.27 else "Closed Lost",

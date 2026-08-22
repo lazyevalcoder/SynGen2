@@ -12,11 +12,24 @@ realized_vs_list(q) ~= 100 - won_avg_discount(q) + ~1.8pp weighting bonus
 win_rate noise std = sqrt(p*(1-p)/n) - statistical failures need volume, not knob shifts.
 Knobs INTERACT: raising end_of_quarter_boost_pp raises every quarterly average - make compensating moves.
 
+Known criterion-to-knob playbook (start here, verify against the data):
+- avg_discount_quarter / discount_trend_monotonic / region_discount_premium / end_of_quarter_effect / realized_vs_list
+    -> opportunities.discount.base_by_quarter curves, end_of_quarter_boost_pp, end_of_quarter_window_days
+- win_rate_flat -> opportunities.win_rate / win_rate_jitter / per_quarter (statistical: raise volume)
+- revenue_vs_plan -> NOTHING to tune; raking enforces attainment exactly. If it fails, segments are mismatched - say so in diagnosis.
+- IMPORTANT: if the config HAS a quota block, realized revenue and deal sizes are RAKED to plan x attainment - price knobs (deal_size_lognormal) will appear not to work. Tune attainment via quota.attainment_by_segment instead.
+- cycle_length_trend -> opportunities.deal_duration_days.means curve (or spread)
+- creation_volume_trend -> opportunities.volume_multipliers (per-quarter multipliers; >1 grows, <1 shrinks; they COMPOUND across quarters)
+- deal_size_trend -> opportunities.deal_size_lognormal: either add/adjust "medians_by_quarter": [<one per quarter>] or change median_usd. NOTE: overridden by raking when a quota block exists.
+- icp_creation_shift -> accounts.icp_sampling_weights_by_quarter: {"icp": [<per-quarter>], "non_icp": [<per-quarter>]}. To RAISE low-ICP share over time: shrink the "icp" curve and/or grow the "non_icp" curve. If this key is null or absent, propose the WHOLE object in one change (path=accounts.icp_sampling_weights_by_quarter), not leaf paths.
+- revenue_concentration -> opportunities.outlier_deals: raise "multiplier" or "share" for more concentration; remove for less
+
 Rules:
 - Propose SMALL changes to base_by_quarter values, boost, or noise; prefer <= 3pp moves.
 - If a criterion is statistical and failing, propose raising per_quarter instead of distribution knobs.
 - Every change must state its predicted effect and what it compensates for.
 - Only touch knobs that exist in the current config.
+- BLOCKED PATHS: time_model.*, seed, output.*, quota.* are plan-of-record and will be rejected - never propose them.
 
 Current simulator.json:
 {{simulator_json}}

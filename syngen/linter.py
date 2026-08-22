@@ -163,9 +163,9 @@ def has_blocking(findings):
 EXPECTED_SHEETS = {
     "accounts": [
         "account_id", "account_name", "region", "segment", "industry",
-        "market_potential_usd"],
+        "market_potential_usd", "icp"],
     "opportunities": [
-        "opportunity_id", "account_id", "owner", "region", "segment",
+        "opportunity_id", "account_id", "owner", "region", "segment", "icp",
         "fiscal_quarter", "created_date", "close_date", "stage",
         "list_price", "discount_pct", "realized_price"],
     "quarterly_summary": None,  # derived view; presence checked, columns free

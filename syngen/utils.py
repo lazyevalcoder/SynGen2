@@ -57,10 +57,13 @@ def set_at_path(obj, dotted_path, value):
         nxt_is_int = isinstance(tokens[i + 1], int)
         if isinstance(token, int):
             node = node[token]
-        else:
-            if nxt_is_int and token not in node:
-                node[token] = []
-            node = node.setdefault(token, {})
+            continue
+        # LLM-authored configs routinely hold explicit nulls where a
+        # container belongs; replace them so leaf-path proposals work
+        # instead of dead-ending
+        if token not in node or node[token] is None:
+            node[token] = [] if nxt_is_int else {}
+        node = node[token]
 
 
 def _tokens(dotted_path):
