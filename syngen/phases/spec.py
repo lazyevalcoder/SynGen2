@@ -64,4 +64,12 @@ def _validate_shape(doc):
     """load_simulator enforces keys; this normalizes minor LLM deviations."""
     if not isinstance(doc, dict):
         raise ValueError("simulator draft is not a JSON object")
+    # F27 (live s21b): drafters invent synonym blocks ('outlier_deals')
+    # that pass schema validation but trip lint R1 and dead-end the
+    # session in manual_edit. Drop unknown top-level blocks up front -
+    # the fixed engine never reads them anyway.
+    known = {"seed", "time_model", "output", "accounts", "opportunities",
+             "products", "territories", "pipeline", "quota"}
+    for key in [k for k in doc if k not in known]:
+        doc.pop(key)
     return doc

@@ -62,6 +62,10 @@
 | F24 | **Static tier-delta term mispredicted blended discounts under mix shift by >2pp** | per-quarter revenue-share-weighted delta term in transfer functions |
 | F25 | **Stale-share solver ignored that created = close - duration reaches BEFORE the deal quarter** - underpredicted staleness ~50pp; EOQ clustering skews ages old beyond uniform bounds even after bounds fix | exact age-bounds model implemented; residual ~8pp gap remains (empirical distribution correction pending) - #11/#5/#21 land next pass |
 | F26 | **Auto-calibration is now a first-class pipeline stage**: closed-form solvers for pinned discount levels, region premiums, tier-mix shares (with multiplier-feasibility fallback), quota synthesis + heterogeneous attainment, margin-spread scaling, and open-pipeline reshaping run BEFORE any LLM corrective loop | converted #8 (6x escaper) and #18/#20 into landings; offline vertical slice now converges iteration 1 with zero proposals |
+| F27 | **Drafters invent synonym blocks** ('outlier_deals') that pass schema validation but trip lint R1 -> manual_edit dead-end mid-batch | _validate_shape strips unknown top-level blocks before validation |
+| F28 | **Slippage criteria fail on binomial sampling noise**: validator measures ONE realized draw (~130 open deals/qtr -> +-4pp SE on the delta); a +13pp drafted path measured +3.6pp | slippage-path solver adds noise-aware margin (1.8x SE) to the config delta |
+| F29 | **apply_raking scaled OPEN rows**, contradicting the documented 'open-deal value is NOT raked' contract - made coverage mathematically unfixable by plan sizing (open value moved with the plan) | engine scales closed rows only; golden anchor unaffected (no open rows in legacy configs) |
+| F30 | **F25 RESOLVED**: engine-exact staleness MC model (incl. quarter-START reference fix), raking contract fix, coverage plan sizing, concentration sigma solver, noise-aware slippage solver - #11/#5/#21 all landed live
 
 ---
 

@@ -870,6 +870,38 @@ def _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes):
     pipe = cfg.get("pipeline")
     if not pipe:
         return
+    # slippage_trend: make the slip-rate path rise by need + noise-aware
+    # margin. The validator measures ONE realized draw: with k open deals
+    # per quarter the delta's SE is ~sqrt(p1q1/k1 + p2q2/k2) - live s21c
+    # showed a +13pp drafted delta measuring anywhere in +-6pp.
+    for c in criteria_doc["criteria"]:
+        if c["check"] != "slippage_trend":
+            continue
+        p = c.get("params", {})
+        need = float(p.get("min_increase_pp", 5))
+        rates = [float(v) for v in pipe["slippage_rate_by_quarter"]]
+        n_qt = len(rates)
+        if n_qt < 2:
+            continue
+        mults = cfg["opportunities"].get("volume_multipliers") \
+            or [1.0] * n_qt
+        k_open = [max(1.0, cfg["opportunities"]["per_quarter"] * mults[qi]
+                      * float(pipe["share_open_by_quarter"][qi]))
+                  for qi in range(n_qt)]
+        r_first = max(0.005, rates[0])
+        r_last = min(0.85, r_first + need / 100.0)
+        se_pp = 200.0 * ((r_first * (1 - r_first) / k_open[0]
+                          + r_last * (1 - r_last) / k_open[-1]) ** 0.5)
+        want_delta = need + max(3.0, 1.8 * se_pp)
+        want_last = min(0.85, r_first + want_delta / 100.0)
+        new_rates = [round(r_first + (want_last - r_first) * qi / (n_qt - 1),
+                           4) for qi in range(n_qt)]
+        if new_rates != rates:
+            pipe["slippage_rate_by_quarter"] = new_rates
+            fixes.append(f"{c['id']}: solved slippage path "
+                         f"{new_rates} (+{(want_last - r_first) * 100:.0f}pp"
+                         f" vs >= {need:g}pp, incl. {se_pp:.0f}pp "
+                         "sampling-noise margin)")
     aging_list = [c for c in criteria_doc["criteria"]
                   if c["check"] == "stage_aging"]
     if not aging_list:

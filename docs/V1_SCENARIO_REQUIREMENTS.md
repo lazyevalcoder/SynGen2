@@ -28,7 +28,7 @@
 | 1 | Territory design + capacity + pipeline quality combo | 🔴 | WS6 stages/aging + WS1 territories/capacity |
 | 2 | Commit concentrated in no-engagement deals | 🔴 | WS7 engagement signals + forecast snapshots |
 | 4 | Whitespace under-covered after capacity added | 🔴 | WS1 territory/account potential model |
-| 5 | "Commit" loosened; deals slipped next quarter | 🔴 | WS6 open-pipeline state machine (G5) |
+| 5 | Forecast miss via slippage into next quarter | ✅ | **LANDED (M5 iter 3, s5):** P4 machinery + coverage plan sizing; AC4 thin-margin delivered via hardening-best |
 | 9 | Expansion ↓ where AE ownership changed recently | 🔴 | WS7 temporal ownership + product penetration |
 | 10 | Capacity +10% but attainment −6pts (ramp placement) | 🔴 | WS1 headcount placement model |
 | 11 | Pipeline decay: stale deals erode effective coverage | ✅ | **LANDED (M5 iter 3, s11q):** engine-exact staleness MC model + raking/open-value contract fix + coverage plan sizing |
@@ -36,7 +36,7 @@
 | 14 | Forecast +9% from overweighted expansion commit | 🔴 | WS7 forecast snapshot entity |
 | 16 | Price elasticity varies by territory | 🔴 | New demand/volume-response model |
 | 17 | Beat driven by outliers masks leading-indicator decline | 🔴 | WS8 mixtures + leading-indicator fields |
-| 21 | Coverage 3.5x but concentrated (original moonshot) | 🔴 | WS6 open pipeline + concentration metrics |
+| 21 | Open pipeline concentrated in few accounts | ✅ | **LANDED (M5 iter 3, s21d):** deal-size sigma solved by seeded MC order statistics + noise-aware slippage path solver |
 | 22 | Rebalance capacity: expansion vs new-logo motions | 🔴 | WS7 customer penetration + motion classification |
 | 24 | Consolidation left strategic accounts unowned | 🔴 | WS7 temporal ownership rules |
 
