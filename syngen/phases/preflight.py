@@ -26,6 +26,7 @@ import copy
 import json
 
 import numpy as np
+import pandas as pd
 
 from syngen.config import ConfigError, validate_simulator_doc
 
@@ -285,6 +286,40 @@ def calibrate(cfg, criteria_doc):
                 add("PF3", "SOFT", cid,
                     "mix-shift criterion but every catalog share is a "
                     "static scalar - needs weights_by_quarter curves")
+        if check == "coverage_ratio" and cfg.get("pipeline"):
+            # P1: quarter+offset must land inside the calendar (normally
+            # pre-repaired by repair_criteria - this is the backstop)
+            q = params.get("quarter")
+            if q in label_set:
+                k = labels.index(q) + int(
+                    params.get("target_quarter_offset", 0))
+                if not (0 <= k < len(labels)):
+                    add("PF1", "HARD", cid,
+                        f"target_quarter_offset points outside the "
+                        f"calendar ({q} + "
+                        f"{params.get('target_quarter_offset')})")
+            # open pipeline that provides coverage at quarter k is, by
+            # the engine's date model, at least p_k stale - if that
+            # already exceeds the stage_aging cap the two criteria
+            # cannot BOTH pass (live s11i)
+            aging = [oc for oc in criteria_doc["criteria"]
+                     if oc["check"] == "stage_aging"]
+            if aging and q in label_set:
+                k = labels.index(q) + int(
+                    params.get("target_quarter_offset", 0))
+                if 0 <= k < len(labels):
+                    cap = float(aging[0]["params"].get(
+                        "max_stale_share_pct", 35)) / 100.0
+                    thr = float(aging[0]["params"].get(
+                        "stale_threshold_days", 120))
+                    p_k = _pipeline_stale_probs(cfg, thr)[k]
+                    if p_k > cap:
+                        add("PF3", "SOFT", cid,
+                            f"coverage at {q} needs open pipeline that "
+                            f"is ~{p_k * 100:.0f}% stale (engine model) "
+                            f"vs stage_aging cap {cap * 100:.0f}% - the "
+                            "two claims conflict unless durations or "
+                            "the threshold change")
 
     return findings
 
@@ -373,7 +408,8 @@ def autocalibrate(cfg, criteria_doc):
     # Tier solving runs TWICE: a multiplier adjustment in one quarter
     # changes every other quarter's achievable share, so counts must
     # re-solve against the final multipliers before levels are solved.
-    for mode in ("tier", "tier", "levels", "planning", "margin", "pipeline"):
+    for mode in ("tier", "tier", "levels", "planning", "margin",
+                 "pipeline", "coverage"):
         _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost,
                             rw, fixes, mode=mode,
                             tier_term=tier_term, bases_sum_at=bases_sum_at)
@@ -535,96 +571,427 @@ def _autocalibrate_margin(cfg, criteria_doc, labels, fixes):
                      f"(target {want:+g}pp)")
 
 
+def _pipeline_stale_probs(cfg, thr):
+    """Exact expected stale fraction per quarter, replicating the
+    ENGINE's date-draw model: close offsets are a mixture (early vs
+    end-of-quarter window) and created = close - duration, so ages at
+    the last quarter end are D_qi - offset + duration. Monte Carlo on a
+    fixed calibration seed -> a deterministic function of the config
+    alone (F25: bounds approximations underpredicted ~8pp because EOQ
+    clustering skews deal ages old beyond any uniform-bounds model)."""
+    o = cfg["opportunities"]
+    tm = cfg["time_model"]
+    ends = [pd.Timestamp(d) for d in tm["quarter_end_dates"]]
+    dspec = o["discount"]
+    window = int(dspec["end_of_quarter_window_days"])
+    eoq_share = float(o["close_clustering"][
+        "share_in_end_of_quarter_window"])
+    dd = o["deal_duration_days"]
+    n_draws = 120_000
+    probs = []
+    for qi in range(len(ends)):
+        q_start = ends[qi] - pd.DateOffset(months=3) + pd.Timedelta(days=1)
+        q_len = (ends[qi] - q_start).days + 1
+        # age at ref = (ref - close) + duration, close = q_start + offset
+        # -> measure from quarter START (live s11h/s11i: measuring from
+        # quarter END underpredicted by ~one full quarter of mass)
+        days_to_ref = (ends[-1] - q_start).days
+        rng = np.random.default_rng([20260824, 9, qi])
+        early = rng.integers(0, max(1, q_len - window), size=n_draws)
+        eoqw = rng.integers(max(1, q_len - window), q_len, size=n_draws)
+        off = np.where(rng.random(n_draws) < eoq_share, eoqw, early)
+        if isinstance(dd, dict):
+            means = dd.get("means") or [30.0]
+            mean_d = float(means[qi]) if qi < len(means) \
+                else float(np.mean(means))
+            dur = np.clip(np.round(rng.normal(
+                mean_d, float(dd.get("spread", 10)), n_draws)), 1, None)
+        else:
+            dur = rng.integers(int(dd[0]), int(dd[1]), size=n_draws)
+        ages = days_to_ref - off + dur
+        probs.append(float((ages > thr).mean()))
+    return probs
+
+
+def _solve_open_shares(shares, probs, cap):
+    """Exponential tilt s'_q ∝ s_q · exp(-β·p_q): monotonically shifts
+    open-pipeline mass toward fresh quarters while preserving relative
+    shape. Binary search the smallest β whose predicted blended stale
+    share meets an 0.85x-safety target (the model is engine-exact, so a
+    slim margin suffices). Every share keeps a FLOOR of
+    25% of its original relative weight (live s11i: an unfloored tilt
+    zeroed early quarters, which later passes then treated as 'no open
+    pipeline exists' and scaled plans to $0 -> invalid config)."""
+    target = cap * 0.85
+    orig = np.asarray(shares, dtype=float)
+
+    def floored_blend(beta):
+        w = orig * np.exp(-beta * np.asarray(probs))
+        tot = w.sum()
+        w = w / tot if tot > 0 else np.full(len(shares), 1.0 / len(shares))
+        w = np.maximum(w, 0.25 * orig)
+        return w / w.sum()
+
+    cur = floored_blend(0.0)
+    if float((cur * probs).sum()) <= target:
+        return None  # already comfortably inside the cap
+    hi = 40.0
+    pred_hi = float((floored_blend(hi) * probs).sum())
+    if pred_hi > cap:
+        # cannot meet the cap by redistribution alone (every quarter is
+        # stale) - apply a moderate tilt only, and let the loop escalate
+        # honestly rather than wrecking the open-pipeline shape
+        w = floored_blend(2.0)
+        return [round(float(v), 4) for v in w]
+    lo = 0.0
+    for _ in range(60):
+        mid = (lo + hi) / 2.0
+        if float((floored_blend(mid) * probs).sum()) > target:
+            lo = mid
+        else:
+            hi = mid
+    w = floored_blend(hi)
+    return [round(float(v), 4) for v in w]
+
+
+def repair_criteria(cfg, doc):
+    """Deterministic criteria repair for unanchorable references
+    (live s11j: decomposer drafted target_quarter_offset=-1 from FY26-Q1,
+    which points BEFORE the calendar - no config re-draft can fix that).
+    Drops out-of-range target_quarter_offsets so the claim measures
+    against its own quarter instead. Returns human-readable notes."""
+    labels = cfg["time_model"]["quarter_labels"]
+    notes = []
+    for c in doc.get("criteria", []):
+        p = c.get("params", {})
+        off = p.get("target_quarter_offset")
+        if not off or p.get("quarter") not in labels:
+            continue
+        k = labels.index(p["quarter"]) + int(off)
+        if not (0 <= k < len(labels)):
+            del p["target_quarter_offset"]
+            notes.append(f"{c['id']}: dropped target_quarter_offset "
+                         f"({off} from {p['quarter']} is outside the "
+                         "calendar) - measuring against the quarter's "
+                         "own plan")
+    return notes
+
+
+def _scaled_durations(dd, f):
+    if isinstance(dd, dict):
+        out = copy.deepcopy(dd)
+        if out.get("means"):
+            out["means"] = [max(1, round(float(m) * f))
+                            for m in out["means"]]
+        if out.get("spread") is not None:
+            out["spread"] = round(float(out["spread"]) * f, 1)
+        return out
+    return [max(1, round(float(dd[0]) * f)), max(2, round(float(dd[1]) * f))]
+
+
+def _coverage_constraints(cfg, criteria_doc):
+    """Effective (quarter_index -> min_multiple) map from coverage_ratio
+    criteria. Multiple criteria on the same effective quarter collapse
+    to the STRONGEST multiple."""
+    labels = cfg["time_model"]["quarter_labels"]
+    out = {}
+    for c in criteria_doc["criteria"]:
+        if c["check"] != "coverage_ratio":
+            continue
+        p = c.get("params", {})
+        q = p.get("quarter")
+        if q not in labels:
+            continue
+        k = labels.index(q) + int(p.get("target_quarter_offset", 0))
+        if 0 <= k < len(labels):
+            out[k] = max(out.get(k, 0.0), float(p["min_multiple"]))
+    return out
+
+
+def _pipeline_joint_solve(cfg, aging_c, cov, fixes):
+    """Joint solve when BOTH stage_aging and coverage_ratio exist
+    (live s11k: they pull share_open_by_quarter in OPPOSITE directions,
+    and plan scaling provably cannot change coverage because raking
+    scales open rows with their stratum).
+
+    Model (n uniform per quarter, deal-value factors cancel against the
+    raked plan): coverage_k ~= sum_{q<=k} s_q / (att * w) >= m_k, i.e.
+    each criterion imposes a LOWER BOUND on cumulative open share;
+    staleness imposes sum(s_q*p_q)/sum(s_q) <= cap.
+
+    Levers, in order: reshape shares (coverage mass placed as late in
+    its prefix as possible, fresh last quarter tops up), then lower
+    win_rate (unmeasured by any check), then shorten durations."""
+    p = aging_c.get("params", {})
+    cap = float(p.get("max_stale_share_pct", 35)) / 100.0
+    thr = float(p.get("stale_threshold_days", 120))
+    cid = aging_c["id"]
+    o = cfg["opportunities"]
+    n = len(cfg["time_model"]["quarter_end_dates"])
+    mults = o.get("volume_multipliers") or [1.0] * n
+
+    def n_q(qi):
+        base = o["per_quarter"] * mults[qi]
+        return base
+
+    def current_state():
+        s = [float(v) for v in cfg["pipeline"]["share_open_by_quarter"]]
+        probs = _pipeline_stale_probs(cfg, thr)
+        blend = sum(a * b for a, b in zip(s, probs)) / sum(s)
+        cov_ok = True
+        cum = 0.0
+        for k in sorted(cov):
+            cum = sum(float(x) * n_q(qi) for qi, x in enumerate(s[:k + 1]))
+            plan_side = float(o["win_rate"]) * n_q(k)
+            if cum < cov[k] * plan_side * 1.06:   # 6% slip safety
+                cov_ok = False
+                break
+        return s, probs, blend, cov_ok
+
+    s0, probs0, blend0, cov0_ok = current_state()
+    if blend0 <= cap * 0.9 and cov0_ok:
+        return  # drafted config already jointly feasible
+
+    orig_w = float(o["win_rate"])
+    orig_dd = copy.deepcopy(o["deal_duration_days"])
+    orig_shares = list(cfg["pipeline"]["share_open_by_quarter"])
+    w, dur_f = orig_w, 1.0
+    solved = None
+    for _round in range(12):
+        probs = _pipeline_stale_probs(cfg, thr)
+        target = cap * 0.88
+        # early-mass budget: with the last quarter maximally fresh
+        p_last = probs[-1]
+        b_max = max(0.0, (target - p_last) / (1.0 - target))
+        # 2% baseline everywhere: zero open mass in a quarter looks
+        # broken downstream (stage history, slippage trends)
+        s = [0.02] * n
+        feasible = True
+        for k in sorted(cov):
+            # coverage_k = sum_{q<=k} s_q*n_q / (w*n_k) >= m_k
+            need = cov[k] * float(o["win_rate"]) * 1.06
+            have = sum(s[q] * n_q(q) / n_q(k) for q in range(k + 1))
+            add = need - have
+            if add > 1e-9:
+                if s[k] + add > 0.95:
+                    feasible = False
+                    break
+                s[k] += add
+        early = sum(s[:n - 1])
+        # Lever order matters (live s11k regression): DURATIONS gate the
+        # freshest-quarter stale prob p_last - shrinking win_rate cannot
+        # help that. Only shrink win_rate when coverage's early-mass
+        # requirement busts the budget.
+        if p_last >= target or (feasible and early <= b_max
+                                and s[n - 1] < 0.95):
+            pass  # durations acceptable / staleness solvable by shaping
+        elif w > 0.03:
+            w = max(0.02, w * 0.72)
+            o["win_rate"] = round(w, 4)
+            continue
+        else:
+            dur_f *= 0.55
+            if dur_f < 0.08:
+                break
+            o["deal_duration_days"] = _scaled_durations(orig_dd, dur_f)
+            o["win_rate"] = round(orig_w, 4)
+            continue
+        # top up the fresh last quarter until the blend meets target
+        lo, hi = s[n - 1], 0.95
+
+        def blend_with(sl):
+            ss = s[:]
+            ss[n - 1] = sl
+            return sum(a * b for a, b in zip(ss, probs)) / sum(ss)
+
+        if blend_with(hi) > target:
+            # even a fully-open last quarter cannot save the blend -
+            # shorten durations (fresher last quarter) and retry
+            dur_f *= 0.55
+            if dur_f < 0.08:
+                break
+            o["deal_duration_days"] = _scaled_durations(orig_dd, dur_f)
+            continue
+        for _ in range(40):
+            mid = (lo + hi) / 2.0
+            if blend_with(mid) > target:
+                lo = mid
+            else:
+                hi = mid
+        s[n - 1] = hi
+        solved = s
+        break
+
+    if solved is None:
+        # roll back every lever so the convergence loop starts clean
+        o["win_rate"] = orig_w
+        o["deal_duration_days"] = copy.deepcopy(orig_dd)
+        cfg["pipeline"]["share_open_by_quarter"] = orig_shares
+        fixes.append(f"{cid}: joint coverage/staleness solve found no "
+                     "feasible configuration - escalating to the "
+                     "convergence loop as-is")
+        return
+    changed = []
+    new_shares = [round(v, 4) for v in solved]
+    if new_shares != [float(v) for v in cfg["pipeline"]["share_open_by_quarter"]]:
+        cfg["pipeline"]["share_open_by_quarter"] = new_shares
+        changed.append(f"share_open={new_shares}")
+    if abs(float(o["win_rate"]) - orig_w) > 1e-4:
+        changed.append(f"win_rate {orig_w:.2f}->{float(o['win_rate']):.2f}")
+    if abs(dur_f - 1.0) > 1e-6:
+        changed.append(f"durations scaled x{dur_f:.2f}")
+    if changed:
+        fixes.append(f"{cid}: joint coverage/staleness solve - "
+                     + ", ".join(changed))
+
+
 def _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes):
-    """Reshape share_open_by_quarter so the stale share at evaluation
-    (last quarter end) meets stage_aging caps: shift open-pipeline mass
-    toward later quarters (live s11: 80% stale because early quarters
-    held most of the open mass)."""
+    """Reshape share_open_by_quarter so the predicted stale share at
+    evaluation meets stage_aging caps (F25 exact model); when coverage
+    criteria coexist, defer to the joint solver."""
     pipe = cfg.get("pipeline")
     if not pipe:
         return
+    aging_list = [c for c in criteria_doc["criteria"]
+                  if c["check"] == "stage_aging"]
+    cov = _coverage_constraints(cfg, criteria_doc)
+    if aging_list and cov:
+        _pipeline_joint_solve(cfg, aging_list[0], cov, fixes)
+        return
+    if not aging_list:
+        return
+    c = aging_list[0]
+    p = c.get("params", {})
+    cap = float(p.get("max_stale_share_pct", 35)) / 100.0
+    thr = float(p.get("stale_threshold_days", 120))
+    shares = [float(v) for v in pipe["share_open_by_quarter"]]
+    if len(shares) < 2:
+        return
+    probs = _pipeline_stale_probs(cfg, thr)
+    new = _solve_open_shares(shares, probs, cap)
+    if new is None:
+        return
+    pred = sum(s * f for s, f in zip(new, probs)) / sum(new)
+    if pred > cap:
+        # Feasibility rescue (live s11j): with durations up to ~95d
+        # and a 90d staleness threshold nearly EVERY deal of any
+        # quarter is stale - no share redistribution can help.
+        # Duration is not measured by any check, so shorten it until
+        # the cap is reachable, then re-solve the tilt.
+        lo_f, hi_f = 0.15, 1.0
+        best = None
+        orig_dd = copy.deepcopy(
+            cfg["opportunities"]["deal_duration_days"])
+        for _ in range(18):
+            mid = (lo_f + hi_f) / 2.0
+            cfg["opportunities"]["deal_duration_days"] = \
+                _scaled_durations(orig_dd, mid)
+            p_m = _pipeline_stale_probs(cfg, thr)
+            s_m = _solve_open_shares(shares, p_m, cap)
+            b_m = sum(a * b for a, b in zip(s_m, p_m)) / sum(s_m) \
+                if s_m else 0.0
+            if b_m <= cap * 0.85:
+                best = mid
+                hi_f = mid
+            else:
+                lo_f = mid
+        if best is None:
+            cfg["opportunities"]["deal_duration_days"] = \
+                _scaled_durations(orig_dd, 0.15)
+        fixes.append(f"{c['id']}: shortened deal durations to "
+                     f"{cfg['opportunities']['deal_duration_days']} - "
+                     "the staleness cap was unreachable at the "
+                     "drafted cycle length")
+        probs = _pipeline_stale_probs(cfg, thr)
+        new = _solve_open_shares(shares, probs, cap)
+        if new is None:
+            return
+    pipe["share_open_by_quarter"] = new
+    pred = sum(s * f for s, f in zip(new, probs)) / sum(new)
+    fixes.append(f"{c['id']}: reshaped share_open_by_quarter to "
+                 f"{new} -> predicted {pred * 100:.1f}% stale "
+                 f"(engine-exact model, <= {cap * 100:.0f}% cap)")
+
+
+def _autocalibrate_coverage(cfg, criteria_doc, fixes):
+    """F25b: size quota plan levels so coverage_ratio criteria can pass.
+    Coverage compares cumulative OPEN-pipeline VALUE (expected close up
+    to the quarter) against that quarter's plan total; a naturally-sized
+    plan leaves coverage at ~0.6x when the story wants 3x. Scale the
+    plan DOWN per affected quarter to open_value/(multiple*1.12) - the
+    revenue_vs_plan ratios are scale-invariant, so this cannot break
+    them (attainment floats up instead)."""
+    if not cfg.get("pipeline") or not cfg.get("quota"):
+        return
+    labels = cfg["time_model"]["quarter_labels"]
+    quota = cfg["quota"]
+    units_map = quota.get("by_segment") or quota.get("by_territory") or {}
+    if not units_map:
+        return
+    n_q = len(labels)
+    # expected open VALUE per created-quarter (engine model: lognormal
+    # deal sizes, predicted blended discount)
+    o = cfg["opportunities"]
+    dl = o["deal_size_lognormal"]
+    sigma = float(dl["sigma"])
+    med0 = float(dl.get("median_usd", 0.0))
+    medians = dl.get("medians_by_quarter")
+    mults = o.get("volume_multipliers")
+    disc = _predicted_discount_curve(cfg)
+    shares = [float(v) for v in cfg["pipeline"]["share_open_by_quarter"]]
+    v_cum, run = [], 0.0
+    for qi in range(min(n_q, len(shares))):
+        med = float(medians[qi]) if medians and qi < len(medians) else med0
+        n_qi = o["per_quarter"] * (mults[qi] if mults else 1.0)
+        run += n_qi * shares[qi] * med * (1.0 - disc[qi] / 100.0)
+        v_cum.append(run)
+    caps = {}
+    need_default = None
     for c in criteria_doc["criteria"]:
-        if c["check"] != "stage_aging":
+        if c["check"] != "coverage_ratio":
             continue
         p = c.get("params", {})
-        cap = float(p.get("max_stale_share_pct", 35)) / 100.0
-        thr = float(p.get("stale_threshold_days", 120))
-        shares = [float(v) for v in pipe["share_open_by_quarter"]]
-        n = len(shares)
-        if n < 2:
+        q = p.get("quarter")
+        m = float(p["min_multiple"])
+        need_default = m if need_default is None else min(need_default, m)
+        if q not in labels:
             continue
-        q_len = 91.33
-        # Exact age bounds: created spans [q_start - dmax, q_end - dmin],
-        # so ages at evaluation span [q_end_age + dmin, q_start_age + dmax]
-        # (live s11g fix: 'created = close - duration' reaches BEFORE the
-        # deal's own quarter - the quarter-end approximation underpredicted
-        # staleness by ~50pp).
-        o = cfg["opportunities"]
-        dd = o["deal_duration_days"]
-        if isinstance(dd, dict):
-            spread = float(dd.get("spread", 10))
-            mean_d = float(np.mean(dd.get("means", [30])))
-            dmin, dmax = max(0.0, mean_d - spread), mean_d + spread
-        else:
-            dmin, dmax = float(dd[0]), float(dd[1])
-        stale_fracs = []
-        for qi in range(n):
-            q_end_age = (n - 1 - qi) * q_len
-            age_lo = q_end_age + dmin
-            age_hi = q_end_age + q_len + dmax
-            if age_hi <= thr:
-                stale_fracs.append(0.0)
-            elif age_lo >= thr:
-                stale_fracs.append(1.0)
-            else:
-                stale_fracs.append(min(1.0, max(0.0,
-                    (age_hi - thr) / max(1e-9, age_hi - age_lo))))
-        stale_flags = [f > 0.99 for f in stale_fracs]
-
-        # Closed form generalized: expected stale share =
-        # Σ s_q · frac_q / Σ s_q. Solve for stale-block mass when all
-        # stale-flagged quarters are ~fully stale; otherwise scale their
-        # shares down proportionally until the blend meets target.
-        fresh_idx = [qi for qi in range(n) if stale_fracs[qi] < 0.99]
-        stale_idx = [qi for qi in range(n) if stale_fracs[qi] >= 0.99]
-        cur = list(shares)
-        if not fresh_idx or not stale_idx:
-            # partial-staleness everywhere: shrink stale-heavy quarters by
-            # a common factor until predicted share <= target
-            for _ in range(60):
-                pred = sum(s * f for s, f in zip(cur, stale_fracs)) / \
-                    max(1e-9, sum(cur))
-                if pred <= cap * 0.6:
-                    break
-                for qi in range(n):
-                    if stale_fracs[qi] > 0.5:
-                        cur[qi] *= 0.85
-                    else:
-                        cur[qi] *= 1.06
-            new = [round(v, 4) for v in cur]
-        else:
-            target = cap * 0.6
-            stale_orig = sum(cur[qi] for qi in stale_idx)
-            new = list(cur)
-            if stale_orig > 1e-9:
-                k = target / stale_orig
-                for qi in stale_idx:
-                    new[qi] = min(0.9, cur[qi] * k)
-                blk = sum(new[qi] for qi in stale_idx)
-                if blk > 0:
-                    for qi in stale_idx:
-                        new[qi] *= target / blk
-            rem = 1.0 - sum(new[qi] for qi in stale_idx)
-            even_f = min(0.9, rem / len(fresh_idx))
-            for qi in fresh_idx:
-                new[qi] = even_f
-            tot = sum(new)
-            new = [round(v / tot, 4) for v in new]
-        if new != shares:
-            pipe["share_open_by_quarter"] = new
-            fixes.append(f"{c['id']}: reshaped share_open_by_quarter to "
-                         f"{new} for <= {cap * 100:.0f}% stale share "
-                         f"(durations {dmin:.0f}-{dmax:.0f}d accounted)")
+        k = labels.index(q) + int(p.get("target_quarter_offset", 0))
+        if not (0 <= k < len(v_cum)):
+            continue
+        caps[k] = min(caps.get(k, float("inf")), v_cum[k] / (m * 1.12))
+    # Healthy-pipeline invariant: when a story cares about coverage at
+    # all, no quarter's plan should exceed what open pipeline can cover
+    # at ~1.25x (live s11j: the drafter drafted $18M/qtr plans that left
+    # later quarters at 0.1x coverage).
+    if need_default is not None:
+        for k in range(len(v_cum)):
+            caps[k] = min(caps.get(k, float("inf")), v_cum[k] * 0.8)
+    dim = "by_segment" if quota.get("by_segment") else "by_territory"
+    for k, cap_k in sorted(caps.items()):
+        try:
+            t_cur = sum(float(u[k]) for u in units_map.values())
+        except (IndexError, TypeError, ValueError):
+            continue
+        if t_cur <= 0 or t_cur <= cap_k:
+            continue
+        f = cap_k / t_cur
+        if v_cum[k] < t_cur * 0.005:
+            # essentially NO open pipeline exists at that quarter - the
+            # conflict is structural, not a sizing problem (live s11i:
+            # an unfloored tilt zeroed open mass, then this pass scaled
+            # the plan to $0 -> invalid config). Leave the plan intact;
+            # the contradiction rule surfaces the conflict instead.
+            fixes.append(f"coverage: Q{k + 1} has no meaningful open "
+                         "pipeline to cover a plan - leaving plan "
+                         "unchanged")
+            continue
+        for u in units_map.values():
+            u[k] = round(float(u[k]) * f, 2)
+        quota[dim] = units_map
+        fixes.append(f"coverage: scaled plan Q{k + 1} down x{f:.2f} "
+                     f"(to ${cap_k:,.0f}) so open pipeline covers it at "
+                     "the required multiple")
 
 
 def _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost, rw,
@@ -636,6 +1003,8 @@ def _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost, rw,
                   "region_discount_premium"}
     elif mode == "planning":
         return _autocalibrate_planning(cfg, criteria_doc, fixes)
+    elif mode == "coverage":
+        return _autocalibrate_coverage(cfg, criteria_doc, fixes)
     elif mode == "margin":
         return _autocalibrate_margin(cfg, criteria_doc, labels, fixes)
     elif mode == "pipeline":

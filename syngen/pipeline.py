@@ -184,7 +184,15 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
     early with a precise reason instead of a doomed convergence loop.
     Returns (sim_cfg, status); sim_cfg None means abort."""
     from syngen.phases.preflight import (autocalibrate, calibrate,
-                                         hard_findings, render_findings)
+                                         hard_findings, render_findings,
+                                         repair_criteria)
+
+    repairs = repair_criteria(sim_cfg, doc)
+    if repairs:
+        log("Repaired criteria deterministically:\n"
+            + "\n".join(f"  - {x}" for x in repairs))
+        session.log("## Criteria repair\n" + "\n".join(f"- {x}" for x in repairs))
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
 
     def run_pass(cfg):
         return calibrate(cfg, doc)
