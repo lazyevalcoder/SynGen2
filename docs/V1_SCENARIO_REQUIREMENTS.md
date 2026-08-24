@@ -31,7 +31,7 @@
 | 5 | "Commit" loosened; deals slipped next quarter | 🔴 | WS6 open-pipeline state machine (G5) |
 | 9 | Expansion ↓ where AE ownership changed recently | 🔴 | WS7 temporal ownership + product penetration |
 | 10 | Capacity +10% but attainment −6pts (ramp placement) | 🔴 | WS1 headcount placement model |
-| 11 | Pipeline decay/stale opps → effective coverage | 🔴 | WS6 open-pipeline state machine (G5) |
+| 11 | Pipeline decay: stale deals erode effective coverage | ✅ | **LANDED (M5 iter 3, s11q):** engine-exact staleness MC model + raking/open-value contract fix + coverage plan sizing |
 | 13 | Activity ↑ but aimed at low-potential accounts | 🔴 | WS7 activity/meetings fact table |
 | 14 | Forecast +9% from overweighted expansion commit | 🔴 | WS7 forecast snapshot entity |
 | 16 | Price elasticity varies by territory | 🔴 | New demand/volume-response model |

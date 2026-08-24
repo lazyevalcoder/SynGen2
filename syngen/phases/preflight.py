@@ -409,7 +409,7 @@ def autocalibrate(cfg, criteria_doc):
     # changes every other quarter's achievable share, so counts must
     # re-solve against the final multipliers before levels are solved.
     for mode in ("tier", "tier", "levels", "planning", "margin",
-                 "pipeline", "coverage"):
+                 "pipeline", "coverage", "concentration"):
         _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost,
                             rw, fixes, mode=mode,
                             tier_term=tier_term, bases_sum_at=bases_sum_at)
@@ -618,10 +618,10 @@ def _solve_open_shares(shares, probs, cap):
     open-pipeline mass toward fresh quarters while preserving relative
     shape. Binary search the smallest β whose predicted blended stale
     share meets an 0.85x-safety target (the model is engine-exact, so a
-    slim margin suffices). Every share keeps a FLOOR of
-    25% of its original relative weight (live s11i: an unfloored tilt
-    zeroed early quarters, which later passes then treated as 'no open
-    pipeline exists' and scaled plans to $0 -> invalid config)."""
+    slim margin suffices). A small ABSOLUTE floor keeps every quarter's
+    pipeline non-degenerate (live s11i taught: zero-share quarters broke
+    downstream passes; live s11o taught: a RELATIVE floor blocks
+    feasibility once coverage is handled by plan sizing instead)."""
     target = cap * 0.85
     orig = np.asarray(shares, dtype=float)
 
@@ -629,7 +629,8 @@ def _solve_open_shares(shares, probs, cap):
         w = orig * np.exp(-beta * np.asarray(probs))
         tot = w.sum()
         w = w / tot if tot > 0 else np.full(len(shares), 1.0 / len(shares))
-        w = np.maximum(w, 0.25 * orig)
+        w = np.maximum(w, 0.01)
+        w = np.minimum(w, 0.94)  # validator rejects share_open > 0.95
         return w / w.sum()
 
     cur = floored_blend(0.0)
@@ -675,6 +676,18 @@ def repair_criteria(cfg, doc):
                          "calendar) - measuring against the quarter's "
                          "own plan")
     return notes
+
+
+def _scaled_durations(dd, f):
+    if isinstance(dd, dict):
+        out = copy.deepcopy(dd)
+        if out.get("means"):
+            out["means"] = [max(1, round(float(m) * f))
+                            for m in out["means"]]
+        if out.get("spread") is not None:
+            out["spread"] = round(float(out["spread"]) * f, 1)
+        return out
+    return [max(1, round(float(dd[0]) * f)), max(2, round(float(dd[1]) * f))]
 
 
 def _scaled_durations(dd, f):
@@ -790,11 +803,12 @@ def _pipeline_joint_solve(cfg, aging_c, cov, fixes):
             o["win_rate"] = round(w, 4)
             continue
         else:
+            # NB: do NOT reset win_rate here - both levers must ratchet
+            # monotonically or the loop ping-pongs (live s11l regression)
             dur_f *= 0.55
             if dur_f < 0.08:
                 break
             o["deal_duration_days"] = _scaled_durations(orig_dd, dur_f)
-            o["win_rate"] = round(orig_w, 4)
             continue
         # top up the fresh last quarter until the blend meets target
         lo, hi = s[n - 1], 0.95
@@ -847,17 +861,17 @@ def _pipeline_joint_solve(cfg, aging_c, cov, fixes):
 
 def _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes):
     """Reshape share_open_by_quarter so the predicted stale share at
-    evaluation meets stage_aging caps (F25 exact model); when coverage
-    criteria coexist, defer to the joint solver."""
+    evaluation meets stage_aging caps (F25 exact model).
+
+    Coverage criteria are NOT handled here: open-pipeline VALUE is not
+    raked (engine F25 fix), so _autocalibrate_coverage can hit any
+    multiple purely by sizing the plan - no share/win_rate gymnastics
+    needed (the joint solver this replaces ping-ponged its levers)."""
     pipe = cfg.get("pipeline")
     if not pipe:
         return
     aging_list = [c for c in criteria_doc["criteria"]
                   if c["check"] == "stage_aging"]
-    cov = _coverage_constraints(cfg, criteria_doc)
-    if aging_list and cov:
-        _pipeline_joint_solve(cfg, aging_list[0], cov, fixes)
-        return
     if not aging_list:
         return
     c = aging_list[0]
@@ -911,6 +925,72 @@ def _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes):
     fixes.append(f"{c['id']}: reshaped share_open_by_quarter to "
                  f"{new} -> predicted {pred * 100:.1f}% stale "
                  f"(engine-exact model, <= {cap * 100:.0f}% cap)")
+
+
+def _autocalibrate_concentration(cfg, criteria_doc, fixes):
+    """pipeline_concentration (top-N accounts' share of open-pipeline
+    VALUE): the engine draws deal sizes iid lognormal, so value
+    concentrates in few accounts only via the SIZE TAIL. Solve sigma by
+    seeded Monte-Carlo order statistics - deterministic in the config,
+    no LLM involved. Raking keeps closed-won revenue on plan, so a
+    fatter tail does not disturb plan/attainment criteria."""
+    if not cfg.get("pipeline"):
+        return
+    o = cfg["opportunities"]
+    dl = o["deal_size_lognormal"]
+    n_acc = int(cfg["accounts"]["count"])
+    labels = cfg["time_model"]["quarter_labels"]
+    mults = o.get("volume_multipliers") or [1.0] * len(labels)
+    shares = [float(v) for v in cfg["pipeline"]["share_open_by_quarter"]]
+    n_open = int(sum(o["per_quarter"] * mults[qi]
+                     * (shares[qi] if qi < len(shares) else 0.0)
+                     for qi in range(len(labels))))
+    if n_open < 10 or n_acc < 10:
+        return
+
+    def top_share(sigma, topn):
+        rng = np.random.default_rng([20260824, 11])
+        vals = rng.lognormal(0.0, float(sigma), n_open)
+        acc = rng.integers(0, n_acc, n_open)
+        tot = np.zeros(n_acc)
+        np.add.at(tot, acc, vals)
+        return float(np.sort(tot)[::-1][:int(topn)].sum() / tot.sum())
+
+    for c in criteria_doc["criteria"]:
+        if c["check"] != "pipeline_concentration":
+            continue
+        p = c.get("params", {})
+        need = float(p.get("min_top_share_pct", 50)) / 100.0
+        topn = int(p.get("top_n_accounts", 5))
+        cur_sigma = float(dl["sigma"])
+        cur = top_share(cur_sigma, topn)
+        if cur >= need * 1.08:
+            continue  # comfortable margin already
+        hi = cur_sigma
+        found = None
+        for _ in range(14):
+            hi *= 1.3
+            if top_share(hi, topn) >= need * 1.08 or hi > 4.0:
+                found = hi
+                break
+        if found is None:
+            fixes.append(f"{c['id']}: could not reach {need * 100:.0f}% "
+                         "top-account concentration even with a fat "
+                         "deal-size tail - escalating as-is")
+            continue
+        lo = cur_sigma
+        for _ in range(30):
+            mid = (lo + hi) / 2.0
+            if top_share(mid, topn) >= need * 1.08:
+                hi = mid
+            else:
+                lo = mid
+        dl["sigma"] = round(hi, 3)
+        got = top_share(dl["sigma"], topn)
+        fixes.append(f"{c['id']}: raised deal_size sigma "
+                     f"{cur_sigma:.2f}->{dl['sigma']:.2f} -> predicted "
+                     f"top-5 open-pipeline share {got * 100:.0f}% "
+                     f"(>= {need * 100:.0f}%)")
 
 
 def _autocalibrate_coverage(cfg, criteria_doc, fixes):
@@ -1005,6 +1085,8 @@ def _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost, rw,
         return _autocalibrate_planning(cfg, criteria_doc, fixes)
     elif mode == "coverage":
         return _autocalibrate_coverage(cfg, criteria_doc, fixes)
+    elif mode == "concentration":
+        return _autocalibrate_concentration(cfg, criteria_doc, fixes)
     elif mode == "margin":
         return _autocalibrate_margin(cfg, criteria_doc, labels, fixes)
     elif mode == "pipeline":

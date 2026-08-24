@@ -87,9 +87,8 @@ def test_solve_open_shares_meets_cap_or_best_effort():
     assert new is not None
     blend = sum(s * p for s, p in zip(new, probs)) / sum(new)
     assert blend <= 0.35 * 0.85 + 1e-3, (blend, new)
-    # floors hold: no quarter loses more than ~75% of its relative weight
-    for o, v in zip(shares, new):
-        assert v >= 0.2 * o / sum(shares) - 1e-6, (o, v)
+    # absolute floor keeps every quarter non-degenerate
+    assert all(v >= 0.009 for v in new), new
     # already-compliant config untouched
     assert _solve_open_shares([0.1, 0.2, 0.3, 0.4],
                               [0.01, 0.05, 0.1, 0.2], 0.35) is None

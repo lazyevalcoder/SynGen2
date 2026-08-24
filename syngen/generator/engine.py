@@ -410,10 +410,14 @@ def apply_raking(opp_df, cfg):
     land at 95% of it. realized is recomputed from the scaled list,
     preserving the derived-field identity exactly.
 
-    All rows in a stratum scale together (won and lost), keeping the
-    stratum's price distribution coherent. Margin fields survive: the
-    cogs_ratio column is per-deal and unscaled, so margin_pct is invariant
-    under uniform price scaling.
+    OPEN rows are NOT scaled (F25 live s11n): they carry no closed
+    revenue, and scaling them made open-pipeline VALUE move with the
+    plan, which made coverage_ratio mathematically unfixable by plan
+    sizing - the documented contract says only closed-won revenue is
+    raked. All CLOSED rows in a stratum scale together (won and lost),
+    keeping the stratum's price distribution coherent. Margin fields
+    survive: the cogs_ratio column is per-deal and unscaled, so
+    margin_pct is invariant under uniform price scaling.
     """
     if not cfg.get("quota"):
         return opp_df
@@ -432,15 +436,18 @@ def apply_raking(opp_df, cfg):
             target = float(curve[qi]) * ratio
             mask = (df[dim] == unit) & (df["fiscal_quarter"] == label)
             won_mask = mask & (df["stage"] == "Closed Won")
+            scale_mask = mask & df["stage"].isin(
+                ["Closed Won", "Closed Lost"])
             won_sum = df.loc[won_mask, "realized_price"].sum()
             if target <= 0 or won_sum <= 0:
                 continue  # cannot rake an empty or unsellable stratum
             k = target / won_sum
-            keep = 1 - df.loc[mask, "discount_pct"] / 100
-            df.loc[mask, "list_price"] = (df.loc[mask, "list_price"] * k).round(2)
+            keep = 1 - df.loc[scale_mask, "discount_pct"] / 100
+            df.loc[scale_mask, "list_price"] = (
+                df.loc[scale_mask, "list_price"] * k).round(2)
             # recompute from the scaled list so realized == list*(1-d) exactly
-            df.loc[mask, "realized_price"] = (
-                df.loc[mask, "list_price"] * keep
+            df.loc[scale_mask, "realized_price"] = (
+                df.loc[scale_mask, "list_price"] * keep
             ).round(2)
             # absorb rounding drift into the largest won deal so attainment
             # is exact to the cent while keeping the identity intact
