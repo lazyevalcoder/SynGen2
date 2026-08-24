@@ -7,29 +7,53 @@ Knob changes tried so far (oldest first):
 {{iteration_history}}
 
 Transfer function learned from experiments:
-won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost_pp + clip_bias
+won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost_pp
+                      + sum_tier(rev_share_tier * discount_delta_pp_by_tier[tier])
+  - the THIRD term matters when products.discount_delta_pp_by_tier is nonzero: a +6pp
+    premium delta on ~30% revenue share adds ~+1.8pp to every quarterly average. Lower
+    base_by_quarter by that amount to keep pinned levels on target.
 realized_vs_list(q) ~= 100 - won_avg_discount(q) + ~1.8pp weighting bonus
+blended_margin%(q) ~= 100 - sum_tier(rev_share_tier * cogs_tier) / (1 - won_avg_discount(q)/100)
+  - use this to COMPUTE the margin_by_tier values that satisfy both a margin target and a
+    realized_vs_list target instead of guessing: rising discounts erode margin by
+    roughly cogs * (d_last - d_first) pp, so if the story demands BOTH a large discount
+    increase AND a small margin decline, RAISE margin_by_tier (lower cogs) until the
+    formula lands inside the band.
 win_rate noise std = sqrt(p*(1-p)/n) - statistical failures need volume, not knob shifts.
 Knobs INTERACT: raising end_of_quarter_boost_pp raises every quarterly average - make compensating moves.
 
 Known criterion-to-knob playbook (start here, verify against the data):
 - avg_discount_quarter / discount_trend_monotonic / region_discount_premium / end_of_quarter_effect / realized_vs_list
     -> opportunities.discount.base_by_quarter curves, end_of_quarter_boost_pp, end_of_quarter_window_days
+    -> CAUSAL RULE: these checks are functions of DISCOUNT PERCENTAGES only. products.* knobs
+       (margin_by_tier, cogs_inflation) have ZERO effect on them - cost never enters list or
+       realized price. If realized_vs_list or an average-discount check fails, change discount
+       knobs; never reach for margin knobs.
 - win_rate_flat -> opportunities.win_rate / win_rate_jitter / per_quarter (statistical: raise volume)
 - revenue_vs_plan -> NOTHING to tune; raking enforces attainment exactly. If it fails, segments are mismatched - say so in diagnosis.
 - IMPORTANT: if the config HAS a quota block, realized revenue and deal sizes are RAKED to plan x attainment - price knobs (deal_size_lognormal) will appear not to work. Tune attainment via quota.attainment_by_segment instead.
 - cycle_length_trend -> opportunities.deal_duration_days.means curve (or spread)
 - creation_volume_trend -> opportunities.volume_multipliers (per-quarter multipliers; >1 grows, <1 shrinks; they COMPOUND across quarters)
-- deal_size_trend -> opportunities.deal_size_lognormal: either add/adjust "medians_by_quarter": [<one per quarter>] or change median_usd. NOTE: overridden by raking when a quota block exists.
+- deal_size_trend -> opportunities.deal_size_lognormal: either add/adjust "medians_by_quarter": [<one per quarter>] or change median_usd. NOTE: overridden by raking when a quota block exists. UNDER A QUOTA BLOCK use volume instead: raking pins each quarter's TOTAL realized revenue, so average won-deal size ~= plan_total / won_count - raise/lower opportunities.volume_multipliers over time to move the average size DOWN/UP while totals stay on plan.
 - icp_creation_shift -> accounts.icp_sampling_weights_by_quarter: {"icp": [<per-quarter>], "non_icp": [<per-quarter>]}. To RAISE low-ICP share over time: shrink the "icp" curve and/or grow the "non_icp" curve. If this key is null or absent, propose the WHOLE object in one change (path=accounts.icp_sampling_weights_by_quarter), not leaf paths.
 - revenue_concentration -> opportunities.outlier_deals: raise "multiplier" or "share" for more concentration; remove for less
+- blended_margin_trend -> products.margin_by_tier values (raise/lower tier margins) or products.cogs_inflation_by_quarter (per-quarter cost multipliers; >1 each quarter erodes margin progressively)
+- tier_share_shift -> products.catalog[].share curves (or {"weights_by_quarter":[...]}; per-quarter sums must stay ~1.0 across ALL products) and/or products.price_multiplier_by_tier. CRITICAL: shares are DEAL-COUNT shares, but the criterion measures REVENUE share:
+  rev_share_tier ~= count_share_tier * price_mult_tier / sum_j(count_share_j * price_mult_j)
+  Cheap tiers need much LARGER count shares than their revenue-share target - e.g. with multipliers entry=0.4/core=1/premium=2.5, a 35% entry REVENUE share needs roughly a 60% entry COUNT share. If raising count shares did not move revenue share enough, KEEP GOING UP (do not reverse direction), or lower that tier's price multiplier.
+- discount_margin_link -> products.discount_delta_pp_by_tier: raise the high-margin tier's delta to widen the gap, lower/zero it to close
+- avg_price_by_tier -> products.price_multiplier_by_tier for that tier (lower multiplier = cheaper deals); also opportunities.deal_size_lognormal medians shift all tiers together
+- gap_concentration -> NOTHING to tune directly; raking enforces per-unit attainment exactly, so shortfalls are plan-shaped. If it fails, territory/plan structure mismatches the claim - say so in diagnosis.
+- IMPORTANT: if the config HAS a quota block, realized revenue and deal sizes are RAKED to plan x attainment - price knobs (deal_size_lognormal) will appear not to work. Tune attainment via quota.attainment_by_segment (or quota.attainment) instead.
+- If a needed key is null or missing entirely, propose the WHOLE parent object in one change rather than leaf paths (leaf edits into null parents fail).
+- Only touch knobs that exist in the current config (products.* knobs only exist when a products block is present).
 
 Rules:
 - Propose SMALL changes to base_by_quarter values, boost, or noise; prefer <= 3pp moves.
 - If a criterion is statistical and failing, propose raising per_quarter instead of distribution knobs.
 - Every change must state its predicted effect and what it compensates for.
 - Only touch knobs that exist in the current config.
-- BLOCKED PATHS: time_model.*, seed, output.*, quota.* are plan-of-record and will be rejected - never propose them.
+- BLOCKED PATHS: time_model.*, seed, output.*, quota.by_segment.*, quota.by_territory.* are plan-of-record and will be rejected - never propose them. quota.attainment* paths ARE allowed.
 
 Current simulator.json:
 {{simulator_json}}

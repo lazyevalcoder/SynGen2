@@ -69,6 +69,8 @@
 
 ## M5 — Automation & Polish
 
+**Status:** Iteration 2 of 5 complete (2026-08-24). Iter 1: convergence intelligence + distribution extensions (#7, #23 landed; #6 earlier). Iter 2: WS2 products/margins, WS4 correlation, WS5 territories + full planning dimension (#12 landed; #3/#8 escalated on drafter variance - F17). Scorecard: 4/25 landed. Iter 3 opens with the drafter pre-flight calibration theme (F17) plus deferred #18/#20 live landings.
+
 **Scope:** Make the loop genuinely hands-off, then complete the scenario surface.
 - Knob-delta proposer agent using transfer-function notes + iteration history (G3)
 - Margin-aware convergence targeting mid-band by default (G4)
@@ -93,3 +95,16 @@ Each milestone answers exactly one trust question before the next begins — the
 ## Explicitly Deferred
 
 Web UI, multi-user/server mode, BI-tool integrations, additional domains beyond M4's scope, orchestration frameworks. Revisit only after M5.
+
+## Post-v1 — Domain Packs (unscheduled)
+
+**Trigger:** any requirement to generate synthetic data for a second vertical (e.g., finance/accounting/treasury scenarios). No timeline committed; do not start before v1 ships.
+
+The harness (loop, raking, sessions, guardrails, playbook learning) is domain-agnostic and proven across three story classes. What is RevOps-specific today: the engine table schemas (`accounts`/`opportunities`), the 13-check sales-metric library, and the analyst persona in prompts. A domain pack is the swappable surface:
+
+1. **Prompt profiles** — per-domain persona + data-model description (decompose/draft/precheck)
+2. **Fact generators** — new entities behind the same declarative config (`invoices`, `cashflows`, `gl_entries`...); generic primitives (period curves, raking vs budget, mix-shift, outliers) carry over untouched
+3. **Check pack** — domain metrics as registered checks following the margin contract (~30 lines each; e.g., DSO trend, aging buckets, liquidity ratios)
+4. **Lint taxonomies** — entity vocabularies for the new tables
+
+Cost estimate: first new domain ≈ M1–M3 effort; subsequent domains are fractions of that. Design constraint to honor during M5 phases 2–5: avoid baking additional sales assumptions into shared schemas (products/temporal entities should stay pack-neutral where cheap).

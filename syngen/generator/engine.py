@@ -71,7 +71,7 @@ def build_accounts(cfg, rng):
     icp_share = float(spec.get("icp_share", DEFAULT_ICP_SHARE))
     icp_rng = np.random.default_rng([int(cfg["seed"]), 2])
     icp = icp_rng.random(n) < icp_share
-    return pd.DataFrame(
+    df = pd.DataFrame(
         {
             "account_id": [f"ACC-{i + 1:04d}" for i in range(n)],
             "account_name": [
@@ -85,6 +85,14 @@ def build_accounts(cfg, rng):
             "icp": icp,
         }
     )
+    # M5 iter 2 (WS5): territory hierarchy - roll regions up into sales
+    # territories; unmapped regions are territories of their own.
+    terr_map = spec.get("territories")
+    if terr_map:
+        region_to_terr = {r: t for t, rs in terr_map.items() for r in rs}
+        df["territory"] = df["region"].map(
+            lambda r: region_to_terr.get(r, r))
+    return df
 
 
 def build_opportunities(cfg, accounts_df, rng):
@@ -113,6 +121,25 @@ def build_opportunities(cfg, accounts_df, rng):
     # M5 iter 1 (#7): per-quarter sampling preference for ICP vs non-ICP
     # accounts - lets stories say pipeline quality shifted over time
     icp_w = cfg["accounts"].get("icp_sampling_weights_by_quarter")
+
+    # M5 iter 2: product attribution. Each opportunity draws a catalog
+    # product from that quarter's mix curve (named stream [seed, 4, qi] -
+    # drawing from the main rng would shift every downstream draw and break
+    # reproducibility of existing stories).
+    prod_spec = cfg.get("products")
+    price_mult = {}
+    disc_delta = {}
+    if prod_spec:
+        catalog = prod_spec["catalog"]
+        prod_ids = [p["id"] for p in catalog]
+        prod_tier = {p["id"]: p["tier"] for p in catalog}
+        prod_curves = {p["id"]: _weight_curve(p["share"], len(quarters))
+                       for p in catalog}
+        tier_margin = prod_spec["margin_by_tier"]
+        price_mult = prod_spec.get("price_multiplier_by_tier", {})
+        disc_delta = prod_spec.get("discount_delta_pp_by_tier", {})
+        cogs_infl = prod_spec.get("cogs_inflation_by_quarter") or \
+            [1.0] * len(quarters)
 
     def sample_accounts(qi, n):
         if not mix_shifts and not icp_w:
@@ -144,6 +171,25 @@ def build_opportunities(cfg, accounts_df, rng):
 
         acct_idx = sample_accounts(qi, n)
         accts = accounts_df.iloc[acct_idx].reset_index(drop=True)
+
+        if prod_spec and n:
+            # per-quarter product mix (own named stream, see note above)
+            pr_rng = np.random.default_rng([int(cfg["seed"]), 4, qi])
+            mix = np.array([prod_curves[pid][qi] for pid in prod_ids])
+            if mix.sum() <= 0:
+                prod_pick = pr_rng.choice(len(prod_ids), size=n)
+            else:
+                prod_pick = pr_rng.choice(len(prod_ids), size=n,
+                                          p=mix / mix.sum())
+            picked_ids = [prod_ids[i] for i in prod_pick]
+            picked_tiers = [prod_tier[pid] for pid in picked_ids]
+            cogs_ratios = np.round(
+                [(1.0 - float(tier_margin[t])) * float(cogs_infl[qi])
+                 for t in picked_tiers], 4)
+        else:
+            picked_ids = [None] * n
+            picked_tiers = [None] * n
+            cogs_ratios = np.full(n, np.nan)
 
         win_rate_q = spec["win_rate"] + rng.uniform(
             -spec["win_rate_jitter"], spec["win_rate_jitter"]
@@ -177,12 +223,27 @@ def build_opportunities(cfg, accounts_df, rng):
             dspec["end_of_quarter_boost_pp"],
             0.0,
         )
-        discount = np.clip(base + noise + boost, dspec["min_pct"], dspec["max_pct"])
+        # M5 iter 2 (WS4): cross-field coupling primitive - discounts may
+        # shift by product tier BEFORE clipping (e.g. high-margin tiers
+        # discounted harder), then realized is derived normally so the
+        # identity holds.
+        if disc_delta:
+            delta = np.array(
+                [float(disc_delta.get(t, 0.0)) for t in picked_tiers])
+            discount = np.clip(base + noise + boost + delta,
+                               dspec["min_pct"], dspec["max_pct"])
+        else:
+            discount = np.clip(base + noise + boost,
+                               dspec["min_pct"], dspec["max_pct"])
 
         discount_pct_rounded = np.round(discount, 2)
         median_usd = size_medians[qi] if size_medians else \
             spec["deal_size_lognormal"]["median_usd"]
         list_price = np.round(rng.lognormal(np.log(median_usd), sigma, size=n), 2)
+        if price_mult:
+            mult_arr = np.array(
+                [float(price_mult.get(t, 1.0)) for t in picked_tiers])
+            list_price = np.round(list_price * mult_arr, 2)
         realized_price = np.round(
             list_price * (1.0 - discount_pct_rounded / 100.0), 2
         )
@@ -204,36 +265,55 @@ def build_opportunities(cfg, accounts_df, rng):
 
         for j in range(n):
             seq += 1
-            rows.append(
-                {
-                    "opportunity_id": f"OPP-{seq:05d}",
-                    "account_id": accts.loc[j, "account_id"],
-                    "owner": str(rng.choice(owners)),
-                    "region": accts.loc[j, "region"],
-                    "segment": accts.loc[j, "segment"],
-                    "icp": bool(accts.loc[j, "icp"]),
-                    "fiscal_quarter": label,
-                    "created_date": created_dates[j].date(),
-                    "close_date": close_dates[j].date(),
-                    "stage": "Closed Won" if won[j] else "Closed Lost",
-                    "list_price": list_price[j],
-                    "discount_pct": float(discount_pct_rounded[j]),
-                    "realized_price": realized_price[j],
-                }
-            )
+            row = {
+                "opportunity_id": f"OPP-{seq:05d}",
+                "account_id": accts.loc[j, "account_id"],
+                "owner": str(rng.choice(owners)),
+                "region": accts.loc[j, "region"],
+                "segment": accts.loc[j, "segment"],
+                "icp": bool(accts.loc[j, "icp"]),
+                "fiscal_quarter": label,
+                "created_date": created_dates[j].date(),
+                "close_date": close_dates[j].date(),
+                "stage": "Closed Won" if won[j] else "Closed Lost",
+                "list_price": list_price[j],
+                "discount_pct": float(discount_pct_rounded[j]),
+                "realized_price": realized_price[j],
+            }
+            if "territory" in accts.columns:
+                row["territory"] = accts.loc[j, "territory"]
+            if prod_spec:
+                row["product_id"] = picked_ids[j]
+                row["product_tier"] = picked_tiers[j]
+                row["cogs_ratio"] = float(cogs_ratios[j])
+            rows.append(row)
 
     return pd.DataFrame(rows)
 
 
+def _quota_dimension(cfg):
+    """Quota plan units: 'segment' (legacy default) or 'territory'."""
+    quota = cfg.get("quota") or {}
+    if quota.get("by_territory"):
+        return "territory", quota["by_territory"]
+    return "segment", quota.get("by_segment")
+
+
 def build_quota_plan(cfg):
-    """quota_plan sheet from the optional config quota block (WS3)."""
-    by_segment = cfg.get("quota", {}).get("by_segment")
-    if not by_segment:
+    """quota_plan sheet from the optional config quota block (WS3).
+
+    Unified schema across plan dimensions: plan_unit_type names the
+    grouping column ('segment' or 'territory'), plan_unit carries its
+    value. Keeps downstream checks domain-neutral.
+    """
+    dim, targets = _quota_dimension(cfg)
+    if not targets:
         return None
     quarters = cfg["time_model"]["quarter_labels"]
     rows = [
-        {"segment": seg, "fiscal_quarter": label, "target_realized_usd": float(t)}
-        for seg, curve in by_segment.items()
+        {"plan_unit_type": dim, "plan_unit": unit, "fiscal_quarter": label,
+         "target_realized_usd": float(t)}
+        for unit, curve in targets.items()
         for label, t in zip(quarters, curve)
     ]
     return pd.DataFrame(rows)
@@ -242,27 +322,34 @@ def build_quota_plan(cfg):
 def apply_raking(opp_df, cfg):
     """Deterministic monetary raking pass (WS3 aggregate targets).
 
-    Per segment x quarter stratum: scale list_price so closed-won realized
-    revenue hits the quota target TIMES the segment's configured attainment
-    (default 1.0). This is what lets a story say "Enterprise missed plan by
-    5%" - the plan stays the plan, and actuals land at 95% of it. realized
-    is recomputed from the scaled list, preserving the derived-field
-    identity exactly.
+    Per plan-unit x quarter stratum: scale list_price so closed-won
+    realized revenue hits the quota target TIMES the unit's configured
+    attainment ratio (default 1.0). This is what lets a story say
+    "Enterprise missed plan by 5%" - the plan stays the plan, and actuals
+    land at 95% of it. realized is recomputed from the scaled list,
+    preserving the derived-field identity exactly.
 
     All rows in a stratum scale together (won and lost), keeping the
-    stratum's price distribution coherent.
+    stratum's price distribution coherent. Margin fields survive: the
+    cogs_ratio column is per-deal and unscaled, so margin_pct is invariant
+    under uniform price scaling.
     """
     if not cfg.get("quota"):
         return opp_df
     quarters = cfg["time_model"]["quarter_labels"]
-    targets = cfg["quota"]["by_segment"]
-    attainment = cfg["quota"].get("attainment_by_segment", {})
+    dim, targets = _quota_dimension(cfg)
+    attainment = cfg["quota"].get("attainment") or \
+        cfg["quota"].get("attainment_by_segment", {})
     df = opp_df.copy()
-    for seg, curve in targets.items():
-        ratio = float(attainment.get(seg, 1.0))
+    for unit, curve in targets.items():
+        raw_ratio = attainment.get(unit, 1.0)
+        try:
+            ratio = float(raw_ratio)
+        except (TypeError, ValueError):
+            ratio = 1.0  # defense in depth: never crash raking on a bad type
         for qi, label in enumerate(quarters):
             target = float(curve[qi]) * ratio
-            mask = (df["segment"] == seg) & (df["fiscal_quarter"] == label)
+            mask = (df[dim] == unit) & (df["fiscal_quarter"] == label)
             won_mask = mask & (df["stage"] == "Closed Won")
             won_sum = df.loc[won_mask, "realized_price"].sum()
             if target <= 0 or won_sum <= 0:

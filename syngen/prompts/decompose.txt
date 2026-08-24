@@ -13,7 +13,8 @@ Story:
 {{story}}
 
 Context you may assume:
-- Data model: accounts table + opportunities table (list price, realized price, discount pct, close date, stage, region, segment, owner). When the story references plans/quotas, a quota_plan sheet (per-segment quarterly revenue targets) is generated too and revenue_vs_plan measures attainment against it.
+- Data model: accounts table + opportunities table (list price, realized price, discount pct, close date, stage, region, segment, owner). When the story references products/SKUs/tiers/margins/COGS, opportunities also carry product_id, product_tier (e.g., entry/core/premium) and cogs_ratio. When the story references territories or sales regions grouped into areas, both tables carry territory. When the story references plans/quotas, a quota_plan sheet (per-segment OR per-territory quarterly revenue targets) is generated too and revenue_vs_plan measures attainment against it.
+- Product tiers carry configurable gross margins and optional per-quarter COGS inflation; discount levels can be coupled to tier margin (WS4 correlation).
 
 Respond with ONLY a JSON object:
 {
@@ -53,9 +54,15 @@ Available checks and their params:
 - deal_size_trend: {target_change_pct, tolerance_pp} - average won-deal size (list price) change from first to last quarter lands within tolerance of the claim. Story says deal sizes shrank ~15% -> target_change_pct=-15.
 - icp_creation_shift: {min_increase_pp} - share of created pipeline from NON-ICP accounts must rise by at least this many percentage points from first to last quarter. Use for "pipeline growth came disproportionately from low-quality accounts".
 - revenue_concentration: {top_n, min_top_share_pct} - top N deals' share of last-quarter won revenue must be at least this percent. Use for "revenue depended on a handful of large deals".
-- revenue_vs_plan: {segment, target_pct, band_pct} - attainment of quarterly revenue plan vs quota targets. Use when the story references quotas/plans or "missed/exceeded plan by X%". target_pct is the story's expected attainment: missed plan by ~5% -> target_pct=95; beat by ~4% -> target_pct=104. band_pct is tolerance (2 is a good default). segment may be a named segment OR "_all_" for company-wide attainment claims (e.g., "revenue finished at 101% of plan"). Do not invent other aggregate names like "Total" or "Overall" - use "_all_" for those claims.
+- revenue_vs_plan: {segment, target_pct, band_pct, dimension?} - attainment of quarterly revenue plan vs quota targets. Use when the story references quotas/plans or "missed/exceeded plan by X%". target_pct is the story's expected attainment: missed plan by ~5% -> target_pct=95; beat by ~4% -> target_pct=104. band_pct is tolerance (2 is a good default). segment may be a named segment/territory OR "_all_" for company-wide attainment claims (e.g., "revenue finished at 101% of plan"). For territory plans add "dimension": "territory". Do not invent other aggregate names like "Total" or "Overall" - use "_all_" for those claims.
+- blended_margin_trend: {target_change_pct, tolerance_pp} - blended gross margin % of won deals changes from first to last quarter within tolerance of the claim. COGS rising -> margin falling: "gross margin eroded ~3 points" -> target_change_pct=-3, tolerance_pp=1.
+- tier_share_shift: {tier, from_share_pct, to_share_pct, tolerance_pp} - one product tier's share of WON REVENUE moves from ~from_share_pct (first quarter) to ~to_share_pct (last quarter). Use for mix-shift claims ("entry-tier products grew to 40% of sales", "mix moved to premium").
+- discount_margin_link: {high_margin_tier, low_margin_tier, min_gap_pp} - avg discount on the high-margin tier must exceed the low-margin tier's by at least min_gap_pp. Use for "discounts were concentrated in high-margin products".
+- avg_price_by_tier: {tier, max_avg_realized_usd} - average realized price of won deals in a tier stays under the cap. Use for entry-price / price-point claims ("SMB bought only entry-level deals around $15k").
+- gap_concentration: {dimension, min_bottom_gap_share_pct} - the bottom quartile of plan units (by attainment) must hold at least this share of total plan shortfall. Use for "the miss was concentrated in weak territories" (dimension: territory).
 
 IMPORTANT semantics:
 - realized_vs_list measures REVENUE RETAINED as a percentage of list price. Its targets are approximately 100 minus the discount percentages (e.g., discounts rising 12% to 18% means realized/list falls ~88% to ~82%), NOT the discount values themselves.
-- Only reference regions/segments that plausibly exist in the data model (e.g., AMER, EMEA, APAC). Do not invent extra regions.
-Quarter labels look like FY26-Q1. Use only these seven check names.
+- Only reference regions/segments that plausibly exist in the data model (e.g., AMER, EMEA, APAC). Do not invent extra regions or tier names - when the story implies tiers without naming them, use entry/core/premium and say so in ambiguities.
+- Margin claims are percentage-point changes (3 points of margin = target_change_pct=-3), NOT percent changes.
+Quarter labels look like FY26-Q1. Use only the available check names listed above.

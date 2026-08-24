@@ -12,7 +12,7 @@ M5 additions (iteration 1):
 import copy
 import json
 from pathlib import Path
-
+from syngen.config import ConfigError, validate_simulator_doc
 from syngen.generator.engine import generate_to_workbook
 from syngen.phases.json_task import chat_json
 from syngen.prompts import load_prompt
@@ -39,20 +39,56 @@ def _path_root(path):
 def _tunable(path):
     """Allowlist decision for a proposed knob path (G14).
 
-    Tunable: accounts.*, opportunities.*, and quota.attainment_by_segment.*
-    (steering actuals relative to the plan is legitimate; editing the plan
-    itself, the calendar, seed, or output paths is not).
+    Tunable: accounts.*, opportunities.*, products.*, and quota attainment
+    ratios under either key (steering actuals relative to the plan is
+    legitimate; editing the plan itself, the calendar, seed, or output
+    paths is not).
     """
     root = _path_root(path)
-    if root in ("accounts", "opportunities"):
+    if root in ("accounts", "opportunities", "products"):
         return True
     if root == "quota":
-        return str(path).startswith("quota.attainment_by_segment")
+        return (str(path).startswith("quota.attainment_by_segment")
+                or str(path).startswith("quota.attainment"))
     return False
+
+
+def _renormalize_product_shares(cfg):
+    """Product catalog shares are RELATIVE weights; proposers routinely
+    adjust one tier's curve without rebalancing siblings, which failed
+    whole otherwise-valid proposals (live s12 lesson). Normalize
+    near-miss sums (~1 +/-0.15); gross errors stay invalid."""
+    prods = cfg.get("products")
+    if not isinstance(prods, dict):
+        return
+    catalog = prods.get("catalog") or []
+    labels = cfg.get("time_model", {}).get("quarter_labels") or []
+    curves = []
+    static = []
+    for p in catalog:
+        s = p.get("share") if isinstance(p, dict) else None
+        if isinstance(s, dict) and isinstance(s.get("weights_by_quarter"),
+                                              list):
+            curves.append(s["weights_by_quarter"])
+        elif isinstance(s, (int, float)):
+            static.append(float(s))
+    if not curves:
+        return
+    static_total = sum(static)
+    target = 1.0 - static_total  # curves must fill what static leaves
+    if target <= 0:
+        return
+    for qi in range(len(labels)):
+        curves_sum = sum(float(c[qi]) for c in curves)
+        if curves_sum > 0 and abs(curves_sum + static_total - 1.0) <= 0.15:
+            k = target / curves_sum
+            for c in curves:
+                c[qi] = float(c[qi]) * k  # no rounding: keep the sum exact
 
 
 def _apply_changes(cfg, changes):
     applied = []
+    snapshot = copy.deepcopy(cfg)
     for ch in changes:
         path = ch.get("path", "")
         if not _tunable(path):
@@ -72,6 +108,26 @@ def _apply_changes(cfg, changes):
                             "predicted_effect": ch.get("predicted_effect", "")})
         except (KeyError, IndexError, TypeError) as e:
             applied.append({"path": path, "error": f"could not apply: {e}"})
+    # Deterministic content gate (F11 meta-lesson): a schema-plausible patch
+    # can still produce an invalid config (e.g., a list where the engine
+    # needs a scalar). Reject the WHOLE proposal rather than crashing the
+    # generator mid-loop. Only enforced when the starting config was itself
+    # valid - never block patches on a pre-broken config.
+    try:
+        validate_simulator_doc(copy.deepcopy(snapshot))
+        was_valid = True
+    except ConfigError:
+        was_valid = False
+    if was_valid:
+        _renormalize_product_shares(cfg)
+        try:
+            validate_simulator_doc(cfg)
+        except ConfigError as e:
+            cfg.clear()
+            cfg.update(snapshot)
+            return [{"path": "*",
+                     "error": f"proposal rejected - config would be "
+                              f"invalid: {e}; no changes applied"}]
     return applied
 
 
@@ -141,6 +197,12 @@ def run_convergence(session, client, sim_path, criteria_path,
     prev_margins = {}
     hardening_rounds = 0
     best = None  # {"cfg", "min_margin", "summary"} of last accepted all-pass
+    best_partial = None  # hill-climbing snapshot: most criteria passed so far
+
+    def _score(results):
+        passed = sum(1 for r in results if r["verdict"] == "PASS")
+        total = sum(r["margin"] or 0.0 for r in results)
+        return passed, total
 
     def finish_with_best():
         """Ensure disk state matches the best known-good configuration."""
@@ -152,8 +214,25 @@ def run_convergence(session, client, sim_path, criteria_path,
         return best["summary"]
 
     for iteration in range(1, max_iterations + 1):
-        _, wb = generate_to_workbook(cfg)
-        results, all_pass = run_validation(wb, criteria_path)
+        try:
+            _, wb = generate_to_workbook(cfg)
+            results, all_pass = run_validation(wb, criteria_path)
+        except Exception as e:  # noqa: BLE001 - engine/config blowups are
+            # data failures, not session failures (live s3 lesson: a bad
+            # attainment type crashed raking and killed the whole session)
+            log_fn(f"Iteration {iteration} raised {type(e).__name__}: {e}")
+            session.log(f"## Iteration {iteration}\n\nGENERATION FAILED: "
+                        f"{type(e).__name__}: {e}")
+            if best_partial is not None:
+                cfg.clear()
+                cfg.update(copy.deepcopy(best_partial["cfg"]))
+                history_lines.append(
+                    f"iter {iteration}: generation failed ({e}); reverted to "
+                    f"{best_partial['score'][0]}-passing state")
+                continue
+            raise LoopEscalation(
+                f"generation failed on the initial config: {e}",
+                [], history_lines)
         table = render_table(results, all_pass)
         log_fn(f"--- Iteration {iteration} ---\n{table}")
         session.log(f"## Iteration {iteration}\n```\n{table}\n```")
@@ -226,6 +305,26 @@ def run_convergence(session, client, sim_path, criteria_path,
             session.log(f"HARDENING REVERTED after iteration {iteration}: "
                         f"failing={failing}")
             return finish_with_best()
+
+        # Hill-climbing guardrail (M5 iter 2 live lesson: the proposer
+        # oscillated, regressing passing criteria while chasing others).
+        # Keep the snapshot with the most passing criteria; if this
+        # iteration regressed, restart the next proposal from that
+        # snapshot so progress is monotone.
+        score = _score(results)
+        if best_partial is None or score > best_partial["score"]:
+            best_partial = {"cfg": copy.deepcopy(cfg), "score": score}
+        elif score < best_partial["score"]:
+            log_fn(f"Proposal regressed ({score[0]} vs "
+                   f"{best_partial['score'][0]} passing) - reverting to "
+                   "best partial state before next proposal.")
+            session.log(f"REGRESSION REVERTED after iteration {iteration}: "
+                        f"score={score} vs best={best_partial['score']}")
+            cfg.clear()
+            cfg.update(copy.deepcopy(best_partial["cfg"]))
+            history_lines.append(
+                f"iter {iteration}: REGRESSED to {score[0]} passing; "
+                f"reverted to {best_partial['score'][0]}-passing state")
 
         # Live M4 lesson: a criterion that references something the data
         # model cannot express (absent segment, missing sheet) is not

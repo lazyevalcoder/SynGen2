@@ -21,7 +21,8 @@ Experiment F's structure_check.py).
 """
 import re
 
-KNOWN_BLOCKS = {"seed", "time_model", "output", "accounts", "opportunities"}
+KNOWN_BLOCKS = {"seed", "time_model", "output", "accounts", "opportunities",
+                "products"}
 
 FACT_SYNONYMS = re.compile(
     r"(deals?|pipeline|opps?|transactions?|records?|activities?)$", re.I)
@@ -160,34 +161,60 @@ def has_blocking(findings):
 
 # --- post-generation structural check ---------------------------------------
 
+BASE_ACCOUNT_COLUMNS = [
+    "account_id", "account_name", "region", "segment", "industry",
+    "market_potential_usd", "icp"]
+BASE_OPP_COLUMNS = [
+    "opportunity_id", "account_id", "owner", "region", "segment", "icp",
+    "fiscal_quarter", "created_date", "close_date", "stage",
+    "list_price", "discount_pct", "realized_price"]
+
 EXPECTED_SHEETS = {
-    "accounts": [
-        "account_id", "account_name", "region", "segment", "industry",
-        "market_potential_usd", "icp"],
-    "opportunities": [
-        "opportunity_id", "account_id", "owner", "region", "segment", "icp",
-        "fiscal_quarter", "created_date", "close_date", "stage",
-        "list_price", "discount_pct", "realized_price"],
+    "accounts": BASE_ACCOUNT_COLUMNS,
+    "opportunities": BASE_OPP_COLUMNS,
     "quarterly_summary": None,  # derived view; presence checked, columns free
-    "quota_plan": ["segment", "fiscal_quarter", "target_realized_usd"],
+    "quota_plan": ["plan_unit_type", "plan_unit", "fiscal_quarter",
+                   "target_realized_usd"],
     "_synngen_meta": None,
 }
 OPTIONAL_SHEETS = {"quota_plan"}  # present only when the config has quotas
 
 
-def structure_findings(xl_file):
+def expected_sheets_for(cfg):
+    """Column contract depends on which optional blocks the config uses
+    (products attribution columns, territory rollups). Order mirrors the
+    engine's row-dict insertion order."""
+    sheets = {k: (list(v) if v else v) for k, v in EXPECTED_SHEETS.items()}
+    if cfg:
+        if cfg.get("products"):
+            sheets["opportunities"] += ["product_id", "product_tier",
+                                        "cogs_ratio"]
+        if cfg.get("accounts", {}).get("territories"):
+            sheets["accounts"] = sheets["accounts"] + ["territory"]
+            # engine emits territory before the product columns
+            opp = sheets["opportunities"]
+            if "product_id" in opp:
+                opp.insert(opp.index("product_id"), "territory")
+            else:
+                opp.append("territory")
+    return sheets
+
+
+def structure_findings(xl_file, cfg=None):
     """Workbook must match the engine's sheet/column contract exactly.
 
     Extra or missing sheets mean someone hand-edited output or the generator
     drifted from its contract - both are gate-blocking. Optional sheets are
-    column-checked only when present.
+    column-checked only when present. The column contract itself depends on
+    which optional blocks the source config enabled.
     """
     import pandas as pd
 
     findings = []
     xl = pd.ExcelFile(xl_file)
     present = set(xl.sheet_names)
-    for sheet, columns in EXPECTED_SHEETS.items():
+    expected = expected_sheets_for(cfg)
+    for sheet, columns in expected.items():
         if sheet not in present:
             if sheet in OPTIONAL_SHEETS:
                 continue
@@ -201,7 +228,7 @@ def structure_findings(xl_file):
                 findings.append(("S1", "FAIL",
                                  f"sheet '{sheet}' column mismatch; "
                                  f"missing={missing} unexpected={extra}"))
-    for sheet in sorted(present - set(EXPECTED_SHEETS)):
+    for sheet in sorted(present - set(expected)):
         findings.append(("S1", "FAIL",
                          f"unexpected sheet '{sheet}' in workbook"))
     return findings

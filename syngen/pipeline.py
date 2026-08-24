@@ -1,4 +1,4 @@
-"""The M2 vertical slice + M3 sessions: story in -> landed dataset out.
+﻿"""The M2 vertical slice + M3 sessions: story in -> landed dataset out.
 
 Orchestrator is a deterministic state machine (AGENT_ROLES); judgment lives in
 named phases. I/O is injected so tests can run the whole flow offline.
@@ -176,17 +176,17 @@ def gate_lint(io, session, sim_cfg, log):
         return None
 
 
-def post_generate_structure_gate(workbook_path, log):
+def post_generate_structure_gate(workbook_path, log, cfg=None):
     """Post-generation structural check (FR4): workbook must match the
-    engine contract exactly."""
-    findings = structure_findings(workbook_path)
+    engine contract exactly (columns depend on optional config blocks)."""
+    findings = structure_findings(workbook_path, cfg=cfg)
     for rule, sev, msg in findings:
         log(f"  STRUCTURE [{rule}/{sev}] {msg}")
     return not has_blocking(findings)
 
 
 def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
-                  max_iterations=10, max_llm_proposals=5, use_personas=False):
+                  max_iterations=10, max_llm_proposals=8, use_personas=False):
     """use_personas defaults OFF: the M4 A/B (experiments/M4_persona_ab)
     found no measurable quality benefit and a consistent ~35s latency cost.
     Opt in when drafting unfamiliar domains where extra critique may help."""
@@ -202,7 +202,7 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
 
 
 def run_resume(session_root, client, io, new_story=None,
-               max_iterations=10, max_llm_proposals=5):
+               max_iterations=10, max_llm_proposals=8):
     """Return to an existing session: regenerate as-is, or classify a tweak."""
     session = Session.open(session_root)
     log = io.inform
@@ -318,7 +318,8 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
         return {"status": "escalated", "reason": esc.reason,
                 "session": str(session.root)}
 
-    if not post_generate_structure_gate(summary["workbook"], log):
+    sim_cfg = load_json(sim_path) if not isinstance(sim_path, dict) else sim_path
+    if not post_generate_structure_gate(summary["workbook"], log, cfg=sim_cfg):
         session.log("STRUCTURE GATE FAILED")
         return {"status": "structure_check_failed",
                 "workbook": summary["workbook"]}
@@ -342,7 +343,7 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
 
 
 def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
-                  max_iterations=10, max_llm_proposals=5, use_personas=True):
+                  max_iterations=10, max_llm_proposals=8, use_personas=True):
     """Fresh-story flow: pre-check, Gate 1, personas+draft, converge, deliver."""
 
     # --- Pre-check ---

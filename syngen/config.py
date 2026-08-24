@@ -171,36 +171,139 @@ def validate_simulator_doc(cfg, source="simulator"):
     if not (0 <= lo < hi):
         raise ConfigError("discount bounds must satisfy 0 <= min_pct < max_pct")
 
-    # optional WS3 aggregate-targets block (M4)
+    # optional WS3 aggregate-targets block (M4); M5 iter 2 adds territory
+    # plan units alongside segments
     quota = cfg.get("quota")
     if quota is not None:
         by_segment = quota.get("by_segment")
-        if not isinstance(by_segment, dict) or not by_segment:
-            raise ConfigError("quota.by_segment must define at least one segment curve")
-        segments = cfg["accounts"].get("segments", {})
-        for seg, curve in by_segment.items():
-            if seg not in segments:
+        by_territory = quota.get("by_territory")
+        if bool(by_segment) == bool(by_territory):
+            raise ConfigError(
+                "quota must define exactly one of by_segment / by_territory")
+        dim_name = "segment" if by_segment else "territory"
+        targets = by_segment or by_territory
+        if not isinstance(targets, dict) or not targets:
+            raise ConfigError(
+                f"quota.by_{dim_name} must define at least one unit curve")
+        known_units = set(cfg["accounts"].get(
+            "segments" if by_segment else "territories", {}))
+        for unit, curve in targets.items():
+            if unit not in known_units:
                 raise ConfigError(
-                    f"quota.by_segment['{seg}'] is not a known account segment "
-                    f"(known: {sorted(segments)})")
+                    f"quota.by_{dim_name}['{unit}'] is not a known account "
+                    f"{dim_name} (known: {sorted(known_units)})")
             if len(curve) != len(labels):
                 raise ConfigError(
-                    f"quota.by_segment['{seg}'] needs one target per quarter "
-                    f"({len(labels)} expected, got {len(curve)})")
+                    f"quota.by_{dim_name}['{unit}'] needs one target per "
+                    f"quarter ({len(labels)} expected, got {len(curve)})")
             if any(float(t) <= 0 for t in curve):
-                raise ConfigError(f"quota targets must be positive ('{seg}')")
-        ratios = quota.get("attainment_by_segment", {})
+                raise ConfigError(f"quota targets must be positive ('{unit}')")
+        ratios = quota.get("attainment") or \
+            quota.get("attainment_by_segment", {})
         if not isinstance(ratios, dict):
-            raise ConfigError("quota.attainment_by_segment must be a dict")
-        for seg, ratio in ratios.items():
-            if seg not in by_segment:
+            raise ConfigError("quota.attainment must be a dict")
+        for unit, ratio in ratios.items():
+            if not isinstance(ratio, (int, float)) or isinstance(ratio, bool):
                 raise ConfigError(
-                    f"quota.attainment_by_segment['{seg}'] has no matching "
-                    "by_segment entry")
+                    f"quota.attainment['{unit}'] must be a number, got "
+                    f"{type(ratio).__name__}")
+            if unit not in targets:
+                raise ConfigError(
+                    f"quota.attainment['{unit}'] has no matching "
+                    f"by_{dim_name} entry")
             if not (0 < float(ratio) < 3):
                 raise ConfigError(
-                    f"quota.attainment_by_segment['{seg}'] must be a sane "
+                    f"quota.attainment['{unit}'] must be a sane "
                     "ratio (0 < r < 3)")
+
+    # M5 iteration 2: products, territories -------------------------------
+
+    terr = cfg["accounts"].get("territories")
+    if terr is not None:
+        regions = cfg["accounts"].get("regions", {})
+        if not isinstance(terr, dict) or not terr:
+            raise ConfigError("accounts.territories must be a non-empty map")
+        seen_terr = set()
+        for tname, members in terr.items():
+            if tname in seen_terr:
+                raise ConfigError(f"duplicate territory '{tname}'")
+            seen_terr.add(tname)
+            if not isinstance(members, list) or not members:
+                raise ConfigError(
+                    f"accounts.territories['{tname}'] must list regions")
+            for r in members:
+                if r not in regions:
+                    raise ConfigError(
+                        f"accounts.territories['{tname}'] references unknown "
+                        f"region '{r}' (known: {sorted(regions)})")
+
+    prods = cfg.get("products")
+    if prods is not None:
+        catalog = prods.get("catalog")
+        if not isinstance(catalog, list) or not catalog:
+            raise ConfigError("products.catalog must be a non-empty list")
+        ids = [p.get("id") for p in catalog]
+        if any(not i for i in ids) or len(set(ids)) != len(ids):
+            raise ConfigError("products.catalog entries need unique 'id's")
+        tiers = {p.get("tier") for p in catalog}
+        if None in tiers or not all(isinstance(t, str) for t in tiers):
+            raise ConfigError("products.catalog entries need a 'tier'")
+        margin = prods.get("margin_by_tier", {})
+        missing = tiers - set(margin)
+        if missing:
+            raise ConfigError(
+                f"products.margin_by_tier missing tiers: {sorted(missing)}")
+        for t, m in margin.items():
+            if not (0 < float(m) < 1):
+                raise ConfigError(
+                    f"products.margin_by_tier['{t}'] must be between 0 and 1")
+        for p in catalog:
+            share = p.get("share")
+            if isinstance(share, dict):
+                curve = share.get("weights_by_quarter")
+                if not isinstance(curve, list) or len(curve) != len(labels):
+                    raise ConfigError(
+                        f"products.catalog['{p['id']}'].share."
+                        f"weights_by_quarter needs one weight per quarter "
+                        f"({len(labels)} expected)")
+                if any(float(w) < 0 for w in curve):
+                    raise ConfigError(
+                        f"product '{p['id']}' weights must be >= 0")
+            elif not (0 <= float(share or 0) <= 1):
+                raise ConfigError(
+                    f"products.catalog['{p['id']}'].share must be 0..1")
+        curves = [p["share"]["weights_by_quarter"] for p in catalog
+                  if isinstance(p.get("share"), dict)]
+        if curves:
+            static = [float(p["share"]) for p in catalog
+                      if not isinstance(p.get("share"), dict)]
+            for qi in range(len(labels)):
+                total = sum(float(c[qi]) for c in curves) + sum(static)
+                if abs(total - 1.0) > 0.05:
+                    raise ConfigError(
+                        f"product shares sum to {total:.3f} at quarter "
+                        f"index {qi}; expected ~1.0")
+        price_mult = prods.get("price_multiplier_by_tier", {})
+        unknown = set(price_mult) - tiers
+        if unknown:
+            raise ConfigError(
+                f"price_multiplier_by_tier has unknown tiers: {sorted(unknown)}")
+        if any(float(v) <= 0 for v in price_mult.values()):
+            raise ConfigError("price multipliers must be positive")
+        disc_delta = prods.get("discount_delta_pp_by_tier", {})
+        unknown = set(disc_delta) - tiers
+        if unknown:
+            raise ConfigError(
+                f"discount_delta_pp_by_tier has unknown tiers: "
+                f"{sorted(unknown)}")
+        infl = prods.get("cogs_inflation_by_quarter")
+        if infl is not None:
+            if not isinstance(infl, list) or len(infl) != len(labels):
+                raise ConfigError(
+                    f"cogs_inflation_by_quarter needs one value per quarter "
+                    f"({len(labels)} expected)")
+            if any(float(v) <= 0 for v in infl):
+                raise ConfigError("cogs inflation factors must be positive")
 
     return cfg
 

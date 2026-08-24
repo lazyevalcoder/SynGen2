@@ -29,6 +29,17 @@ CRITERIA_PARAMS = {
     "deal_size_trend": {"target_change_pct": 0.0, "tolerance_pp": 25.0},
     "icp_creation_shift": {"min_increase_pp": 0.0},
     "revenue_concentration": {"top_n": 50, "min_top_share_pct": 10.0},
+    # M5 iter 2 checks (fixture: premium tier carries +2pp discount over
+    # entry, flat cogs ratios, ~50/50 revenue split)
+    "blended_margin_trend": {"target_change_pct": -4.0, "tolerance_pp": 6.0},
+    "tier_share_shift": {"tier": "premium", "from_share_pct": 40.0,
+                         "to_share_pct": 40.0, "tolerance_pp": 15.0},
+    "discount_margin_link": {"high_margin_tier": "premium",
+                             "low_margin_tier": "entry", "min_gap_pp": 0.0},
+    "avg_price_by_tier": {"tier": "entry", "max_avg_realized_usd": 500000.0},
+    # quota df injected at runtime (see run_check), like revenue_vs_plan
+    "gap_concentration": {"dimension": "segment",
+                          "min_bottom_gap_share_pct": 60.0},
 }
 
 
@@ -43,6 +54,7 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
     # established randomness (win-rate bands etc.)
     dur_rng = np.random.default_rng(seed + 999)
     icp_rng = np.random.default_rng(seed + 555)
+    prod_rng = np.random.default_rng(seed + 777)
     quarters = ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]
     q_ends = {"FY26-Q1": "2026-03-31", "FY26-Q2": "2026-06-30",
               "FY26-Q3": "2026-09-30", "FY26-Q4": "2026-12-31"}
@@ -60,7 +72,9 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
             disc = base[region][qi] + nprng.normal(0, 3)
             if day > q_len - 14:
                 disc += 6.5
-            disc = float(np.clip(disc, 0, 40))
+            # ~35% of rows are premium tier and get +2pp below; a uniform
+            # rebate keeps the overall discount means at their targets
+            disc = float(np.clip(disc - 0.7, 0, 40))
             list_price = round(float(nprng.lognormal(10.7, 0.8)), 2)
             account_id = f"ACC-{nprng.integers(1, 61):04d}"
             close_date = q_start + pd.Timedelta(days=day - 1)
@@ -80,6 +94,17 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
                 "discount_pct": round(disc, 2),
                 "realized_price": round(list_price * (1 - disc / 100), 2),
             })
+            # M5 iter 2 product columns (separate stream, see above):
+            # premium is the high-margin tier and gets +2pp discount so
+            # discount_margin_link has a positive gap on story-shaped data
+            tier = "premium" if prod_rng.random() < 0.35 else "entry"
+            rows[-1]["product_id"] = f"SKU-{tier.upper()}"
+            rows[-1]["product_tier"] = tier
+            rows[-1]["cogs_ratio"] = 0.30 if tier == "premium" else 0.60
+            if tier == "premium":
+                rows[-1]["discount_pct"] = round(min(disc + 2.0, 40), 2)
+                rows[-1]["realized_price"] = round(
+                    list_price * (1 - rows[-1]["discount_pct"] / 100), 2)
     return pd.DataFrame(rows)
 
 
@@ -103,15 +128,33 @@ def good_data():
 
 def run_check(name, opp, accounts):
     params = dict(CRITERIA_PARAMS[name])
-    if name == "revenue_vs_plan":
+    if name in ("revenue_vs_plan", "gap_concentration"):
         # plan targets derived from the data itself: the fixture proves the
-        # check's arithmetic, not raking (covered in test_planning.py).
-        # opp already carries denormalized segment (engine contract).
+        # check's arithmetic, not raking (covered in test_planning.py /
+        # test_iter2.py). opp already carries denormalized segment.
         won = opp[opp["stage"] == "Closed Won"]
         agg = (won.groupby(["segment", "fiscal_quarter"])["realized_price"]
                .sum().reset_index())
         agg.columns = ["segment", "fiscal_quarter", "target_realized_usd"]
-        params["_quota_df"] = agg
+        if name == "revenue_vs_plan":
+            params["_quota_df"] = agg
+        else:
+            # per-segment totals as plan; make one segment a deliberate
+            # laggard (target >> actual) so the bottom quartile
+            # deterministically holds most of the shortfall
+            agg["target_realized_usd"] *= 0.95
+            worst_unit = "Enterprise"
+            laggard = (won[won["segment"] == worst_unit]
+                       .groupby("fiscal_quarter")["realized_price"].sum()
+                       / 0.55).reset_index()
+            laggard.columns = ["fiscal_quarter", "target_realized_usd"]
+            laggard.insert(0, "segment", worst_unit)
+            combined = pd.concat(
+                [agg[agg["segment"] != worst_unit], laggard],
+                ignore_index=True)
+            quota = combined.rename(columns={"segment": "plan_unit"})
+            quota.insert(0, "plan_unit_type", "segment")
+            params["_quota_df"] = quota
     return CHECKS[name](opp, accounts, params)
 
 

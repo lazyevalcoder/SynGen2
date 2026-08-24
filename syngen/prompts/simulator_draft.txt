@@ -7,7 +7,9 @@ HARD RULE on the quota block: scan the acceptance criteria FIRST. If none of the
   "time_model": {"fiscal_year": "FY26", "quarter_labels": [...], "quarter_end_dates": [...]},
   "output": {"workbook": "output/dataset.xlsx"},
   "accounts": {
-    "count": <int>, "regions": {name: weight}, "segments": {name: weight}, "industries": [...]
+    "count": <int>, "regions": {name: weight}, "segments": {name: weight}, "industries": [...],
+    "territories": {"<territory>": ["<region>", ...], ...},
+    "icp_share": <0-1>
   },
   "opportunities": {
     "per_quarter": <int>,
@@ -23,19 +25,38 @@ HARD RULE on the quota block: scan the acceptance criteria FIRST. If none of the
       "end_of_quarter_window_days": <int>, "min_pct": 0, "max_pct": 40
     }
   },
+  "products": {
+    "catalog": [{"id": "<sku>", "tier": "<entry|core|premium>", "share": <0-1 or {"weights_by_quarter":[...]}>}],
+    "margin_by_tier": {"entry": <0-1>, "core": <0-1>, "premium": <0-1>},
+    "price_multiplier_by_tier": {"entry": <mult>, "core": 1.0, "premium": <mult>},
+    "discount_delta_pp_by_tier": {"entry": 0, "core": 0, "premium": <-pp>},
+    "cogs_inflation_by_quarter": [<one multiplier per quarter>]
+  },
   "quota": {
     "by_segment": {"<segment>": [<revenue target per quarter>], ...}
   }
 }
 
-The optional quota block: include it ONLY when the acceptance criteria contain revenue_vs_plan checks or the story gives explicit per-segment plan numbers ("Enterprise plan was $2M/quarter"). A vague phrase like "below plan" or "vs plan" WITHOUT numbers or a matching revenue_vs_plan criterion does NOT justify a quota block - omit it, because raking overrides deal-size knobs and would fight other criteria. When included, two parts:
-- "by_segment": the PLAN - what each segment was targeted to earn per quarter (authoritative numbers, sized near natural expected revenue).
+The optional quota block: include it ONLY when the acceptance criteria contain revenue_vs_plan or gap_concentration checks or the story gives explicit per-segment plan numbers ("Enterprise plan was $2M/quarter"). A vague phrase like "below plan" or "vs plan" WITHOUT numbers or a matching criterion does NOT justify a quota block - omit it, because raking overrides deal-size knobs and would fight other criteria. When included, two parts:
+- "by_segment" (or "by_territory" when criteria use dimension territory): the PLAN - what each unit was targeted to earn per quarter (authoritative numbers, sized near natural expected revenue). Exactly one of the two keys.
 - "attainment_by_segment": OPTIONAL map of how actuals land RELATIVE to plan (default 1.0). The story defines these: Enterprise missed plan by ~5% -> "Enterprise": 0.95; Mid-Market beat by ~4% -> "Mid-Market": 1.04. The engine rakes deal sizes so closed-won revenue lands exactly at attainment x plan.
-Size by_segment targets near naturally expected revenue: per_quarter * win_rate * median_usd * (1 - avg_discount/100), split across segments by weight. revenue_vs_plan criteria need NO further calibration: raking makes attainment exact.
+Size targets near naturally expected revenue: per_quarter * win_rate * median_usd * (1 - avg_discount/100), split across units by weight. revenue_vs_plan criteria need NO further calibration: raking makes attainment exact.
+
+Products block: include it whenever any criterion uses product/tier/margin/price-point checks (blended_margin_trend, tier_share_shift, discount_margin_link, avg_price_by_tier) - those criteria fail structurally without it. Guidance:
+- margin_by_tier is gross margin at list price (e.g., premium 0.75, core 0.6, entry 0.45); discounts reduce realized margin below it
+- price_multiplier_by_tier scales deal size by tier (entry ~0.35-0.5 of core; premium ~2-3x); omit to keep all tiers at the base deal-size distribution
+- discount_delta_pp_by_tier COUPLES discounting to tier margin (WS4): high-margin tier discounted harder -> {"premium": +4}; guardrail punishing premium discounting -> {"premium": -3}
+- cogs_inflation_by_quarter multiplies every tier's cost each quarter ([1.0, 1.02, 1.04, 1.06] for steadily rising COGS)
+- product shares may be {"weights_by_quarter":[...]} curves for mix-shift stories; per-quarter sums must stay ~1.0
+- COUPLING CALCIULUS (use it): blended_margin%(q) ~= 100 - avg_cogs/(1 - won_avg_discount(q)/100). If criteria demand both a big discount increase and only a small margin decline, pick HIGH margins (margin_by_tier 0.7-0.85) so the discount rise erodes margin by the claimed amount, e.g. discounts 12->18 with cogs 0.25 gives margin drop of only ~2pp; with cogs 0.45 it drops ~5pp
+- TIER SHARE CALCULUS: catalog 'share' values are DEAL-COUNT shares; tier_share_shift criteria measure REVENUE share:
+  rev_share_tier ~= count_share_tier * price_mult_tier / sum_j(count_share_j * price_mult_j)
+  Work backwards from the criterion's revenue-share targets before choosing share curves - e.g., for entry=20%->35% of REVENUE with multipliers entry=0.4/core=1/premium=2.5, entry COUNT share must go roughly 40% -> 60%
 
 Calibration guidance from prior experiments - USE THIS RECIPE, do not re-derive it:
-- won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost
+- won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost + sum_tier(rev_share_tier * discount_delta_pp_by_tier[tier]) - INCLUDE the tier-delta term when discount_delta_pp_by_tier is nonzero (e.g., +6pp premium delta on 30% revenue share adds +1.8pp to every quarterly average; lower base curves accordingly)
 - realized/list pct(q) ~= 100 - won_avg_discount(q) + ~1.8pp revenue-weighting bonus
+- When criteria PIN a level (avg_discount or realized_vs_list target) for a quarter, set base_by_quarter so blended won_avg_discount(q) = 100 - target_realized_vs_list(q) + 1.8 exactly at each pinned quarter (e.g., Q1 realized_vs_list 88% -> blended Q1 discount ~= 13.8). The loop should inherit correct levels, not discover them.
 - win rate noise std at n deals/quarter = sqrt(p*(1-p)/n): pick per_quarter >= 300 so statistical criteria are reachable
 - noise_sd_pp of 2.5-3.5 is a good default; it does not shift averages
 - revenue_vs_plan criteria need NO calibration: raking makes attainment exact; just include a sensible quota block covering every segment the criteria name
@@ -43,8 +64,9 @@ Calibration guidance from prior experiments - USE THIS RECIPE, do not re-derive 
 - volume_multipliers (optional): per-quarter creation scaling, e.g. pipeline slowing ~20% by Q4 -> [1.0, 0.95, 0.88, 0.8]. Omit when volume is flat.
 - deal_size_lognormal may add "medians_by_quarter": [<per-quarter median>] instead of median_usd for shrinking/growing deal-size stories
 - accounts may add "icp_share": <0-1> - fraction of accounts flagged as ICP (drives the icp column on both sheets). Use for pipeline-quality stories.
-- categorical weights (regions/segments) may be {"weights_by_quarter": [...]} for mix-shift stories; per-quarter sums across the dimension must stay ~1.0
+- categorical weights (regions/segments/products) may be {"weights_by_quarter": [...]} for mix-shift stories; per-quarter sums across the dimension must stay ~1.0
 - "outlier_deals": {"share": 0.01, "multiplier": 15} creates a few whale deals (scaled prices) for concentration stories
+- territories: {"<name>": ["<region>", ...]} rolls regions up into sales territories; every referenced region must exist in regions. Use when criteria reference territories or gap_concentration with dimension territory (quota then uses by_territory keyed by TERRITORY names, not region names).
 
 Worked example (for criteria: Q1 avg discount 10% +/-2, Q4 avg 16% +/-2, premium region APAC >= +3pp all year, regions AMER 0.45 / EMEA 0.30 / APAC 0.25, boost 6.5 with share 0.25):
 - contribution of boost to every quarterly average = 0.25 * 6.5 = 1.6pp

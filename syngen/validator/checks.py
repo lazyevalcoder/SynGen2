@@ -193,12 +193,14 @@ def check_data_sanity(opp, accounts, params):
 
 
 def check_revenue_vs_plan(opp, accounts, params):
-    """Attainment of a segment's quarterly revenue plan (WS3).
+    """Attainment of a plan unit's quarterly revenue plan (WS3/WS5).
 
     Reads the workbook's quota_plan sheet (injected into params by the
-    runner as '_quota_df'). Attainment = closed-won realized / target * 100
-    per quarter; worst quarter decides. The criterion carries the story's
-    expected attainment (e.g., missed plan by 5% -> target_pct 95).
+    runner as '_quota_df'; unified schema: plan_unit_type/plan_unit).
+    params['segment'] is the plan unit value; optional params['dimension']
+    selects segment (default) or territory plans. "_all_" aggregates every
+    row of the requested dimension. Attainment = closed-won realized /
+    target * 100 per quarter; worst quarter decides.
     """
     plan = params.get("_quota_df")
     seg = params["segment"]
@@ -211,28 +213,39 @@ def check_revenue_vs_plan(opp, accounts, params):
                     -band)
         r["structural"] = True
         return r
-    # "_all_" = company-wide attainment: totals across every planned segment
+    dim = params.get("dimension")
+    if dim and "plan_unit_type" in plan.columns:
+        plan = plan[plan["plan_unit_type"] == dim]
+    # "_all_" = aggregate attainment: totals across every planned unit
     if seg == "_all_":
         seg_plan = plan.groupby("fiscal_quarter")[
             "target_realized_usd"].sum().reset_index()
-        seg_plan["segment"] = "_all_"
+        agg_key = "_all_"
     else:
-        seg_plan = plan[plan["segment"] == seg]
-    if not len(seg_plan):
-        known = sorted(plan["segment"].unique())
-        r = _result(False, f"segment '{seg}' absent from plan",
-                    f"{target_pct}% +/-{band:g}pp",
-                    f"criterion segment '{seg}' not found; "
-                    f"plan covers segments: {known}", -band)
-        r["structural"] = True
-        return r
+        if "plan_unit" in plan.columns:  # unified schema
+            seg_plan = plan[plan["plan_unit"] == seg]
+            agg_col = "plan_unit"
+        else:  # legacy sheet schema
+            seg_plan = plan[plan["segment"] == seg]
+            agg_col = "segment"
+        known = sorted(plan[agg_col].unique()) if len(plan) else []
+        if not len(seg_plan):
+            r = _result(False, f"unit '{seg}' absent from plan",
+                        f"{target_pct}% +/-{band:g}pp",
+                        f"criterion unit '{seg}' not found; "
+                        f"plan covers units: {known}", -band)
+            r["structural"] = True
+            return r
+        seg_plan = seg_plan.copy()
+        seg_plan[agg_col] = seg
     won_all = won_deals(opp)
     attainments = {}
+    unit_col = dim if dim in ("territory",) else "segment"
     for _, row in seg_plan.iterrows():
         label = row["fiscal_quarter"]
         won_q = won_all[won_all["fiscal_quarter"] == label]
-        if seg != "_all_":
-            won_q = won_q[won_q["segment"] == seg]
+        if seg != "_all_" and unit_col in won_all.columns:
+            won_q = won_q[won_q[unit_col] == seg]
         actual = won_q["realized_price"].sum()
         plan_target = float(row["target_realized_usd"])
         attainments[label] = (actual / plan_target * 100) if plan_target else float("nan")
@@ -353,6 +366,179 @@ def check_revenue_concentration(opp, accounts, params):
                    f">= {needed}%", detail, top - needed)
 
 
+# --- M5 iteration 2: products, margins, correlation, territories ----------
+
+
+def _margin_pct(df):
+    """Per-deal gross margin % of realized revenue. COGS is charged on
+    list price; discounts come out of margin:
+    margin% = 1 - cogs_ratio * list / realized."""
+    cost = df["cogs_ratio"] * df["list_price"]
+    return (1.0 - cost / df["realized_price"]) * 100.0
+
+
+def _structural_no_products(what):
+    r = _result(False, "no product columns", what,
+                "criterion requires a products block in simulator.json "
+                "(product_tier/cogs_ratio columns absent)", -1.0)
+    r["structural"] = True
+    return r
+
+
+def check_blended_margin_trend(opp, accounts, params):
+    """Blended gross margin % of won deals: last-quarter vs first-quarter
+    change must match target_change_pct (signed pp) within tolerance_pp.
+    Covers COGS-inflation (#8) and comp-driven margin erosion (#12)."""
+    if not {"product_tier", "cogs_ratio"}.issubset(opp.columns):
+        return _structural_no_products("blended margin trend")
+    labels = list(resolve_quarter_ends(params))
+    tol = float(params.get("tolerance_pp", 2.0))
+    target = float(params["target_change_pct"])
+    won = won_deals(opp)
+    margins = {}
+    for label in labels:
+        q = won[won["fiscal_quarter"] == label]
+        margins[label] = (
+            (q["realized_price"].sum() -
+             (q["cogs_ratio"] * q["list_price"]).sum())
+            / q["realized_price"].sum() * 100) if len(q) else float("nan")
+    first, last = labels[0], labels[-1]
+    delta = margins[last] - margins[first]
+    detail = "; ".join(f"{k}: {v:.1f}% margin" for k, v in margins.items()) + \
+        f"; delta {delta:+.2f}pp"
+    ok = abs(delta - target) <= tol
+    return _result(ok, f"{delta:+.1f}pp margin change",
+                   f"{target:+g}pp +/-{tol:g}pp", detail,
+                   tol - abs(delta - target))
+
+
+def check_tier_share_shift(opp, accounts, params):
+    """Share of WON REVENUE held by one product tier: moves from
+    from_share_pct (first quarter) to to_share_pct (last quarter),
+    each within tolerance_pp of its target."""
+    if not {"product_tier", "cogs_ratio"}.issubset(opp.columns):
+        return _structural_no_products("tier share shift")
+    labels = list(resolve_quarter_ends(params))
+    tier = params["tier"]
+    from_share = float(params["from_share_pct"])
+    to_share = float(params["to_share_pct"])
+    tol = float(params.get("tolerance_pp", 3.0))
+    won = won_deals(opp)
+    shares = {}
+    for label, want in ((labels[0], from_share), (labels[-1], to_share)):
+        q = won[won["fiscal_quarter"] == label]
+        total = q["realized_price"].sum()
+        got = q.loc[q["product_tier"] == tier, "realized_price"].sum()
+        shares[label] = (got / total * 100) if total else 0.0
+        dev = abs(shares[label] - want)
+        if dev > tol:
+            detail = (f"tier '{tier}' revenue share {shares[label]:.1f}% "
+                      f"in {label}, wanted ~{want:g}%")
+            return _result(False, f"{shares[label]:.1f}% ({label})",
+                           f"~{want:g}% +/-{tol:g}pp", detail, tol - dev)
+    detail = "; ".join(f"{k}: {v:.1f}% of revenue"
+                       for k, v in shares.items())
+    return _result(True,
+                   f"{shares[labels[0]]:.1f}% -> {shares[labels[-1]]:.1f}%",
+                   f"~{from_share:g}% -> ~{to_share:g}% +/-{tol:g}pp",
+                   detail, tol)
+
+
+def check_discount_margin_link(opp, accounts, params):
+    """WS4 correlation primitive made observable: avg discount on the
+    high-margin tier minus avg discount on the low-margin tier must be at
+    least min_gap_pp (positive gap = richer tiers discounted harder)."""
+    if not {"product_tier", "cogs_ratio"}.issubset(opp.columns):
+        return _structural_no_products("discount/margin link")
+    hi_tier = params["high_margin_tier"]
+    lo_tier = params["low_margin_tier"]
+    gap_need = float(params["min_gap_pp"])
+    won = won_deals(opp)
+    hi = won.loc[won["product_tier"] == hi_tier, "discount_pct"]
+    lo = won.loc[won["product_tier"] == lo_tier, "discount_pct"]
+    if not len(hi) or not len(lo):
+        known = sorted(won["product_tier"].dropna().unique())
+        r = _result(False, "tier missing",
+                    f"gap >= {gap_need}pp",
+                    f"tiers {hi_tier}/{lo_tier} not both present; "
+                    f"known tiers: {known}", -gap_need)
+        r["structural"] = True
+        return r
+    gap = hi.mean() - lo.mean()
+    detail = (f"avg discount {hi_tier}={hi.mean():.2f}% vs "
+              f"{lo_tier}={lo.mean():.2f}% -> gap {gap:+.2f}pp over "
+              f"{len(hi)}+{len(lo)} won deals")
+    return _result(gap >= gap_need, f"{gap:+.1f}pp gap",
+                   f">= {gap_need}pp", detail, gap - gap_need)
+
+
+def check_avg_price_by_tier(opp, accounts, params):
+    """Entry-price discipline (#3/#12): average realized price of won
+    deals in a tier must stay under max_avg_realized_usd."""
+    if "product_tier" not in opp.columns:
+        return _structural_no_products("price point by tier")
+    tier = params["tier"]
+    cap = float(params["max_avg_realized_usd"])
+    won = won_deals(opp)
+    t = won.loc[won["product_tier"] == tier, "realized_price"]
+    if not len(t):
+        known = sorted(won["product_tier"].dropna().unique())
+        r = _result(False, f"tier '{tier}' has no won deals",
+                    f"avg <= ${cap:,.0f}",
+                    f"known tiers: {known}", -cap)
+        r["structural"] = True
+        return r
+    avg = t.mean()
+    detail = (f"avg realized ${avg:,.0f} across {len(t)} won "
+              f"'{tier}' deals")
+    return _result(avg <= cap, f"${avg:,.0f}", f"<= ${cap:,.0f}",
+                   detail, cap - avg)
+
+
+def check_gap_concentration(opp, accounts, params):
+    """WS5 territory analysis (#18): the bottom quartile of plan units
+    (by attainment) must account for at least min_bottom_gap_share_pct of
+    the company's total plan shortfall."""
+    plan = params.get("_quota_df")
+    dim = params.get("dimension", "territory")
+    need = float(params["min_bottom_gap_share_pct"])
+    if plan is None or not len(plan):
+        r = _result(False, "no quota_plan sheet", f">= {need}% of gap",
+                    "criterion requires a quota block in simulator.json",
+                    -need)
+        r["structural"] = True
+        return r
+    if dim and "plan_unit_type" in plan.columns:
+        plan = plan[plan["plan_unit_type"] == dim]
+    units = sorted(plan["plan_unit"].unique()) \
+        if "plan_unit" in plan.columns else []
+    if not units:
+        r = _result(False, "no plan units", f">= {need}% of gap",
+                    f"no '{dim}' rows in quota_plan", -need)
+        r["structural"] = True
+        return r
+    unit_col = dim if dim in opp.columns else None
+    stats = []
+    for unit in units:
+        prow = plan[plan["plan_unit"] == unit]
+        target = float(prow["target_realized_usd"].sum())
+        won = won_deals(opp)
+        actual = won.loc[won[unit_col] == unit, "realized_price"].sum() \
+            if unit_col else won["realized_price"].sum()
+        attain = actual / target * 100 if target else float("nan")
+        stats.append((unit, attain, max(target - actual, 0.0)))
+    total_gap = sum(g for _, _, g in stats)
+    stats.sort(key=lambda s: s[1])  # worst attainment first
+    n_bottom = max(1, int(np.ceil(len(stats) * 0.25)))
+    bottom = stats[:n_bottom]
+    share = sum(g for _, _, g in bottom) / total_gap * 100 if total_gap else 0.0
+    names = ", ".join(f"{u} ({a:.0f}%)" for u, a, _ in bottom)
+    detail = (f"bottom quartile [{names}] holds {share:.1f}% of the "
+              f"${total_gap:,.0f} total shortfall")
+    return _result(share >= need, f"{share:.1f}% of gap",
+                   f">= {need}% in bottom quartile", detail, share - need)
+
+
 CHECKS = {
     "win_rate_flat": check_win_rate_flat,
     "avg_discount_quarter": check_avg_discount_quarter,
@@ -367,4 +553,9 @@ CHECKS = {
     "deal_size_trend": check_deal_size_trend,
     "icp_creation_shift": check_icp_creation_shift,
     "revenue_concentration": check_revenue_concentration,
+    "blended_margin_trend": check_blended_margin_trend,
+    "tier_share_shift": check_tier_share_shift,
+    "discount_margin_link": check_discount_margin_link,
+    "avg_price_by_tier": check_avg_price_by_tier,
+    "gap_concentration": check_gap_concentration,
 }
