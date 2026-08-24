@@ -41,6 +41,9 @@ REQUIRED_DISCOUNT_KEYS = {
 
 
 def _check_keys(mapping, required, label):
+    if not isinstance(mapping, dict):
+        raise ConfigError(f"{label}: expected an object, got "
+                          f"{type(mapping).__name__}")
     missing = set(required) - set(mapping)
     if missing:
         raise ConfigError(f"{label}: missing keys {sorted(missing)}")
@@ -158,6 +161,15 @@ def validate_simulator_doc(cfg, source="simulator"):
             raise ConfigError("outlier_deals.multiplier must be > 1")
 
     curves = discount["base_by_quarter"]
+    if not isinstance(curves, dict) or not curves:
+        raise ConfigError(
+            "discount.base_by_quarter must map regions to per-quarter "
+            "curves")
+    for region, curve in curves.items():
+        if not isinstance(curve, list):
+            raise ConfigError(
+                f"discount.base_by_quarter['{region}'] must be a list of "
+                "per-quarter values")
     if not curves:
         raise ConfigError("discount.base_by_quarter must define at least one region curve")
     curve_len = len(next(iter(curves.values())))
@@ -304,6 +316,39 @@ def validate_simulator_doc(cfg, source="simulator"):
                     f"({len(labels)} expected)")
             if any(float(v) <= 0 for v in infl):
                 raise ConfigError("cogs inflation factors must be positive")
+
+    # M5 iter 3 (P4): open-pipeline state machine --------------------------
+    pipe = cfg.get("pipeline")
+    if pipe is not None:
+        stages = pipe.get("stage_names")
+        if not isinstance(stages, list) or not stages or \
+                not all(isinstance(s, str) and s for s in stages):
+            raise ConfigError(
+                "pipeline.stage_names must be a non-empty list of strings")
+        weights = pipe.get("stage_weights")
+        if weights is not None:
+            if not isinstance(weights, list) or len(weights) != len(stages):
+                raise ConfigError(
+                    "pipeline.stage_weights needs one weight per stage")
+            if any(float(w) < 0 for w in weights):
+                raise ConfigError("pipeline.stage_weights must be >= 0")
+        for key, lo in (("share_open_by_quarter", 0.0),
+                        ("slippage_rate_by_quarter", 0.0)):
+            curve = pipe.get(key)
+            if curve is None:
+                continue
+            if not isinstance(curve, list) or len(curve) != len(labels):
+                raise ConfigError(
+                    f"pipeline.{key} needs one value per quarter "
+                    f"({len(labels)} expected)")
+            hi = 1.0 if key == "slippage_rate_by_quarter" else 0.95
+            if any(not (lo <= float(v) <= hi) for v in curve):
+                raise ConfigError(
+                    f"pipeline.{key} values must be within [{lo}, {hi}]")
+        if pipe.get("share_open_by_quarter") is None:
+            raise ConfigError(
+                "pipeline.share_open_by_quarter is required when a "
+                "pipeline block is present")
 
     return cfg
 

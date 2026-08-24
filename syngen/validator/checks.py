@@ -539,23 +539,156 @@ def check_gap_concentration(opp, accounts, params):
                    f">= {need}% in bottom quartile", detail, share - need)
 
 
+CLOSED_STAGES = {"Closed Won", "Closed Lost"}
+
+
+def _open_pipeline(opp):
+    return opp[~opp["stage"].isin(CLOSED_STAGES)]
+
+
+def _pipeline_value(df):
+    return df["realized_price"].sum()
+
+
+def check_stage_aging(opp, accounts, params):
+    """P4 (#11): share of open pipeline older than stale_threshold_days
+    must stay under max_stale_share_pct. Age is measured at the LAST
+    quarter end (deterministic evaluation date)."""
+    open_rows = _open_pipeline(opp)
+    if not len(open_rows):
+        r = _result(False, "no open pipeline", f"<= {params['max_stale_share_pct']}% stale",
+                    "no open-pipeline rows - is a pipeline block configured?",
+                    -1.0)
+        r["structural"] = True
+        return r
+    labels = list(resolve_quarter_ends(params))
+    ref = pd.Timestamp(resolve_quarter_ends(params)[labels[-1]])
+    created = pd.to_datetime(open_rows["created_date"])
+    age_days = (ref - created).dt.days
+    stale = (age_days > float(params["stale_threshold_days"])).mean() * 100
+    cap = float(params["max_stale_share_pct"])
+    detail = (f"{int((age_days > float(params['stale_threshold_days'])).sum())}"
+              f"/{len(open_rows)} open deals older than "
+              f"{params['stale_threshold_days']}d at {labels[-1]}")
+    return _result(stale <= cap, f"{stale:.1f}% stale",
+                   f"<= {cap:g}% stale", detail, cap - stale)
+
+
+def check_slippage_trend(opp, accounts, params):
+    """P4 (#5): share of open deals whose expected close has slipped past
+    their creation quarter's end must rise from first to last quarter by
+    at least min_increase_pp."""
+    if "expected_close_date" not in opp.columns:
+        r = _result(False, "no expected_close_date column",
+                    f">= +{params['min_increase_pp']}pp",
+                    "criterion requires a pipeline block in simulator.json",
+                    -float(params["min_increase_pp"]))
+        r["structural"] = True
+        return r
+    qends = resolve_quarter_ends(params)
+    open_rows = _open_pipeline(opp).copy()
+    if not len(open_rows):
+        r = _result(False, "no open pipeline", ">=",
+                    "no open rows to measure slippage on", -1.0)
+        r["structural"] = True
+        return r
+    ec = pd.to_datetime(open_rows["expected_close_date"])
+    creation_qe = pd.to_datetime(open_rows["fiscal_quarter"].map(qends))
+    open_rows["slipped"] = (ec > creation_qe).astype(int)
+    rates = open_rows.groupby("fiscal_quarter")["slipped"].mean() * 100
+    labels = [l for l in qends if l in rates.index]
+    first, last = rates.get(labels[0], 0.0), rates.get(labels[-1], 0.0)
+    delta = last - first
+    need = float(params["min_increase_pp"])
+    detail = "; ".join(f"{k}: {rates[k]:.0f}%" for k in labels) + \
+        f"; delta {delta:+.1f}pp"
+    return _result(delta >= need, f"{delta:+.1f}pp slip-rate change",
+                   f">= +{need:g}pp", detail, delta - need)
+
+
+def check_coverage_ratio(opp, accounts, params):
+    """P4 (#21): open-pipeline value closing in `quarter` divided by that
+    quarter's plan target must be at least min_multiple."""
+    plan = params.get("_quota_df")
+    need = float(params["min_multiple"])
+    if plan is None or not len(plan):
+        r = _result(False, "no quota_plan sheet", f">= {need}x",
+                    "criterion requires a quota block in simulator.json",
+                    -need)
+        r["structural"] = True
+        return r
+    quarter = params["quarter"]
+    offset = int(params.get("target_quarter_offset", 0))
+    if offset:
+        labels = list(resolve_quarter_ends(params))
+        qi = labels.index(quarter) + offset
+        if not (0 <= qi < len(labels)):
+            r = _result(False, "quarter+offset out of range", f">= {need}x",
+                        "invalid target_quarter_offset", -need)
+            r["structural"] = True
+            return r
+        quarter = labels[qi]
+    prow = plan[plan["fiscal_quarter"] == quarter] \
+        if "plan_unit" in plan.columns or "segment" in plan.columns else plan
+    target = float(prow["target_realized_usd"].sum()) if len(prow) else 0.0
+    open_rows = _open_pipeline(opp)
+    if "expected_close_date" not in open_rows.columns or not len(open_rows):
+        r = _result(False, "no open pipeline", f">= {need}x",
+                    "criterion requires a pipeline block", -need)
+        r["structural"] = True
+        return r
+    in_q = open_rows[pd.to_datetime(
+        open_rows["expected_close_date"]).dt.strftime("%Y-%m-%d")
+        <= str(resolve_quarter_ends(params).get(quarter, "9999-12-31"))]
+    value = _pipeline_value(in_q)
+    ratio = value / target if target else float("nan")
+    detail = (f"${value:,.0f} open vs ${target:,.0f} target in "
+              f"{quarter} = {ratio:.2f}x")
+    return _result(ratio >= need, f"{ratio:.2f}x coverage",
+                   f">= {need:g}x", detail, ratio - need)
+
+
+def check_pipeline_concentration(opp, accounts, params):
+    """P4 (#21): top-N ACCOUNTS' share of open-pipeline VALUE in the last
+    quarter must be at least min_top_share_pct."""
+    n_top = int(params.get("top_n_accounts", 5))
+    needed = float(params["min_top_share_pct"])
+    open_rows = _open_pipeline(opp)
+    if not len(open_rows):
+        r = _result(False, "no open pipeline", f">= {needed}%",
+                    "criterion requires a pipeline block", -needed)
+        r["structural"] = True
+        return r
+    by_acct = open_rows.groupby("account_id")["realized_price"].sum()
+    top = by_acct.nlargest(n_top).sum()
+    total = by_acct.sum()
+    share = top / total * 100 if total else 0.0
+    detail = (f"top {n_top} accounts hold {share:.1f}% of open pipeline "
+              f"value")
+    return _result(share >= needed, f"{share:.1f}% top-{n_top}",
+                   f">= {needed}%", detail, share - needed)
+
 CHECKS = {
-    "win_rate_flat": check_win_rate_flat,
-    "avg_discount_quarter": check_avg_discount_quarter,
-    "discount_trend_monotonic": check_discount_trend_monotonic,
-    "region_discount_premium": check_region_discount_premium,
-    "end_of_quarter_effect": check_end_of_quarter_effect,
-    "realized_vs_list": check_realized_vs_list,
-    "data_sanity": check_data_sanity,
-    "revenue_vs_plan": check_revenue_vs_plan,
-    "cycle_length_trend": check_cycle_length_trend,
-    "creation_volume_trend": check_creation_volume_trend,
-    "deal_size_trend": check_deal_size_trend,
-    "icp_creation_shift": check_icp_creation_shift,
-    "revenue_concentration": check_revenue_concentration,
-    "blended_margin_trend": check_blended_margin_trend,
-    "tier_share_shift": check_tier_share_shift,
-    "discount_margin_link": check_discount_margin_link,
-    "avg_price_by_tier": check_avg_price_by_tier,
-    "gap_concentration": check_gap_concentration,
+    'win_rate_flat': check_win_rate_flat,
+    'avg_discount_quarter': check_avg_discount_quarter,
+    'discount_trend_monotonic': check_discount_trend_monotonic,
+    'region_discount_premium': check_region_discount_premium,
+    'end_of_quarter_effect': check_end_of_quarter_effect,
+    'realized_vs_list': check_realized_vs_list,
+    'data_sanity': check_data_sanity,
+    'revenue_vs_plan': check_revenue_vs_plan,
+    'cycle_length_trend': check_cycle_length_trend,
+    'creation_volume_trend': check_creation_volume_trend,
+    'deal_size_trend': check_deal_size_trend,
+    'icp_creation_shift': check_icp_creation_shift,
+    'revenue_concentration': check_revenue_concentration,
+    'blended_margin_trend': check_blended_margin_trend,
+    'tier_share_shift': check_tier_share_shift,
+    'discount_margin_link': check_discount_margin_link,
+    'avg_price_by_tier': check_avg_price_by_tier,
+    'gap_concentration': check_gap_concentration,
+    'stage_aging': check_stage_aging,
+    'slippage_trend': check_slippage_trend,
+    'coverage_ratio': check_coverage_ratio,
+    'pipeline_concentration': check_pipeline_concentration,
 }

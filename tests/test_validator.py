@@ -40,6 +40,13 @@ CRITERIA_PARAMS = {
     # quota df injected at runtime (see run_check), like revenue_vs_plan
     "gap_concentration": {"dimension": "segment",
                           "min_bottom_gap_share_pct": 60.0},
+    # M5 iter 3 P4 checks (fixture: ~5% open rows, slip starts in Q3)
+    "stage_aging": {"stale_threshold_days": 270,
+                    "max_stale_share_pct": 60.0},
+    "slippage_trend": {"min_increase_pp": 10.0},
+    "coverage_ratio": {"quarter": "FY26-Q4", "min_multiple": 0.005},
+    "pipeline_concentration": {"top_n_accounts": 45,
+                               "min_top_share_pct": 50.0},
 }
 
 
@@ -55,6 +62,7 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
     dur_rng = np.random.default_rng(seed + 999)
     icp_rng = np.random.default_rng(seed + 555)
     prod_rng = np.random.default_rng(seed + 777)
+    pipe_rng = np.random.default_rng(seed + 888)
     quarters = ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]
     q_ends = {"FY26-Q1": "2026-03-31", "FY26-Q2": "2026-06-30",
               "FY26-Q3": "2026-09-30", "FY26-Q4": "2026-12-31"}
@@ -105,6 +113,16 @@ def make_opp(n_per_q=300, seed=1, account_segments=None):
                 rows[-1]["discount_pct"] = round(min(disc + 2.0, 40), 2)
                 rows[-1]["realized_price"] = round(
                     list_price * (1 - rows[-1]["discount_pct"] / 100), 2)
+            # M5 iter 3 open-pipeline rows (~5%, slip starts in Q3) on
+            # their own stream; expected_close_date adjacent to close_date
+            row = rows[-1]
+            if pipe_rng.random() < 0.05:
+                row["stage"] = "Discovery"
+                row["close_date"] = pd.NaT
+                if qi >= 2:  # slippage trend rises across the year
+                    row["expected_close_date"] = q_end + pd.Timedelta(days=30)
+                else:
+                    row["expected_close_date"] = close_date
     return pd.DataFrame(rows)
 
 
@@ -128,7 +146,7 @@ def good_data():
 
 def run_check(name, opp, accounts):
     params = dict(CRITERIA_PARAMS[name])
-    if name in ("revenue_vs_plan", "gap_concentration"):
+    if name in ("revenue_vs_plan", "gap_concentration", "coverage_ratio"):
         # plan targets derived from the data itself: the fixture proves the
         # check's arithmetic, not raking (covered in test_planning.py /
         # test_iter2.py). opp already carries denormalized segment.
@@ -138,6 +156,12 @@ def run_check(name, opp, accounts):
         agg.columns = ["segment", "fiscal_quarter", "target_realized_usd"]
         if name == "revenue_vs_plan":
             params["_quota_df"] = agg
+        elif name == "coverage_ratio":
+            quota = agg.copy() * 1  # keep columns; scale below
+            quota["target_realized_usd"] *= 0.95 / 1
+            quota = quota.rename(columns={"segment": "plan_unit"})
+            quota.insert(0, "plan_unit_type", "segment")
+            params["_quota_df"] = quota
         else:
             # per-segment totals as plan; make one segment a deliberate
             # laggard (target >> actual) so the bottom quartile

@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from syngen.config import validate_simulator_doc
+from syngen.config import ConfigError, validate_simulator_doc
 from syngen.phases.json_task import chat_json
 from syngen.prompts import load_prompt
 from syngen.utils import extract_json
@@ -19,8 +19,12 @@ def persona_critique(client, story, criteria_summary, log_fn=print):
 
 
 def draft_simulator(client, story, criteria_summary, spec_notes="", sim_path=None,
-                    log_fn=print):
+                    log_fn=print, corrective_findings=None):
     spec_brief = (spec_notes or "none")[-1500:]
+    if corrective_findings:
+        spec_brief = (spec_brief + "\n\nCORRECTIVE FINDINGS - your previous "
+                      "draft was invalid/uncalibrated. Fix ALL of these:\n"
+                      + corrective_findings)[-2500:]
     system = load_prompt(
         "simulator_draft", story=story[:2000], criteria=criteria_summary,
         spec=spec_brief,
@@ -28,7 +32,23 @@ def draft_simulator(client, story, criteria_summary, spec_notes="", sim_path=Non
     response = chat_json(client, "simulator_draft", system,
                          "Produce the simulator.json now.")
     doc = response
-    validated = validate_simulator_doc(_validate_shape(doc))
+    try:
+        validated = validate_simulator_doc(_validate_shape(doc))
+    except ConfigError as e:
+        # F19/F17 family: a schema-plausible draft can still be invalid
+        # (share sums off, bad types). One deterministic repair attempt,
+        # then one corrective re-draft; never crash the session here.
+        log_fn(f"Draft invalid ({e}) - attempting deterministic repair.")
+        try:
+            from syngen.phases.preflight import _renormalize_product_shares_cfg
+            _renormalize_product_shares_cfg(doc)
+            validated = validate_simulator_doc(doc)
+        except (ConfigError, Exception):
+            log_fn("Repair failed - re-drafting with corrective findings.")
+            return draft_simulator(client, story, criteria_summary,
+                                   spec_notes, sim_path=sim_path,
+                                   log_fn=log_fn,
+                                   corrective_findings=str(e))
 
     if sim_path:
         Path(sim_path).write_text(json.dumps(validated, indent=2), encoding="utf-8")

@@ -137,8 +137,11 @@ def test_full_vertical_slice_converges_offline(run_in_tmp):
                            io, sessions_dir="sessions", slug="test")
 
     assert result["status"] == "converged"
-    assert result["iterations"] == 2, f"expected fix on iteration 2: {result}"
-    assert result["llm_proposals"] == 1
+    # M5 iter 3: pre-flight auto-calibration solves the drafted config's
+    # level defect deterministically, so the loop converges on iteration 1
+    # with zero LLM proposals (the FIX_PROPOSAL script entry is unused).
+    assert result["iterations"] == 1, f"expected instant convergence: {result}"
+    assert result["llm_proposals"] == 0
 
     session_dir = run_in_tmp / "sessions"
     sessions = list(session_dir.iterdir())
@@ -152,7 +155,11 @@ def test_full_vertical_slice_converges_offline(run_in_tmp):
 
     sim = json.loads((sdir / "simulator.json").read_text(encoding="utf-8"))
     emea = sim["opportunities"]["discount"]["base_by_quarter"]["EMEA"]
-    assert emea[2:] == [20, 22], "knob patch must persist to simulator.json"
+    # M5 iter 3: auto-calibration (not an LLM proposal) must have raised
+    # EMEA's late-quarter bases to satisfy the region premium + realized
+    # levels - the drafted flat [12, 12, 12, 12] cannot pass AC5/levels.
+    assert emea[2] > 12 and emea[3] > 12, \
+        f"auto-calibration must persist to simulator.json: {emea}"
 
     # Live-M3 regression: the workbook MUST land inside the session folder,
     # not in <cwd>/output (converge used to ignore its own resolved path)
@@ -162,7 +169,9 @@ def test_full_vertical_slice_converges_offline(run_in_tmp):
     log_text = (sdir / "session_log.md").read_text(encoding="utf-8")
     assert "GATE 1 passed" in log_text
     assert "GATE 2 passed" in log_text
-    assert "Iteration 2" in log_text
+    assert "Iteration 1" in log_text
+    # auto-calibration note must be on the record (deterministic fix trail)
+    assert "Auto-calibration" in log_text or "Auto-calibrated" in log_text
 
 
 def test_overrides_parser_updates_params():

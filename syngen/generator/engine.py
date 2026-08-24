@@ -87,11 +87,26 @@ def build_accounts(cfg, rng):
     )
     # M5 iter 2 (WS5): territory hierarchy - roll regions up into sales
     # territories; unmapped regions are territories of their own.
+    # M5 iter 3 fix (live s18): a region MAY be split across several
+    # territories (e.g., AMER -> East/West). Split that region's accounts
+    # evenly using the named stream [seed, 6] - last-one-wins dict mapping
+    # silently starved half the plan units of any pipeline.
     terr_map = spec.get("territories")
     if terr_map:
-        region_to_terr = {r: t for t, rs in terr_map.items() for r in rs}
-        df["territory"] = df["region"].map(
-            lambda r: region_to_terr.get(r, r))
+        region_groups = {}
+        for tname, members in terr_map.items():
+            for r in members:
+                region_groups.setdefault(r, []).append(tname)
+        split_rng = np.random.default_rng([int(cfg["seed"]), 6])
+        n_acc = len(df)
+
+        def pick_terr(region):
+            group = region_groups.get(region, [region])
+            if len(group) == 1:
+                return group[0]
+            return group[int(split_rng.integers(0, len(group)))]
+
+        df["territory"] = [pick_terr(r) for r in df["region"]]
     return df
 
 
@@ -159,8 +174,27 @@ def build_opportunities(cfg, accounts_df, rng):
             return rng.integers(0, len(accounts_df), size=n)
         return rng.choice(len(accounts_df), size=n, p=w / total)
 
+    # M5 iter 3 (P4): open-pipeline state machine. A per-quarter share of
+    # created opportunities stays OPEN in a lifecycle stage instead of
+    # closing; open rows carry expected_close_date (possibly slipped past
+    # the quarter) and feed the stage-history entity. All pipeline draws
+    # use the named stream [seed, 5, qi] - main-rng order is untouched, so
+    # stories without a pipeline block reproduce byte-identically.
     rows = []
     seq = 0
+    stage_history = []  # canonical Opportunity Stage History entity (P4)
+    pipe_spec = cfg.get("pipeline")
+    if pipe_spec:
+        p_open = pipe_spec["share_open_by_quarter"]
+        stage_names = list(pipe_spec["stage_names"])
+        stage_w = pipe_spec.get("stage_weights")
+        if stage_w:
+            wsum = sum(float(w) for w in stage_w)
+            stage_p = [float(w) / wsum for w in stage_w]
+        else:
+            stage_p = None
+        slip_rates = pipe_spec.get("slippage_rate_by_quarter")
+
     for qi, (label, q_end_str) in enumerate(zip(quarters, quarter_ends)):
         q_end = pd.Timestamp(q_end_str)
         q_start = q_end - pd.DateOffset(months=3) + pd.Timedelta(days=1)
@@ -263,6 +297,26 @@ def build_opportunities(cfg, accounts_df, rng):
             realized_price[whale_local] = np.round(
                 list_price[whale_local] * keep_whale, 2)
 
+        # P4: pick this quarter's open-pipeline cohort (named stream)
+        if pipe_spec and n:
+            pl_rng = np.random.default_rng([int(cfg["seed"]), 5, qi])
+            k_open = int(round(n * float(p_open[qi])))
+            k_open = min(k_open, n)
+            open_local = set(pl_rng.choice(n, size=k_open, replace=False)
+                             .tolist()) if k_open else set()
+            open_stage = {}
+            for j in open_local:
+                st = str(pl_rng.choice(stage_names, p=stage_p)) \
+                    if stage_p else str(pl_rng.choice(stage_names))
+                open_stage[j] = st
+            slipped = set()
+            if slip_rates and k_open:
+                thresh = float(slip_rates[qi])
+                slipped = {j for j in open_local
+                           if pl_rng.random() < thresh}
+        else:
+            open_local = set()
+
         for j in range(n):
             seq += 1
             row = {
@@ -286,9 +340,36 @@ def build_opportunities(cfg, accounts_df, rng):
                 row["product_id"] = picked_ids[j]
                 row["product_tier"] = picked_tiers[j]
                 row["cogs_ratio"] = float(cogs_ratios[j])
+            if pipe_spec:
+                # keep expected_close_date adjacent to close_date in the
+                # column contract (insertion order defines sheet columns)
+                _items = list(row.items())
+                _idx = [k for k, _ in _items].index("close_date") + 1
+                _items.insert(_idx, ("expected_close_date", None))
+                row = dict(_items)
+            if j in open_local:
+                # lifecycle state: still open at evaluation time. Expected
+                # close is the original duration-based date; slippage pushes
+                # it beyond the creation quarter's end.
+                row["stage"] = open_stage[j]
+                row["close_date"] = None
+                expected = pd.Timestamp(close_dates[j])
+                if j in slipped:
+                    expected = q_end + pd.Timedelta(
+                        days=int(pl_rng.integers(5, 80)))
+                row["expected_close_date"] = expected.date()
+                stage_history.append({
+                    "opportunity_id": row["opportunity_id"],
+                    "stage": open_stage[j],
+                    "entered_date": created_dates[j].date(),
+                    "fiscal_quarter": label,
+                })
             rows.append(row)
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df.attrs["stage_history"] = pd.DataFrame(stage_history) \
+        if stage_history else None
+    return df
 
 
 def _quota_dimension(cfg):
@@ -422,6 +503,9 @@ def generate(cfg_or_path):
     }
     if quota_df is not None:
         frames["quota_plan"] = quota_df
+    hist = opp_df.attrs.get("stage_history")
+    if hist is not None:
+        frames["opportunity_stage_history"] = hist
     return frames
 
 
@@ -439,7 +523,7 @@ def write_workbook(frames, workbook_path, meta=None):
     out_path = Path(workbook_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     sheet_order = ["accounts", "opportunities", "quarterly_summary",
-                   "quota_plan", "_synngen_meta"]
+                   "quota_plan", "opportunity_stage_history", "_synngen_meta"]
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         for name in sheet_order:
             if name in frames:

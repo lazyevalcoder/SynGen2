@@ -22,7 +22,7 @@ Experiment F's structure_check.py).
 import re
 
 KNOWN_BLOCKS = {"seed", "time_model", "output", "accounts", "opportunities",
-                "products"}
+                "products", "pipeline", "quota"}
 
 FACT_SYNONYMS = re.compile(
     r"(deals?|pipeline|opps?|transactions?|records?|activities?)$", re.I)
@@ -177,15 +177,22 @@ EXPECTED_SHEETS = {
                    "target_realized_usd"],
     "_synngen_meta": None,
 }
-OPTIONAL_SHEETS = {"quota_plan"}  # present only when the config has quotas
+OPTIONAL_SHEETS = {"quota_plan",  # present only when the config has quotas
+                   "opportunity_stage_history"}  # P4 pipeline block
 
 
 def expected_sheets_for(cfg):
     """Column contract depends on which optional blocks the config uses
-    (products attribution columns, territory rollups). Order mirrors the
-    engine's row-dict insertion order."""
+    (products attribution columns, territory rollups, open pipeline).
+    Order mirrors the engine's row-dict insertion order."""
     sheets = {k: (list(v) if v else v) for k, v in EXPECTED_SHEETS.items()}
     if cfg:
+        if cfg.get("pipeline"):
+            # engine emits expected_close_date right after close_date
+            opp = sheets["opportunities"]
+            opp.insert(opp.index("close_date") + 1, "expected_close_date")
+            sheets["opportunity_stage_history"] = [
+                "opportunity_id", "stage", "entered_date", "fiscal_quarter"]
         if cfg.get("products"):
             sheets["opportunities"] += ["product_id", "product_tier",
                                         "cogs_ratio"]
@@ -193,8 +200,9 @@ def expected_sheets_for(cfg):
             sheets["accounts"] = sheets["accounts"] + ["territory"]
             # engine emits territory before the product columns
             opp = sheets["opportunities"]
-            if "product_id" in opp:
-                opp.insert(opp.index("product_id"), "territory")
+            anchor = "product_id" if "product_id" in opp else None
+            if anchor:
+                opp.insert(opp.index(anchor), "territory")
             else:
                 opp.append("territory")
     return sheets

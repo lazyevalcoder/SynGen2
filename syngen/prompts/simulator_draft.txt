@@ -32,12 +32,17 @@ HARD RULE on the quota block: scan the acceptance criteria FIRST. If none of the
     "discount_delta_pp_by_tier": {"entry": 0, "core": 0, "premium": <-pp>},
     "cogs_inflation_by_quarter": [<one multiplier per quarter>]
   },
+  "pipeline": {
+    "stage_names": ["Discovery", "Validation", "Proposal", "Negotiation"],
+    "share_open_by_quarter": [<one per quarter, 0-0.95>],
+    "slippage_rate_by_quarter": [<one per quarter, 0-1>]
+  },
   "quota": {
     "by_segment": {"<segment>": [<revenue target per quarter>], ...}
   }
 }
 
-The optional quota block: include it ONLY when the acceptance criteria contain revenue_vs_plan or gap_concentration checks or the story gives explicit per-segment plan numbers ("Enterprise plan was $2M/quarter"). A vague phrase like "below plan" or "vs plan" WITHOUT numbers or a matching criterion does NOT justify a quota block - omit it, because raking overrides deal-size knobs and would fight other criteria. When included, two parts:
+The optional quota block: include it whenever acceptance criteria use revenue_vs_plan, gap_concentration OR coverage_ratio checks, or the story gives explicit per-unit plan numbers ("Enterprise plan was $2M/quarter"). A vague phrase like "below plan" WITHOUT numbers or a matching criterion does NOT justify a quota block - omit it, because raking overrides deal-size knobs and would fight other criteria. When included, two parts:
 - "by_segment" (or "by_territory" when criteria use dimension territory): the PLAN - what each unit was targeted to earn per quarter (authoritative numbers, sized near natural expected revenue). Exactly one of the two keys.
 - "attainment_by_segment": OPTIONAL map of how actuals land RELATIVE to plan (default 1.0). The story defines these: Enterprise missed plan by ~5% -> "Enterprise": 0.95; Mid-Market beat by ~4% -> "Mid-Market": 1.04. The engine rakes deal sizes so closed-won revenue lands exactly at attainment x plan.
 Size targets near naturally expected revenue: per_quarter * win_rate * median_usd * (1 - avg_discount/100), split across units by weight. revenue_vs_plan criteria need NO further calibration: raking makes attainment exact.
@@ -67,6 +72,12 @@ Calibration guidance from prior experiments - USE THIS RECIPE, do not re-derive 
 - categorical weights (regions/segments/products) may be {"weights_by_quarter": [...]} for mix-shift stories; per-quarter sums across the dimension must stay ~1.0
 - "outlier_deals": {"share": 0.01, "multiplier": 15} creates a few whale deals (scaled prices) for concentration stories
 - territories: {"<name>": ["<region>", ...]} rolls regions up into sales territories; every referenced region must exist in regions. Use when criteria reference territories or gap_concentration with dimension territory (quota then uses by_territory keyed by TERRITORY names, not region names).
+
+Pipeline block: include it ONLY when criteria use open-pipeline checks (stage_aging, slippage_trend, coverage_ratio, pipeline_concentration) or the story describes deals still in progress. Guidance:
+- share_open_by_quarter is the fraction of each quarter's created opportunities that REMAIN OPEN at evaluation time; they get lifecycle stages and an expected_close_date instead of closing
+- open deals do NOT count toward closed-won revenue - quota targets apply only to the (1-share) that closes, so size per_quarter UP accordingly
+- slippage_rate_by_quarter pushes that fraction of open deals' expected close dates past their creation quarter's end (rising rates = "deals slipping" stories)
+- stage_names are your lifecycle stages; keep them conventional unless the story names specific ones
 
 Worked example (for criteria: Q1 avg discount 10% +/-2, Q4 avg 16% +/-2, premium region APAC >= +3pp all year, regions AMER 0.45 / EMEA 0.30 / APAC 0.25, boost 6.5 with share 0.25):
 - contribution of boost to every quarterly average = 0.25 * 6.5 = 1.6pp

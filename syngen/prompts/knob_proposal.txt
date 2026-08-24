@@ -29,6 +29,11 @@ Known criterion-to-knob playbook (start here, verify against the data):
        (margin_by_tier, cogs_inflation) have ZERO effect on them - cost never enters list or
        realized price. If realized_vs_list or an average-discount check fails, change discount
        knobs; never reach for margin knobs.
+    -> DIRECTION RULE: realized_vs_list(q) ~= 100 - won_avg_discount(q). If actual realized/list
+       is BELOW target, SUBTRACT roughly the gap (in pp) from that quarter's base_by_quarter
+       values; if ABOVE, add. Never raise discounts to fix a low-realized failure.
+    -> SHAPE RULE: if the criterion pins start and end levels (e.g., 88% -> 82%), the base curve
+       must be roughly MONOTONIC between them - remove humps/dips that fight the claimed trend.
 - win_rate_flat -> opportunities.win_rate / win_rate_jitter / per_quarter (statistical: raise volume)
 - revenue_vs_plan -> NOTHING to tune; raking enforces attainment exactly. If it fails, segments are mismatched - say so in diagnosis.
 - IMPORTANT: if the config HAS a quota block, realized revenue and deal sizes are RAKED to plan x attainment - price knobs (deal_size_lognormal) will appear not to work. Tune attainment via quota.attainment_by_segment instead.
@@ -44,7 +49,11 @@ Known criterion-to-knob playbook (start here, verify against the data):
 - discount_margin_link -> products.discount_delta_pp_by_tier: raise the high-margin tier's delta to widen the gap, lower/zero it to close
 - avg_price_by_tier -> products.price_multiplier_by_tier for that tier (lower multiplier = cheaper deals); also opportunities.deal_size_lognormal medians shift all tiers together
 - gap_concentration -> NOTHING to tune directly; raking enforces per-unit attainment exactly, so shortfalls are plan-shaped. If it fails, territory/plan structure mismatches the claim - say so in diagnosis.
-- IMPORTANT: if the config HAS a quota block, realized revenue and deal sizes are RAKED to plan x attainment - price knobs (deal_size_lognormal) will appear not to work. Tune attainment via quota.attainment_by_segment (or quota.attainment) instead.
+- stage_aging -> pipeline.share_open_by_quarter (raising EARLY-quarter shares puts more old deals in the bucket at evaluation time) and opportunities.deal_duration_days (longer durations age the pipeline). Lower max-staleness pressure by shrinking early-quarter open shares.
+- slippage_trend -> pipeline.slippage_rate_by_quarter curve: raise later-quarter rates to increase the slip-share trend, lower to flatten. share_open_by_quarter changes dilute/concentrate the effect.
+- coverage_ratio -> pipeline.share_open_by_quarter (more open deals = more coverage value) and deal_size_lognormal medians (bigger deals = more value). NOTE: open-deal VALUE is NOT raked - only closed-won revenue is.
+- pipeline_concentration -> nothing direct; concentration follows account sampling. If it fails, say so in diagnosis - consider outlier_deals for value skew.
+- IMPORTANT: if the config HAS a quota block, realized revenue and deal sizes are RAKED to plan x attainment - price knobs (deal_size_lognormal) will appear not to work for CLOSED revenue. Tune attainment via quota.attainment_by_segment (or quota.attainment) instead.
 - If a needed key is null or missing entirely, propose the WHOLE parent object in one change rather than leaf paths (leaf edits into null parents fail).
 - Only touch knobs that exist in the current config (products.* knobs only exist when a products block is present).
 

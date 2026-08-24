@@ -116,18 +116,19 @@ def _apply_changes(cfg, changes):
     try:
         validate_simulator_doc(copy.deepcopy(snapshot))
         was_valid = True
-    except ConfigError:
+    except (ConfigError, TypeError, KeyError, ValueError):
         was_valid = False
-    if was_valid:
-        _renormalize_product_shares(cfg)
-        try:
-            validate_simulator_doc(cfg)
-        except ConfigError as e:
-            cfg.clear()
-            cfg.update(snapshot)
-            return [{"path": "*",
-                     "error": f"proposal rejected - config would be "
-                              f"invalid: {e}; no changes applied"}]
+    if not was_valid:
+        return applied
+    _renormalize_product_shares(cfg)
+    try:
+        validate_simulator_doc(cfg)
+    except (ConfigError, TypeError, KeyError, ValueError) as e:
+        cfg.clear()
+        cfg.update(snapshot)
+        return [{"path": "*",
+                 "error": f"proposal rejected - config would be "
+                          f"invalid: {e}; no changes applied"}]
     return applied
 
 

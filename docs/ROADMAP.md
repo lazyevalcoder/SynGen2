@@ -69,6 +69,8 @@
 
 ## M5 — Automation & Polish
 
+**Status:** Iteration 3 of 5 complete (2026-08-24). Iter 3: CANONICAL_MODEL adoption (Option A), pre-flight calibration gate + deterministic auto-calibration suite (F17 theme), P4 open-pipeline state machine (lifecycle stages, expected_close_date, stage-history entity, aging/slippage/coverage/concentration checks). Landings: #8, #18, #20. Scorecard: 7/25. Remaining for P4 stories (#5/#11/#21): empirical stale-distribution correction + coverage-aware plan sizing (F25).
+
 **Status:** Iteration 2 of 5 complete (2026-08-24). Iter 1: convergence intelligence + distribution extensions (#7, #23 landed; #6 earlier). Iter 2: WS2 products/margins, WS4 correlation, WS5 territories + full planning dimension (#12 landed; #3/#8 escalated on drafter variance - F17). Scorecard: 4/25 landed. Iter 3 opens with the drafter pre-flight calibration theme (F17) plus deferred #18/#20 live landings.
 
 **Scope:** Make the loop genuinely hands-off, then complete the scenario surface.

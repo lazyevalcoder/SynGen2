@@ -176,6 +176,88 @@ def gate_lint(io, session, sim_cfg, log):
         return None
 
 
+def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
+                   sim_cfg, session, log):
+    """Pre-flight calibration (F17): deterministic config-vs-criteria
+    cross-check before any iteration burns. HARD findings trigger one
+    corrective re-draft; persistent HARD findings abort the session
+    early with a precise reason instead of a doomed convergence loop.
+    Returns (sim_cfg, status); sim_cfg None means abort."""
+    from syngen.phases.preflight import (autocalibrate, calibrate,
+                                         hard_findings, render_findings)
+
+    def run_pass(cfg):
+        return calibrate(cfg, doc)
+
+    def evaluate(cfg):
+        """Calibrate + deterministically auto-fix (ALWAYS - even a
+        findings-free draft may be missing planning synthesis like
+        attainment ratios or a required quota block)."""
+        f = run_pass(cfg)
+        fx = autocalibrate(cfg, doc)
+        if fx:
+            log("Auto-calibrated " + f"{len(fx)} item(s) deterministically:"
+                + "\n" + "\n".join(f"  - {x}" for x in fx))
+            session.log("## Auto-calibration\n" +
+                        "\n".join(f"- {x}" for x in fx))
+            (session.root / "simulator.json").write_text(
+                json.dumps(cfg, indent=2), encoding="utf-8")
+            f = run_pass(cfg)
+        return f, fx
+
+    findings, fixes = evaluate(sim_cfg)
+    if not findings:
+        return sim_cfg, ("autocalibrated" if fixes else "clean")
+    log("Pre-flight calibration findings:\n" + render_findings(findings))
+    session.log("## Pre-flight calibration\n```\n"
+                + render_findings(findings) + "\n```")
+
+    # Bounded corrective re-drafts (F17): the drafter converges on the
+    # share/margin calculus across attempts (live s8c: 14pp -> 8pp miss
+    # after one redraft). Keep drafting while HARD findings strictly
+    # shrink; escalate the moment a draft fails to improve or the
+    # budget is spent.
+    max_redrafts = 3
+    drafts_done = 0
+    prev_hard_count = None
+    while True:
+        hard = hard_findings(findings)
+        if not hard:
+            if findings:
+                log("Residual soft warnings:\n" + render_findings(findings))
+            log("Pre-flight calibration passed.")
+            session.log("PREFLIGHT passed "
+                        f"({drafts_done} corrective re-drafts).")
+            return sim_cfg, ("redrafted" if drafts_done else "soft_warnings")
+        if prev_hard_count is not None and len(hard) >= prev_hard_count:
+            log(f"HARD findings did not shrink ({len(hard)} >= "
+                f"{prev_hard_count}) - escalating early.")
+            session.log("PREFLIGHT FAILED: no improvement across "
+                        "corrective drafts: " + json.dumps(hard))
+            return None, "hard_findings_persist"
+        if drafts_done >= max_redrafts:
+            log("Corrective re-draft budget exhausted.")
+            session.log("PREFLIGHT FAILED after re-draft budget: "
+                        + json.dumps(hard))
+            return None, "hard_findings_persist"
+        log(f"{len(hard)} HARD finding(s) - corrective re-draft...")
+        fix_notes = (spec_notes + "\n\nCORRECTIVE FINDINGS from pre-flight "
+                     "calibration - fix ALL of these in the new draft:\n"
+                     + render_findings(hard))
+        sim_cfg = draft_simulator(client, story, crit_summary, fix_notes)
+        doc.setdefault("definitions", {})["quarter_end_dates"] = dict(
+            zip(sim_cfg["time_model"]["quarter_labels"],
+                sim_cfg["time_model"]["quarter_end_dates"]))
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+        sim_cfg = gate_lint(io, session, sim_cfg, log)
+        if sim_cfg is None:
+            return None, "manual_edit"
+        prev_hard_count = len(hard)
+        drafts_done += 1
+        findings, _ = evaluate(sim_cfg)
+        log("Re-drafted calibration:\n" + render_findings(findings))
+
+
 def post_generate_structure_gate(workbook_path, log, cfg=None):
     """Post-generation structural check (FR4): workbook must match the
     engine contract exactly (columns depend on optional config blocks)."""
@@ -419,6 +501,13 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
     sim_cfg = gate_lint(io, session, sim_cfg, log)
     if sim_cfg is None:
         return {"status": "manual_edit", "session": str(session.root)}
+
+    # --- Pre-flight calibration gate (F17) ---
+    sim_cfg, status = calibrate_gate(client, io, story, crit_summary,
+                                     spec_notes, doc, sim_cfg, session, log)
+    if sim_cfg is None:
+        return {"status": "escalated", "reason": "preflight_calibration",
+                "session": str(session.root)}
 
     return _converge_and_deliver(session, client, io, doc,
                                  session.root / "simulator.json", log,
