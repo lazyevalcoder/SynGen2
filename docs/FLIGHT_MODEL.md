@@ -25,8 +25,8 @@ session files). Iteration 5 onward exists to remove those hands.
 | Pilot training | Simulator hours | Prompt vocabulary, worked examples, check catalogs with triggers | ✅ iter 5 |
 | Envelope protection | Limits the aircraft enforces | Schema linter, pre-flight HARD referential findings, coverage guard, criteria coherence rules | ✅ iters 3–5 |
 | Auto-throttle | Engine manages power automatically | Deterministic auto-calibration solvers (levels, tier mix, attainment, capacity ramping, whale sizing) | ✅ iters 3–5 |
-| **Autopilot / stall recovery** | Detects deviation, corrects, retries without help | On failing iterations: classify failure → apply remedy (knob deltas, re-synthesis, seed bump, criteria re-draft) → bounded retries → structured report only as last resort | 🔨 next |
-| Solo certification | Type rating, check rides | `syngen fly`: fully non-interactive story→dataset→proof runs with telemetry; unassisted-landing rate as THE metric | 🔨 next |
+| **Autopilot / stall recovery** | Detects deviation, corrects, retries without help | In-loop deterministic remedies before any LLM spend: one re-calibration pass (heals omitted-block structural failures), one bounded seed bump on draw-noise, early stall escalation with worst margins named | ✅ iter 5 |
+| Solo certification | Type rating, check rides | `syngen fly` / `run_fly`: fully non-interactive story→dataset→proof with telemetry (`fly_report.json`); `scripts/benchmark_fly.py` computes the unassisted landing rate | ✅ harness built; live benchmark pending go-ahead |
 | Maintenance loop | Fleet data feeds redesigns | Escalations + telemetry convert into general primitives/solvers/guards (the defect-ledger discipline) | ✅ ongoing |
 
 ## Doctrines
