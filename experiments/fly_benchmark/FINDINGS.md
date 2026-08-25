@@ -225,3 +225,25 @@ flight failures.
 - -> F10.1 GUARD-WORKING (evidence the guard adds value when the gap is
   directional/parametric, not missing-dimension)
 - -> F10.2 GAP-AUTOMATION: commit stage-composition check (~F29 family).
+
+---
+
+## DECISION (2026-08-25): Pass-1 frozen at 7/25 - baseline-as-built
+
+Per user direction, the fly benchmark is frozen here. Rationale: the failure
+taxonomy is saturated - 6 of 6 non-landings share one family
+(criteria-quality/guard-policy) and further flights under the current guard
+would reproduce it, not refine it.
+
+Disposition of the queued work:
+- The entire PASS-1 candidate-fix queue is FOLDED INTO M6 domain-packs v0
+  (graduated guard = fix #1; auditor naming contract + matrix = fixes #2/#5;
+  preflight hardening = #3; telemetry = #4). See docs/DOMAIN_PACKS.md.
+- Multi-agent drafter/critic split ships inside v0 per user decision.
+- Remaining 18 flights are NOT run under the old architecture. All 25
+  stories re-fly as the M6 P4 certification suite, reported against this
+  baseline: 7 flown, 1 landed unassisted (14.3%), 5 guard escalations,
+  1 crash, all non-landings killed pre-generation.
+
+This file remains the measurement record. New findings land in the
+certification report after M6.

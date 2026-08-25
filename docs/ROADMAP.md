@@ -95,11 +95,30 @@
 
 ---
 
+## M6 — Domain Packs v0 (RevOps distillation)
+
+> **Status:** ACTIVE (2026-08-25). Promoted from "Post-v1, unscheduled" after the fly-benchmark Pass-1 evidence froze at 7/25 flights: 6 of 6 non-landings died in the intake/coverage-guard layer, root cause structural (fuzzy-text coverage judgment with no canonical claim representation). Design of record: `DOMAIN_PACKS.md`. The frozen 7-flight benchmark is the baseline-as-built; all 25 stories re-fly as certification.
+
+**Scope:** Promote the pack manifest to normative single source of truth; kernel/pack split; claim matrix + graduated guard; generated catalogs (kill duplicated prompt/linter vocabularies); multi-agent drafter/critic roles inside v0; infra fixes folded in.
+
+- P0: spec + kernel plugin interfaces + `packs/revops/` skeleton + import-time-validating loader (zero behavior change)
+- P1: claim matrix from CHECKS registry; cohort algebra; graduated guard (PROCEED → PROCEED-WITH-NOTE → REDRAFT bounded → ESCALATE near-zero only); auditor must name an EXISTING check or classify VOCAB-GAP
+- P2: prompt catalogs and linter vocabularies GENERATED from the registry
+- P3: checks/solvers/prompts/recipes moved into `packs/revops/`; preflight sigma-less hardening (F8.1) + error-path telemetry (F8.2/F5.3)
+- P4: certification — all 25 UAT scenarios via `syngen fly`, reported vs baseline
+
+**Exit criteria:** suite green with byte-identical golden anchors at every phase gate; certification re-fly materially above the 14.3% baseline unassisted landing rate; zero qualifier-pedantry kills; every vocabulary hole routed to roadmap queue instead of failing a flight; grep-audit proves no duplicated catalogs remain.
+
+**Retires:** the criteria-quality/guard-policy failure family (F5.1/F7.1/F9.1 class), vocabulary-hole flight-fatalism (F5.2/F6.1/F7.2/F9.2/F10.2), catalog-drift bug class; advances M5 exit criterion (unassisted landing rate).
+
+---
+
 ## Sequencing Logic
 
 ```
 M1 (trust the engine) → M2 (trust the product) → M3 (trust the replay)
 → M4 (trust the generality) → M5 (trust the automation)
+→ M6 (trust the single source of truth)
 ```
 
 Each milestone answers exactly one trust question before the next begins — the same isolation discipline that made the six experiments cheap. If a milestone's exit criteria fail, we stop and diagnose rather than building forward on sand.
@@ -108,9 +127,9 @@ Each milestone answers exactly one trust question before the next begins — the
 
 Web UI, multi-user/server mode, BI-tool integrations, additional domains beyond M4's scope, orchestration frameworks. Revisit only after M5.
 
-## Post-v1 — Domain Packs (unscheduled)
+## Post-v1 — Domain Packs beyond RevOps
 
-**Trigger:** any requirement to generate synthetic data for a second vertical (e.g., finance/accounting/treasury scenarios). No timeline committed; do not start before v1 ships.
+**Trigger:** any requirement to generate synthetic data for a second vertical (e.g., finance/accounting/treasury scenarios). v0 architecture is delivered in M6 (see `DOMAIN_PACKS.md` and M6 above); this section records the original second-vertical motivation. Per decision 2026-08-25, only RevOps exists until after M6 certification.
 
 The harness (loop, raking, sessions, guardrails, playbook learning) is domain-agnostic and proven across three story classes. What is RevOps-specific today: the engine table schemas (`accounts`/`opportunities`), the 13-check sales-metric library, and the analyst persona in prompts. A domain pack is the swappable surface:
 
