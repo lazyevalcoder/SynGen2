@@ -62,6 +62,33 @@ Deliverables: dataset.xlsx + validation_report.md + simulator.json
 | **Convergence loop** | Adjusts declared knobs until criteria pass; escalates honestly when they can't | LLM proposals + numeric margins |
 | **Session store** | Append-only history of every iteration, config, and report | Files — replayable |
 
+### Built-in tools and methods
+
+Every analytical concept a RevOps story can invoke exists as three matched
+parts: a **config block** (what the engine generates), a **validator check**
+(how the proof measures it), and — for anything arithmetic — a
+**built-in solver** (deterministic code that sizes the config exactly, so
+the LLM never has to guess numbers). The current library:
+
+| Story claim family | Validator checks | Built-in solver / method |
+|---|---|---|
+| Discount & realization levels | `avg_discount_quarter`, `discount_trend_monotonic`, `region_discount_premium`, `end_of_quarter_effect`, `realized_vs_list` | Closed-form blended-discount calculus: per-region base curves solved so weighted levels land exactly on pinned targets |
+| Win rates, cycle time, volume, deal size, ICP quality | `win_rate_flat`, `cycle_length_trend`, `creation_volume_trend`, `deal_size_trend`, `icp_creation_shift` | Statistical-noise-aware sizing (per-quarter sample-size math; per-period median curves for shrinking deal sizes) |
+| Plans, quotas & attainment | `revenue_vs_plan`, `gap_concentration`, `coverage_ratio`, `quota_vs_potential`, `potential_coverage_gap` | Exact raking: deal sizes scaled so attainment = plan × ratio precisely; heterogeneous-attainment synthesis for concentrated-shortfall claims; plan-level sizing against open-pipeline value |
+| Product mix, margins & price points | `tier_share_shift`, `blended_margin_trend`, `discount_margin_link`, `avg_price_by_tier` | Count-share ↔ revenue-share inversion solved twice against final multipliers; margin-spread scaling solved linearly in closed form |
+| Revenue concentration & whale mixtures | `revenue_concentration`, `pipeline_concentration`, `core_vs_headline_growth` | Seeded Monte-Carlo order statistics solve the deal-size tail for top-N concentration; mixture raking splits headline vs ex-whale core attainment exactly; empirically calibrated whale recipe (share curve × multiplier × deal-count floor) |
+| Open-pipeline health | `stage_aging`, `slippage_trend`, `coverage_ratio` | Engine-exact staleness model (Monte-Carlo replicating the date-draw machinery) + exponential-tilt solver for open-share reshaping; noise-aware slippage-path solve |
+| Rep capacity & ramp | `effective_capacity`, `headcount_growth_placement` | Ramping-count equation solved exactly per unit/quarter: ((A−R)+R·p/100)/P = target |
+| Ownership & account churn | `unowned_account_share`, `post_change_revenue_decline` | Block synthesis sized to criterion params + win-rate coupling after ownership changes |
+| Activity & forecast behavior | `commit_no_engagement_share`, `activity_potential_misalignment`, `forecast_vs_actual` | Commit-flag bias knobs + activity-tilt synthesis aimed at the story's claimed misallocation |
+| Price elasticity by segment quality | `elasticity_differential` | Pricing-response coupling (price path × elasticity × high-potential mitigation) synthesized from the criterion |
+
+Behind the library sit four **autonomy guards** that reject impossible or
+vacuous work before compute is spent: a schema linter, pre-flight
+referential HARD findings, a coverage guard (criteria must express the
+story's computable claims), and coherence rules (criteria sets must be
+mutually satisfiable in exact arithmetic).
+
 ### Why this architecture doesn't accumulate heavy technical debt
 
 Three deliberate constraints do most of the work:

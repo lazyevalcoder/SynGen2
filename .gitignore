@@ -14,3 +14,5 @@ output_simdraft_debug.txt
 # OS / editor
 Thumbs.db
 .DS_Store
+
+uat/

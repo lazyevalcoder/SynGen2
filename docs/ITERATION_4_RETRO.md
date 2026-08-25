@@ -123,6 +123,13 @@ before the loop starts.
 
 ## Iteration 5 optimization queue (evidence-backed)
 
+> 2026-08-25 scope revision (flight-model doctrine, see FLIGHT_MODEL.md):
+> the queue is re-ordered so autonomy work precedes feature work. Items
+> 0/1/2/3/5 below are DONE; item 4 (F29) is DEMOTED below the new
+> autopilot workstream (autonomous remediation loop merging G3+G4, then
+> `syngen fly` solo-certification harness, then a 25-story unassisted
+> benchmark). F29 returns after the pilot can fly solo.
+
 Status at 2026-08-25 (iter 5 session, commits 986ca62..c620e3f):
 items 0, 1, 2, 3, 5 DONE; item 4 (F29) and item 6 (G3/G4/packaging)
 remain.
