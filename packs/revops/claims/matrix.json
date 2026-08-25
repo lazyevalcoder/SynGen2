@@ -2,45 +2,499 @@
   "version": "0.1.0",
   "note": "Claim matrix v0 (M6 P1): canonical claim cells {entity x metric x cohort} bound to proof checks and solver families. One cell per check; KPI names match docs/ENTITY_SCHEMA.md section 6. Vocabulary gaps are deliberately NOT cells - they live in ENTITY_SCHEMA.md section 7 until implemented.",
   "cells": [
-    {"id": "opportunity.win_rate.closed", "kpi": "win_rate", "entity": "opportunity", "metric": "level", "cohort": "closed", "direction": "flat", "checks": ["win_rate_flat"], "solved_by": []},
-    {"id": "opportunity.creation_volume.all", "kpi": "creation_volume", "entity": "opportunity", "metric": "trend", "cohort": "all", "direction": null, "checks": ["creation_volume_trend"], "solved_by": []},
-    {"id": "opportunity.deal_size.all", "kpi": "deal_size", "entity": "opportunity", "metric": "trend", "cohort": "all", "direction": null, "checks": ["deal_size_trend"], "solved_by": ["concentration"]},
-    {"id": "opportunity.revenue_concentration.all", "kpi": "revenue_concentration", "entity": "opportunity", "metric": "concentration", "cohort": "won", "direction": "up", "checks": ["revenue_concentration"], "solved_by": ["concentration"]},
-    {"id": "opportunity.icp_creation_share.all", "kpi": "icp_creation_shift", "entity": "opportunity", "metric": "share", "cohort": "all", "direction": null, "checks": ["icp_creation_shift"], "solved_by": []},
-
-    {"id": "opportunity.avg_discount.won", "kpi": "average_discount", "entity": "opportunity", "metric": "level", "cohort": "won", "direction": null, "checks": ["avg_discount_quarter"], "solved_by": ["discount_path"]},
-    {"id": "opportunity.discount_trend.won", "kpi": "discount_trend", "entity": "opportunity", "metric": "trend", "cohort": "won", "direction": null, "checks": ["discount_trend_monotonic"], "solved_by": []},
-    {"id": "opportunity.region_price_premium.won", "kpi": "regional_price_premium", "entity": "opportunity", "metric": "divergence", "cohort": "won", "dimension": "region", "direction": null, "checks": ["region_discount_premium"], "solved_by": ["discount_path"]},
-    {"id": "opportunity.realized_vs_list.won", "kpi": "realized_vs_list", "entity": "opportunity", "metric": "ratio", "cohort": "won", "direction": null, "checks": ["realized_vs_list"], "solved_by": ["discount_path"]},
-    {"id": "opportunity.price_by_tier.won", "kpi": "price_by_tier", "entity": "product", "metric": "level", "cohort": "won", "dimension": "product_tier", "direction": null, "checks": ["avg_price_by_tier"], "solved_by": ["price_solve"]},
-    {"id": "opportunity.tier_share_shift.all", "kpi": "tier_share_shift", "entity": "product", "metric": "share", "cohort": "all", "dimension": "product_tier", "direction": null, "checks": ["tier_share_shift"], "solved_by": ["tier_mix"]},
-    {"id": "opportunity.discount_margin_link.won", "kpi": "discount_margin_link", "entity": "opportunity", "metric": "correlation", "cohort": "won", "direction": null, "checks": ["discount_margin_link"], "solved_by": ["margin"]},
-    {"id": "opportunity.blended_margin.all", "kpi": "blended_margin", "entity": "opportunity", "metric": "trend", "cohort": "won", "direction": null, "checks": ["blended_margin_trend"], "solved_by": ["margin"]},
-    {"id": "opportunity.elasticity_differential.segment", "kpi": "elasticity_differential", "entity": "opportunity", "metric": "divergence", "cohort": "won", "dimension": "segment", "direction": null, "checks": ["elasticity_differential"], "solved_by": ["pricing_response"]},
-    {"id": "opportunity.eoq_close_timing.all", "kpi": "end_of_quarter_effect", "entity": "opportunity", "metric": "timing", "cohort": "closed", "direction": null, "checks": ["end_of_quarter_effect"], "solved_by": []},
-
-    {"id": "pipeline.coverage.open", "kpi": "pipeline_coverage", "entity": "opportunity", "metric": "ratio", "cohort": "open_pipeline", "dimension": "quota_plan", "direction": null, "checks": ["coverage_ratio"], "solved_by": ["pipeline_joint"]},
-    {"id": "pipeline.cycle_length.closed", "kpi": "sales_cycle", "entity": "opportunity", "metric": "trend", "cohort": "closed", "direction": null, "checks": ["cycle_length_trend"], "solved_by": []},
-    {"id": "pipeline.stage_aging.open", "kpi": "stage_aging", "entity": "stage_history", "metric": "aging", "cohort": "open_pipeline", "direction": null, "checks": ["stage_aging"], "solved_by": ["pipeline_joint"]},
-    {"id": "pipeline.slippage.open", "kpi": "slippage_rate", "entity": "opportunity", "metric": "trend", "cohort": "open_pipeline", "direction": null, "checks": ["slippage_trend"], "solved_by": ["pipeline_joint"]},
-    {"id": "pipeline.concentration.open", "kpi": "pipeline_concentration", "entity": "opportunity", "metric": "concentration", "cohort": "open_pipeline", "dimension": "account", "direction": "up", "checks": ["pipeline_concentration"], "solved_by": ["concentration"]},
-
-    {"id": "quota.attainment.plan_unit", "kpi": "plan_attainment", "entity": "quota", "metric": "ratio", "cohort": "won", "dimension": "plan_unit", "direction": null, "checks": ["revenue_vs_plan"], "solved_by": ["planning"]},
-    {"id": "capacity.effective_capacity.unit_quarter", "kpi": "effective_capacity", "entity": "rep", "metric": "level", "cohort": "all", "dimension": "plan_unit", "direction": "flat", "checks": ["effective_capacity"], "solved_by": ["capacity_synthesis"]},
-    {"id": "capacity.headcount_growth_placement.unit", "kpi": "headcount_growth_placement", "entity": "rep", "metric": "correlation", "cohort": "all", "dimension": "plan_unit", "direction": null, "checks": ["headcount_growth_placement"], "solved_by": ["capacity_synthesis"]},
-    {"id": "ownership.unowned_share.account", "kpi": "unowned_share", "entity": "ownership_history", "metric": "share", "cohort": "all", "dimension": "account", "direction": "down", "checks": ["unowned_account_share"], "solved_by": ["block_synthesis"]},
-    {"id": "territory.quota_vs_potential.territory", "kpi": "quota_vs_potential", "entity": "territory", "metric": "ratio", "cohort": "all", "dimension": "territory", "direction": null, "checks": ["quota_vs_potential"], "solved_by": ["planning"]},
-
-    {"id": "whitespace.potential_coverage_gap.high_potential", "kpi": "potential_coverage_gap", "entity": "penetration_whitespace", "metric": "share", "cohort": "open_pipeline", "dimension": "account_potential_rank", "direction": null, "checks": ["potential_coverage_gap"], "solved_by": ["block_synthesis"]},
-    {"id": "whitespace.gap_concentration.bottom_territories", "kpi": "gap_concentration", "entity": "penetration_whitespace", "metric": "concentration", "cohort": "open_pipeline", "direction": "up", "checks": ["gap_concentration"], "solved_by": []},
-
-    {"id": "forecast.commit_vs_actual.quarter", "kpi": "forecast_vs_actual", "entity": "forecast_snapshot", "metric": "ratio", "cohort": "all", "dimension": "quarter", "direction": null, "checks": ["forecast_vs_actual"], "solved_by": ["block_synthesis"]},
-    {"id": "commit.commit_no_engagement.won_commit", "kpi": "commit_engagement", "entity": "opportunity", "metric": "share", "cohort": "in_commit", "direction": "down", "checks": ["commit_no_engagement_share"], "solved_by": ["commit_flags"]},
-    {"id": "growth.core_vs_headline.ex_outlier", "kpi": "core_vs_headline_growth", "entity": "opportunity", "metric": "divergence", "cohort": "ex_outlier", "direction": null, "checks": ["core_vs_headline_growth"], "solved_by": ["whale_sizing"]},
-
-    {"id": "ownership.post_change_revenue.changed_accounts", "kpi": "post_change_revenue", "entity": "ownership_history", "metric": "trend", "cohort": "closed", "direction": "down", "checks": ["post_change_revenue_decline"], "solved_by": ["ownership_synthesis"]},
-    {"id": "activity.potential_alignment.low_half", "kpi": "activity_potential_alignment", "entity": "activity", "metric": "divergence", "cohort": "all", "dimension": "account_potential_rank", "direction": "down", "checks": ["activity_potential_misalignment"], "solved_by": ["activity_synthesis"]},
-
-    {"id": "hygiene.data_sanity.all", "kpi": "data_sanity", "entity": "opportunity", "metric": "generic", "cohort": "all", "direction": null, "checks": ["data_sanity"], "generic": true, "solved_by": []}
+    {
+      "id": "opportunity.win_rate.closed",
+      "kpi": "win_rate",
+      "entity": "opportunity",
+      "metric": "level",
+      "cohort": "closed",
+      "direction": "flat",
+      "checks": [
+        "win_rate_flat"
+      ],
+      "solved_by": [],
+      "vocab": "{band_pp} - won share of closed deals per quarter must stay within band across quarters"
+    },
+    {
+      "id": "opportunity.creation_volume.all",
+      "kpi": "creation_volume",
+      "entity": "opportunity",
+      "metric": "trend",
+      "cohort": "all",
+      "direction": null,
+      "checks": [
+        "creation_volume_trend"
+      ],
+      "solved_by": [],
+      "vocab": "{target_decline_pct, tolerance_pp} - opportunity creation change from first to last quarter lands within tolerance of the claimed decline (story says pipeline slowed ~20% -> target_decline_pct=20, tolerance_pp=8)"
+    },
+    {
+      "id": "opportunity.deal_size.all",
+      "kpi": "deal_size",
+      "entity": "opportunity",
+      "metric": "trend",
+      "cohort": "all",
+      "direction": null,
+      "checks": [
+        "deal_size_trend"
+      ],
+      "solved_by": [
+        "concentration"
+      ],
+      "vocab": "{target_change_pct, tolerance_pp} - average won-deal size (list price) change from first to last quarter lands within tolerance of the claim. Story says deal sizes shrank ~15% -> target_change_pct=-15"
+    },
+    {
+      "id": "opportunity.revenue_concentration.all",
+      "kpi": "revenue_concentration",
+      "entity": "opportunity",
+      "metric": "concentration",
+      "cohort": "won",
+      "direction": "up",
+      "checks": [
+        "revenue_concentration"
+      ],
+      "solved_by": [
+        "concentration"
+      ],
+      "vocab": "{top_n, min_top_share_pct} - top N deals' share of last-quarter won revenue must be at least this percent. Use for revenue depended on a handful of large deals"
+    },
+    {
+      "id": "opportunity.icp_creation_share.all",
+      "kpi": "icp_creation_shift",
+      "entity": "opportunity",
+      "metric": "share",
+      "cohort": "all",
+      "direction": null,
+      "checks": [
+        "icp_creation_shift"
+      ],
+      "solved_by": [],
+      "vocab": "{min_increase_pp} - share of created pipeline from NON-ICP accounts must rise by at least this many percentage points from first to last quarter. Use for pipeline growth came disproportionately from low-quality accounts"
+    },
+    {
+      "id": "opportunity.avg_discount.won",
+      "kpi": "average_discount",
+      "entity": "opportunity",
+      "metric": "level",
+      "cohort": "won",
+      "direction": null,
+      "checks": [
+        "avg_discount_quarter"
+      ],
+      "solved_by": [
+        "discount_path"
+      ],
+      "vocab": "{quarter, target_pct, tolerance_pp} - average discount of won deals in a quarter"
+    },
+    {
+      "id": "opportunity.discount_trend.won",
+      "kpi": "discount_trend",
+      "entity": "opportunity",
+      "metric": "trend",
+      "cohort": "won",
+      "direction": null,
+      "checks": [
+        "discount_trend_monotonic"
+      ],
+      "solved_by": [],
+      "vocab": "{max_dip_pp} - discount path must not dip by more than this between consecutive quarters"
+    },
+    {
+      "id": "opportunity.region_price_premium.won",
+      "kpi": "regional_price_premium",
+      "entity": "opportunity",
+      "metric": "divergence",
+      "cohort": "won",
+      "dimension": "region",
+      "direction": null,
+      "checks": [
+        "region_discount_premium"
+      ],
+      "solved_by": [
+        "discount_path"
+      ],
+      "vocab": "{region, vs: [regions], min_premium_pp, quarters: [labels]} - named region's discount premium over peers"
+    },
+    {
+      "id": "opportunity.realized_vs_list.won",
+      "kpi": "realized_vs_list",
+      "entity": "opportunity",
+      "metric": "ratio",
+      "cohort": "won",
+      "direction": null,
+      "checks": [
+        "realized_vs_list"
+      ],
+      "solved_by": [
+        "discount_path"
+      ],
+      "vocab": "{quarter_start, target_start_pct, quarter_end, target_end_pct, tolerance_pp} - realized revenue as pct of list price at quarter start/end"
+    },
+    {
+      "id": "opportunity.price_by_tier.won",
+      "kpi": "price_by_tier",
+      "entity": "product",
+      "metric": "level",
+      "cohort": "won",
+      "dimension": "product_tier",
+      "direction": null,
+      "checks": [
+        "avg_price_by_tier"
+      ],
+      "solved_by": [
+        "price_solve"
+      ],
+      "vocab": "{tier, max_avg_realized_usd} - average realized price of won deals in a tier stays under the cap. Use for entry-price / price-point claims (SMB bought only entry-level deals around $15k)"
+    },
+    {
+      "id": "opportunity.tier_share_shift.all",
+      "kpi": "tier_share_shift",
+      "entity": "product",
+      "metric": "share",
+      "cohort": "all",
+      "dimension": "product_tier",
+      "direction": null,
+      "checks": [
+        "tier_share_shift"
+      ],
+      "solved_by": [
+        "tier_mix"
+      ],
+      "vocab": "{tier, from_share_pct, to_share_pct, tolerance_pp} - one product tier's share of WON REVENUE moves from ~from_share_pct (first quarter) to ~to_share_pct (last quarter). Use for mix-shift claims (entry-tier products grew to 40% of sales, mix moved to premium)"
+    },
+    {
+      "id": "opportunity.discount_margin_link.won",
+      "kpi": "discount_margin_link",
+      "entity": "opportunity",
+      "metric": "correlation",
+      "cohort": "won",
+      "direction": null,
+      "checks": [
+        "discount_margin_link"
+      ],
+      "solved_by": [
+        "margin"
+      ],
+      "vocab": "{high_margin_tier, low_margin_tier, min_gap_pp} - avg discount on the high-margin tier must exceed the low-margin tier's by at least min_gap_pp. Use for discounts were concentrated in high-margin products"
+    },
+    {
+      "id": "opportunity.blended_margin.all",
+      "kpi": "blended_margin",
+      "entity": "opportunity",
+      "metric": "trend",
+      "cohort": "won",
+      "direction": null,
+      "checks": [
+        "blended_margin_trend"
+      ],
+      "solved_by": [
+        "margin"
+      ],
+      "vocab": "{target_change_pct, tolerance_pp} - blended gross margin % of won deals changes from first to last quarter within tolerance of the claim. COGS rising -> margin falling: gross margin eroded ~3 points -> target_change_pct=-3, tolerance_pp=1"
+    },
+    {
+      "id": "opportunity.elasticity_differential.segment",
+      "kpi": "elasticity_differential",
+      "entity": "opportunity",
+      "metric": "divergence",
+      "cohort": "won",
+      "dimension": "segment",
+      "direction": null,
+      "checks": [
+        "elasticity_differential"
+      ],
+      "solved_by": [
+        "pricing_response"
+      ],
+      "vocab": "{min_gap_pp} - won-rate change of LOW-potential accounts trails HIGH-potential accounts by at least this many points after price changes. Use for the price increase hurt where we could least afford it"
+    },
+    {
+      "id": "opportunity.eoq_close_timing.all",
+      "kpi": "end_of_quarter_effect",
+      "entity": "opportunity",
+      "metric": "timing",
+      "cohort": "closed",
+      "direction": null,
+      "checks": [
+        "end_of_quarter_effect"
+      ],
+      "solved_by": [],
+      "vocab": "{window_days, min_gap_pp} - close-date clustering inside the last window of each quarter"
+    },
+    {
+      "id": "pipeline.coverage.open",
+      "kpi": "pipeline_coverage",
+      "entity": "opportunity",
+      "metric": "ratio",
+      "cohort": "open_pipeline",
+      "dimension": "quota_plan",
+      "direction": null,
+      "checks": [
+        "coverage_ratio"
+      ],
+      "solved_by": [
+        "pipeline_joint"
+      ],
+      "vocab": "{quarter, min_multiple, target_quarter_offset?} - open-pipeline VALUE closing around `quarter` divided by that quarter's revenue plan target. Use for coverage was 3.5x style claims (requires a quota block; set target_quarter_offset=-1 to measure against the PRIOR quarter's plan). IMPORTANT: quarter+offset must stay INSIDE the fiscal year - do not reference quarters before Q1; for a coverage was X at the start of the year claim use quarter=FY26-Q1 WITHOUT an offset and anchor the plan numbers accordingly"
+    },
+    {
+      "id": "pipeline.cycle_length.closed",
+      "kpi": "sales_cycle",
+      "entity": "opportunity",
+      "metric": "trend",
+      "cohort": "closed",
+      "direction": null,
+      "checks": [
+        "cycle_length_trend"
+      ],
+      "solved_by": [],
+      "vocab": "{min_increase_pct} - average won-deal cycle time (close minus created, days) must grow from first to last quarter by at least this percent. Use for deals are taking longer to close"
+    },
+    {
+      "id": "pipeline.stage_aging.open",
+      "kpi": "stage_aging",
+      "entity": "stage_history",
+      "metric": "aging",
+      "cohort": "open_pipeline",
+      "direction": null,
+      "checks": [
+        "stage_aging"
+      ],
+      "solved_by": [
+        "pipeline_joint"
+      ],
+      "vocab": "{stale_threshold_days, max_stale_share_pct} - share of OPEN pipeline older than the threshold (measured at last quarter end) stays under this percent. Use for pipeline is decaying/stale"
+    },
+    {
+      "id": "pipeline.slippage.open",
+      "kpi": "slippage_rate",
+      "entity": "opportunity",
+      "metric": "trend",
+      "cohort": "open_pipeline",
+      "direction": null,
+      "checks": [
+        "slippage_trend"
+      ],
+      "solved_by": [
+        "pipeline_joint"
+      ],
+      "vocab": "{min_increase_pp} - the share of open deals whose expected close has slipped past their creation quarter's end rises from first to last quarter by at least this many points. Use for deals are slipping into next quarter"
+    },
+    {
+      "id": "pipeline.concentration.open",
+      "kpi": "pipeline_concentration",
+      "entity": "opportunity",
+      "metric": "concentration",
+      "cohort": "open_pipeline",
+      "dimension": "account",
+      "direction": "up",
+      "checks": [
+        "pipeline_concentration"
+      ],
+      "solved_by": [
+        "concentration"
+      ],
+      "vocab": "{top_n_accounts, min_top_share_pct} - top N accounts' share of open-pipeline VALUE. Use for coverage was concentrated in a few accounts/deals"
+    },
+    {
+      "id": "quota.attainment.plan_unit",
+      "kpi": "plan_attainment",
+      "entity": "quota",
+      "metric": "ratio",
+      "cohort": "won",
+      "dimension": "plan_unit",
+      "direction": null,
+      "checks": [
+        "revenue_vs_plan"
+      ],
+      "solved_by": [
+        "planning"
+      ],
+      "vocab": "{segment, target_pct, band_pct, dimension?} - attainment of quarterly revenue plan vs quota targets. Use when the story references quotas/plans or missed/exceeded plan by X%. target_pct is the story's expected attainment: missed plan by ~5% -> target_pct=95; beat by ~4% -> target_pct=104. band_pct is tolerance (2 is a good default). segment may be a named segment/territory OR _all_ for company-wide attainment claims (e.g., revenue finished at 101% of plan). For territory plans add dimension=territory. Do not invent other aggregate names like Total or Overall - use _all_ for those claims"
+    },
+    {
+      "id": "capacity.effective_capacity.unit_quarter",
+      "kpi": "effective_capacity",
+      "entity": "rep",
+      "metric": "level",
+      "cohort": "all",
+      "dimension": "plan_unit",
+      "direction": "flat",
+      "checks": [
+        "effective_capacity"
+      ],
+      "solved_by": [
+        "capacity_synthesis"
+      ],
+      "vocab": "{target_pct, band_pp, unit?} - derived effective capacity pct ((actual-ramping)+ramping*ramp_pct/100)/plan must sit within band of target for every capacity-plan row (worst decides); optional unit narrows to one territory/region. Use for we had the heads but not the capacity ramp/hiring stories"
+    },
+    {
+      "id": "capacity.headcount_growth_placement.unit",
+      "kpi": "headcount_growth_placement",
+      "entity": "rep",
+      "metric": "correlation",
+      "cohort": "all",
+      "dimension": "plan_unit",
+      "direction": null,
+      "checks": [
+        "headcount_growth_placement"
+      ],
+      "solved_by": [
+        "capacity_synthesis"
+      ],
+      "vocab": "{min_growth_share_pct} - at least this share of net headcount additions went to units that produced the bulk of first-quarter won revenue (hires went to historically strong territories)"
+    },
+    {
+      "id": "ownership.unowned_share.account",
+      "kpi": "unowned_share",
+      "entity": "ownership_history",
+      "metric": "share",
+      "cohort": "all",
+      "dimension": "account",
+      "direction": "down",
+      "checks": [
+        "unowned_account_share"
+      ],
+      "solved_by": [
+        "block_synthesis"
+      ],
+      "vocab": "{min_unowned_share_pct, top_value_pct?, quarter?} - among top-value accounts (default top 20% by won revenue), at least this share has NO owner in the evaluation quarter. Use for key accounts were left unowned"
+    },
+    {
+      "id": "territory.quota_vs_potential.territory",
+      "kpi": "quota_vs_potential",
+      "entity": "territory",
+      "metric": "ratio",
+      "cohort": "all",
+      "dimension": "territory",
+      "direction": null,
+      "checks": [
+        "quota_vs_potential"
+      ],
+      "solved_by": [
+        "planning"
+      ],
+      "vocab": "{dimension?, target_ratio_pct, band_pp, unit?} - a plan unit's total quota divided by its addressable market (summed account potential) as a percent. Use for territory X was asked to sell more than exists over-plan claims (target ~120) or whitespace headroom claims (target ~40)"
+    },
+    {
+      "id": "whitespace.potential_coverage_gap.high_potential",
+      "kpi": "potential_coverage_gap",
+      "entity": "penetration_whitespace",
+      "metric": "share",
+      "cohort": "open_pipeline",
+      "dimension": "account_potential_rank",
+      "direction": null,
+      "checks": [
+        "potential_coverage_gap"
+      ],
+      "solved_by": [
+        "block_synthesis"
+      ],
+      "vocab": "{dimension?, min_gap_pp} - top-half-potential units' share of CREATED pipeline lags their share of market potential by at least this many points. Use for capacity went where the whitespace wasn't"
+    },
+    {
+      "id": "whitespace.gap_concentration.bottom_territories",
+      "kpi": "gap_concentration",
+      "entity": "penetration_whitespace",
+      "metric": "concentration",
+      "cohort": "open_pipeline",
+      "direction": "up",
+      "checks": [
+        "gap_concentration"
+      ],
+      "solved_by": [],
+      "vocab": "{dimension, min_bottom_gap_share_pct} - the bottom quartile of plan units (by attainment) must hold at least this share of total plan shortfall. Use for the miss was concentrated in weak territories (dimension: territory)"
+    },
+    {
+      "id": "forecast.commit_vs_actual.quarter",
+      "kpi": "forecast_vs_actual",
+      "entity": "forecast_snapshot",
+      "metric": "ratio",
+      "cohort": "all",
+      "dimension": "quarter",
+      "direction": null,
+      "checks": [
+        "forecast_vs_actual"
+      ],
+      "solved_by": [
+        "block_synthesis"
+      ],
+      "vocab": "{target_pct, band_pp} - the commit snapshot ran within band of this percent of actuals each quarter (109 = forecast was 9% hot). Use for forecast said X but actuals came in Y"
+    },
+    {
+      "id": "commit.commit_no_engagement.won_commit",
+      "kpi": "commit_engagement",
+      "entity": "opportunity",
+      "metric": "share",
+      "cohort": "in_commit",
+      "direction": "down",
+      "checks": [
+        "commit_no_engagement_share"
+      ],
+      "solved_by": [
+        "commit_flags"
+      ],
+      "vocab": "{min_share_pct} - at least this share of COMMIT deal value sits on accounts with ZERO touches that quarter. Use for half the commit wasn't being worked"
+    },
+    {
+      "id": "growth.core_vs_headline.ex_outlier",
+      "kpi": "core_vs_headline_growth",
+      "entity": "opportunity",
+      "metric": "divergence",
+      "cohort": "ex_outlier",
+      "direction": null,
+      "checks": [
+        "core_vs_headline_growth"
+      ],
+      "solved_by": [
+        "whale_sizing"
+      ],
+      "vocab": "{min_headline_growth_pct, max_core_growth_pct} - total won-revenue growth first->last quarter reaches min_headline while ex-outlier (core) growth stays at or below max_core (typically negative). Use for the beat was carried by a few huge deals while the core business shrank"
+    },
+    {
+      "id": "ownership.post_change_revenue.changed_accounts",
+      "kpi": "post_change_revenue",
+      "entity": "ownership_history",
+      "metric": "trend",
+      "cohort": "closed",
+      "direction": "down",
+      "checks": [
+        "post_change_revenue_decline"
+      ],
+      "solved_by": [
+        "ownership_synthesis"
+      ],
+      "vocab": "{min_gap_pp} - accounts whose owner changed show aggregate won-revenue growth trailing stable-owner accounts by at least this many points. Use for revenue fell after accounts changed hands"
+    },
+    {
+      "id": "activity.potential_alignment.low_half",
+      "kpi": "activity_potential_alignment",
+      "entity": "activity",
+      "metric": "divergence",
+      "cohort": "all",
+      "dimension": "account_potential_rank",
+      "direction": "down",
+      "checks": [
+        "activity_potential_misalignment"
+      ],
+      "solved_by": [
+        "activity_synthesis"
+      ],
+      "vocab": "{min_gap_pp} - low-potential accounts (bottom half by potential) receive more than their fair share (account-count share) of all touches by at least this many points. Use for activity is up but aimed at the wrong accounts"
+    },
+    {
+      "id": "hygiene.data_sanity.all",
+      "kpi": "data_sanity",
+      "entity": "opportunity",
+      "metric": "generic",
+      "cohort": "all",
+      "direction": null,
+      "checks": [
+        "data_sanity"
+      ],
+      "generic": true,
+      "solved_by": [],
+      "vocab": "{max_discount_pct} - referential sanity: valid FKs, non-negative prices, discount cap"
+    }
   ]
 }

@@ -234,6 +234,47 @@ def test_generic_flag_marks_hygiene_cell(revops):
     assert sanity.get("generic") is True
 
 
+# --- generated prompt catalogs (M6 P2) ---------------------------------------
+
+
+def test_check_catalog_covers_exactly_the_kernel_registry():
+    from syngen.validator.checks import CHECKS
+
+    taxonomy = PackTaxonomy(load_pack(REPO_PACK))
+    catalog_names = [line[2:].split(":")[0]
+                     for line in taxonomy.check_catalog().splitlines()]
+    assert set(catalog_names) == set(CHECKS)
+    assert len(catalog_names) == len(CHECKS)
+    assert set(taxonomy.check_names(" | ").split(" | ")) == set(CHECKS)
+
+
+def test_every_cell_documents_its_vocabulary():
+    pack = load_pack(REPO_PACK)
+    undocumented = [c["id"] for c in pack.claims_matrix["cells"]
+                    if not c.get("vocab")]
+    assert undocumented == []
+
+
+def test_decompose_prompt_renders_generated_catalog_not_hardcoded_list():
+    from syngen.phases.intake import _pack_taxonomy
+    from syngen.prompts import load_prompt
+
+    tax = _pack_taxonomy()
+    text = load_prompt("decompose", user_decisions="none", story="s",
+                       check_catalog=tax.check_catalog(),
+                       check_names=tax.check_names())
+    assert "{{check_catalog}}" not in text
+    assert "{{check_names}}" not in text
+    for check in ("revenue_vs_plan", "effective_capacity",
+                  "activity_potential_misalignment", "data_sanity"):
+        assert f"- {check}:" in text
+
+
+def test_intake_taxonomy_cache_returns_same_instance():
+    from syngen.phases.intake import _pack_taxonomy
+    assert _pack_taxonomy() is _pack_taxonomy()
+
+
 # --- cohort algebra ----------------------------------------------------------
 
 

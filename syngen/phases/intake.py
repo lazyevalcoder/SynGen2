@@ -6,6 +6,7 @@ claims - the vacuous-convergence hole where #24 "landed" 0/0 and #9/#13
 landed on generic hygiene checks alone.
 """
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from syngen.config import validate_criteria_doc
@@ -19,6 +20,16 @@ from syngen.validator.checks import CHECKS
 GENERIC_CHECKS = {"data_sanity"}
 
 MAX_COVERAGE_REDRAFTS = 1
+
+
+@lru_cache(maxsize=1)
+def _pack_taxonomy():
+    """The active domain pack's claim taxonomy (M6): single source for
+    every prompt catalog. Cached - the pack is load-time validated."""
+    from syngen.packs.loader import ensure_valid
+    from syngen.packs.taxonomy import PackTaxonomy
+    pack, _warnings = ensure_valid()
+    return PackTaxonomy(pack)
 
 
 def precheck_claims(client, story, log_fn=print):
@@ -92,7 +103,7 @@ def audit_coverage_structured(client, story, doc, computable_claims,
     try:
         result = chat_json(client, "coverage_audit",
                            load_prompt("coverage_audit",
-                                       checks=", ".join(sorted(CHECKS))),
+                                       checks=_pack_taxonomy().check_names()),
                            user)
     except (ValueError, KeyError) as e:
         log_fn(f"WARN coverage audit unavailable ({e}); "
@@ -291,8 +302,20 @@ def _log_notes(gaps, log_fn):
 
 
 def draft_criteria(client, story, decisions_text="", criteria_path=None, log_fn=print):
-    """LLM drafts criteria JSON; contract validation rejects malformed output."""
-    system = load_prompt("decompose", user_decisions=decisions_text or "none", story=story)
+    """LLM drafts criteria JSON; contract validation rejects malformed output.
+
+    The check catalog and name list are GENERATED from the pack's claim
+    matrix (M6 P2) - the prompt no longer hand-maintains them, so a new
+    check registered in the matrix is instantly draftable.
+    """
+    taxonomy = _pack_taxonomy()
+    system = load_prompt(
+        "decompose",
+        user_decisions=decisions_text or "none",
+        story=story,
+        check_catalog=taxonomy.check_catalog(),
+        check_names=taxonomy.check_names(),
+    )
     doc = chat_json(client, "decompose", system, "Produce the criteria JSON now.")
 
     if criteria_path:

@@ -253,6 +253,9 @@ def validate_claims_matrix(pack):
         direction = cell.get("direction")
         if direction is not None and direction not in DIRECTION_VOCAB:
             errors.append(f"{where}: unknown direction {direction!r}")
+        if not isinstance(cell.get("vocab"), str) or not cell["vocab"]:
+            warnings.append(f"{cid}: no vocabulary doc (prompt catalogs "
+                            "will render this check bare)")
 
     uncovered = sorted(set(pack.checks) - covered_checks)
     if uncovered:

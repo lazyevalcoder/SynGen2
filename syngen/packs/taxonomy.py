@@ -26,3 +26,25 @@ class PackTaxonomy(ClaimTaxonomy):
     def cohorts(self):
         return {name: (lambda df, _n=name: cohort_algebra.mask(df, _n))
                 for name in cohort_algebra.names()}
+
+    def check_catalog(self):
+        """Generated 'name: params - usage' lines, in matrix order."""
+        seen, lines = set(), []
+        for cell in self._cells.values():
+            for check in cell.get("checks", []):
+                if check in seen:
+                    continue
+                seen.add(check)
+                vocab = cell.get("vocab")
+                lines.append(f"- {check}: {vocab}" if vocab
+                             else f"- {check}")
+        return "\n".join(lines)
+
+    def check_names(self, sep=" | "):
+        """All registered check names, in matrix order."""
+        seen = []
+        for cell in self._cells.values():
+            for check in cell.get("checks", []):
+                if check not in seen:
+                    seen.append(check)
+        return sep.join(seen)
