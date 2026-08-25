@@ -992,7 +992,20 @@ def write_workbook(frames, workbook_path, meta=None):
 
 def generate_to_workbook(cfg_or_path):
     """Convenience: generate and write in one call. Returns (frames, path)."""
-    cfg = load_simulator(cfg_or_path) if isinstance(cfg_or_path, (str, Path)) else cfg_or_path
+    if isinstance(cfg_or_path, (str, Path)):
+        cfg_path = Path(cfg_or_path)
+        cfg = load_simulator(cfg_path)
+        # R5 fix: relative output.workbook paths in a config FILE are
+        # resolved against the config's own directory, not the process
+        # cwd - `python -m syngen generate sessions/<date>_<slug>/...`
+        # used to drop the workbook into <cwd>/output instead of the
+        # session folder.
+        wb = Path(cfg["output"]["workbook"])
+        if not wb.is_absolute():
+            cfg["output"]["workbook"] = str(
+                (cfg_path.resolve().parent / wb).resolve())
+    else:
+        cfg = cfg_or_path
     frames = generate(cfg)
     path = write_workbook(frames, cfg["output"]["workbook"],
                           meta=_meta_frame(cfg))
