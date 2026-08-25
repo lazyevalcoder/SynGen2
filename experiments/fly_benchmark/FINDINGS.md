@@ -9,10 +9,10 @@
 
 | Metric | Value |
 |---|---|
-| Flown | 1 / 25 (scenario_06: v1 escalated, v2 after fixes LANDED) |
+| Flown | 2 / 25 |
 | Landed unassisted | 1 |
-| Escalated | 0 |
-| Unassisted landing rate | 100.0% (n=1, post-fix) |
+| Escalated | 1 |
+| Unassisted landing rate | 50.0% |
 
 ---
 
@@ -66,3 +66,44 @@ recovered without human help.
 
 ---
 
+
+### Batch 2 - scenario_17 (beat carried by whales masks core decline) [HARD CANARY]
+
+**Outcome:** ESCALATED `criteria_coverage`, 217s, zero iterations
+(escalated pre-convergence, at the coverage guard).
+
+**Observations:**
+- The drafter's FIRST draft was essentially correct: 4 criteria including
+  `core_vs_headline_growth` - the exact check this story needs (the
+  hand-flown landing used the same one).
+- The coverage-guard LLM audit rejected it on two pedantic grounds:
+  1. "'closed in the back half' timing claim not captured" - narrative
+     detail; the substance (whales drive headline while core declines)
+     IS covered.
+  2. "no criterion measures ex-outlier revenue as a quarter-by-quarter
+     time series" - demands a per-quarter monotonic series when the
+     story's computable substance is first->last divergence, which IS
+     captured.
+- My audit prompt says "Be strict: when unsure mark UNCOVERED" - that
+  instruction has no ceiling. Strictness without an equivalence clause
+  turns the guard into a false-positive generator on exactly the stories
+  whose claims are expressible.
+- Escalation message is wrong: "criteria express NONE of the story's
+  computable claims" when they covered most of them. Partial-coverage
+  escalation mislabeled as total.
+- Infra: escalation fires BEFORE Gate 1 persist -> criteria.json never
+  written, so "review criteria manually" points at a nonexistent file.
+
+**Failures & classification (PROVISIONAL - Pass 1, no fixes):**
+- F5.1 BUG-GUARD-CALIBRATION (family: criteria-quality): coverage audit
+  over-strict; rejects semantically equivalent coverage. Candidate fix:
+  equivalence clause in coverage_audit prompt + calibrated strictness
+  ("uncovered = absent DIMENSION, not imperfect shape").
+- F5.2 GAP-AUTOMATION (family: mixture-calculus): genuinely missing
+  vocabulary - no per-period cohort-revenue-trend check exists (ex-outlier
+  revenue by quarter). Candidate: generic `revenue_trend` check with a
+  cohort filter.
+- F5.3 INFRA (family: telemetry): partial-coverage escalations report
+  "none"; drafted criteria not persisted on guard rejection.
+
+**Actions:** logged only. NO code changes (measurement freeze).

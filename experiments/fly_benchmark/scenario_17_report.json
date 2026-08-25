@@ -1,0 +1,39 @@
+{
+  "status": "escalated",
+  "reason": "criteria_coverage",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-17",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-17",
+      "Pre-check found 6 claims; 4 question(s) for user",
+      "  [+] The region beat its annual plan - Verifiable by comparing actual closed revenue against the annual plan target in the data m",
+      "  [+] The beat was driven entirely by a small number of unusually large deals that closed in the back half - Verifiable by identifying deal sizes and close dates; 'entirely' and 'small number' are qu",
+      "  [+] Core deal volume shrank - Verifiable by counting deals excluding outliers across periods, assuming 'core' is defined",
+      "  [+] Ex-outlier revenue declined quarter after quarter - Verifiable by summing revenue excluding outlier deals per quarter; 'quarter after quarter'",
+      "  [-] Leading indicators had been deteriorating all year - Narrative framing; 'leading indicators' and 'deteriorating' are interpretive. Could indire",
+      "  [-] The headline success masked a business that was getting weaker underneath - Narrative framing/judgment. Could indirectly reflect computable claims about deal concentr",
+      "  ? How are 'outliers' defined (e.g., deal size threshold, percentile)? This determines which deals count as 'unusually large' and which are excluded from 'core' metrics.",
+      "  ? What counts as a 'leading indicator'? The data model may not contain pipeline/leading-indicator fields.",
+      "  ? Does the data model include close dates and quarterly period fields to support the back-half and quarter-over-quarter claims?",
+      "  ? Is there an annual plan target field in the data model to verify the region beat?",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The beat was driven entirely by a small number of unusually large deals that closed in the back half': AC3 (revenue_concentration) measures share concentration among top deals but has no check for the temporal dimension \u2014 it cannot verify that these large deals closed in the back half of the year, which is a substantive part of the claim. AC2 (core_vs_headline_growth) measures the divergence between core and headline growth but does not attribute the beat to large deals specifically, nor to their timing. No criterion captures the 'closed in the back half' timing claim. (consider check: end_of_quarter_effect)",
+      "  - Uncovered claim 'Ex-outlier revenue declined quarter after quarter': No criterion measures ex-outlier (outlier-stripped) revenue as a time series. AC2 (core_vs_headline_growth) compares aggregate core vs headline growth levels but does not verify a quarter-after-quarter decline in the ex-outlier series. AC4 (creation_volume_trend) measures deal creation volume, not revenue. The specific claim that ex-outlier revenue declined every quarter is not captured by any criterion's metric or direction. (consider check: blended_margin_trend)",
+      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
+      "Coverage guard: gaps persist after corrective re-draft.",
+      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_17",
+  "elapsed_s": 216.5
+}
