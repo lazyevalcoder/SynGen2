@@ -1,0 +1,98 @@
+{
+  "name": "revops",
+  "version": "0.1.0",
+  "kernel_compat": ">=0.1.0",
+  "description": "Revenue-operations domain pack: entities per docs/CANONICAL_MODEL.md, the 33-check sales-metric library, engine block and prompt vocabularies. P0: declarative mirror of kernel built-ins; later phases move implementations behind pack plugin interfaces.",
+  "entities": {
+    "account": {
+      "binding": "accounts sheet + config block",
+      "sheets": ["accounts"],
+      "notes": "dimensions: region/segment/industry/territory/potential/icp"
+    },
+    "segment": {
+      "binding": "accounts dimension",
+      "sheets": ["accounts"]
+    },
+    "territory": {
+      "binding": "territory rollup; quota by_territory",
+      "sheets": ["quota_plan"]
+    },
+    "time_period": {
+      "binding": "time_model + quarter sheets",
+      "sheets": []
+    },
+    "quota": {
+      "binding": "quota block + quota_plan sheet",
+      "sheets": ["quota_plan"]
+    },
+    "product": {
+      "binding": "product_id/tier/cogs_ratio columns on opportunities; standalone catalog sheet only if a scenario demands it",
+      "sheets": []
+    },
+    "opportunity": {
+      "binding": "won/lost fact rows in opportunities sheet; lifecycle via stage history",
+      "sheets": ["opportunities"]
+    },
+    "rep": {
+      "binding": "reps roster + capacity_plan sheet (WS1 rest)",
+      "sheets": ["capacity_plan"]
+    },
+    "revenue_motion": {
+      "binding": "motion column via quota.by_motion (#22)",
+      "sheets": ["quota_plan"]
+    },
+    "booking": {
+      "binding": "implicit: won opportunities are bookings; separate facts only if demanded",
+      "sheets": []
+    },
+    "activity": {
+      "binding": "account_activity fact table, touches per account x quarter (#13)",
+      "sheets": ["account_activity"]
+    },
+    "stage_history": {
+      "binding": "open-pipeline state machine (#5/#11/#21)",
+      "sheets": ["opportunity_stage_history"]
+    },
+    "forecast_snapshot": {
+      "binding": "forecast_snapshot sheet + in_commit flags (#14/#2)",
+      "sheets": ["forecast_snapshot"]
+    },
+    "ownership_history": {
+      "binding": "account_ownership, dated rep-account ownership (#9/#24)",
+      "sheets": ["account_ownership"]
+    },
+    "penetration_whitespace": {
+      "binding": "market_potential_usd on accounts + potential_coverage_gap check; deeper views when landing demands",
+      "sheets": ["accounts"]
+    }
+  },
+  "blocks": [
+    "seed", "time_model", "output", "accounts", "opportunities", "products",
+    "pipeline", "quota", "capacity", "ownership", "activity", "forecast",
+    "pricing_response"
+  ],
+  "checks": [
+    "win_rate_flat", "avg_discount_quarter", "discount_trend_monotonic",
+    "region_discount_premium", "end_of_quarter_effect", "realized_vs_list",
+    "data_sanity", "revenue_vs_plan", "cycle_length_trend",
+    "creation_volume_trend", "deal_size_trend", "icp_creation_shift",
+    "revenue_concentration", "blended_margin_trend", "tier_share_shift",
+    "discount_margin_link", "avg_price_by_tier", "gap_concentration",
+    "stage_aging", "slippage_trend", "coverage_ratio",
+    "pipeline_concentration", "effective_capacity", "quota_vs_potential",
+    "potential_coverage_gap", "headcount_growth_placement",
+    "unowned_account_share", "post_change_revenue_decline",
+    "forecast_vs_actual", "commit_no_engagement_share",
+    "core_vs_headline_growth", "elasticity_differential",
+    "activity_potential_misalignment"
+  ],
+  "prompts": [
+    "precheck", "decompose", "simulator_draft", "coverage_audit",
+    "knob_proposal", "persona_critique", "story_diff"
+  ],
+  "cohorts": [],
+  "solvers": [],
+  "recipes": [],
+  "examples": [],
+  "claims_matrix": null
+}
