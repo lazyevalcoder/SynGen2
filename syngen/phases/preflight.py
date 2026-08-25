@@ -34,6 +34,32 @@ TIER_CHECKS = {"tier_share_shift", "discount_margin_link",
                "avg_price_by_tier", "blended_margin_trend"}
 QUARTER_LEVEL_CHECKS = {"avg_discount_quarter", "realized_vs_list"}
 
+# M5 iter 5: criteria -> optional config blocks they structurally require.
+_BLOCK_REQUIREMENTS = {
+    "effective_capacity": lambda c: bool(c.get("capacity")),
+    "headcount_growth_placement": lambda c: bool(c.get("capacity")),
+    "unowned_account_share": lambda c: bool(c.get("ownership")),
+    "post_change_revenue_decline": lambda c: bool(c.get("ownership")),
+    "forecast_vs_actual": lambda c: bool(c.get("forecast")),
+    "commit_no_engagement_share": lambda c: bool(c.get("forecast"))
+    and bool(c.get("activity")),
+    "activity_potential_misalignment": lambda c: bool(c.get("activity")),
+    "elasticity_differential": lambda c: bool(c.get("pricing_response")),
+    "core_vs_headline_growth": lambda c:
+        bool(c["opportunities"].get("outlier_deals")),
+}
+_BLOCK_LABEL = {
+    "effective_capacity": "capacity",
+    "headcount_growth_placement": "capacity",
+    "unowned_account_share": "ownership",
+    "post_change_revenue_decline": "ownership",
+    "forecast_vs_actual": "forecast",
+    "commit_no_engagement_share": "forecast + activity",
+    "activity_potential_misalignment": "activity",
+    "elasticity_differential": "pricing_response",
+    "core_vs_headline_growth": "opportunities.outlier_deals",
+}
+
 
 def _region_weights(cfg):
     """Mean weight per region (curves averaged, mirroring the engine)."""
@@ -144,7 +170,7 @@ def calibrate(cfg, criteria_doc):
                     f"calendar {labels}")
 
         if check in ("revenue_vs_plan", "gap_concentration",
-                     "coverage_ratio"):
+                      "coverage_ratio", "quota_vs_potential"):
             if not quota:
                 add("PF1", "HARD", cid,
                     f"{check} criterion but no quota block in config - "
@@ -211,6 +237,15 @@ def calibrate(cfg, criteria_doc):
                     "no icp_share/icp_sampling_weights configured - icp "
                     "column will be all-false and the check fails "
                     "structurally")
+
+        # P1 (M5 iter 5): optional iter-4 blocks are structural too - a
+        # criterion naming a check whose sheet the engine never generates
+        # is a guaranteed in-loop structural failure
+        for needed_block, present in _BLOCK_REQUIREMENTS.items():
+            if check == needed_block and not present(cfg):
+                add("PF1", "HARD", cid,
+                    f"{check} criterion but the required config block is "
+                    f"missing ({_BLOCK_LABEL[needed_block]})")
 
         # --- P2 level arithmetic ---
         if check in QUARTER_LEVEL_CHECKS and disc_curve is None:
@@ -403,13 +438,14 @@ def autocalibrate(cfg, criteria_doc):
         return sum(rw[r] * float(vals[qi])
                    for r, vals in dspec["base_by_quarter"].items())
 
-    # NOTE ordering: tier-mix shares first (they shift revenue weights,
-    # which feeds the discount tier-term), then pinned discount levels.
-    # Tier solving runs TWICE: a multiplier adjustment in one quarter
-    # changes every other quarter's achievable share, so counts must
-    # re-solve against the final multipliers before levels are solved.
-    for mode in ("tier", "tier", "levels", "planning", "margin",
-                 "pipeline", "coverage", "concentration"):
+    # NOTE ordering: block synthesis first (later passes may size against
+    # them), then tier-mix shares (they shift revenue weights, which feeds
+    # the discount tier-term), then pinned discount levels. Tier solving
+    # runs TWICE: a multiplier adjustment in one quarter changes every
+    # other quarter's achievable share, so counts must re-solve against
+    # the final multipliers before levels are solved.
+    for mode in ("blocks", "tier", "tier", "levels", "planning", "margin",
+                 "pipeline", "coverage", "concentration", "capacity"):
         _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost,
                             rw, fixes, mode=mode,
                             tier_term=tier_term, bases_sum_at=bases_sum_at)
@@ -1106,9 +1142,183 @@ def _autocalibrate_coverage(cfg, criteria_doc, fixes):
                      "the required multiple")
 
 
+def _autocalibrate_blocks(cfg, criteria_doc, labels, fixes):
+    """M5 iter 5 (R2 extension): synthesize the iter-4 optional blocks the
+    criteria structurally require but the drafter omitted. Every recipe
+    here is a known-good live landing shape (s9/s13/s14/s2/s16/s17)."""
+    n_q = len(labels)
+    checks = {c["check"]: c.get("params", {}) for c in criteria_doc["criteria"]}
+
+    if "ownership" not in cfg and any(
+            k in checks for k in ("unowned_account_share",
+                                  "post_change_revenue_decline")):
+        p = checks.get("unowned_account_share", {})
+        end = min(0.45, float(p.get("min_unowned_share_pct", 25)) / 100.0
+                  + 0.08)
+        start = max(0.02, end / 4)
+        curve = [round(start + (end - start) * qi / max(1, n_q - 1), 3)
+                 for qi in range(n_q)]
+        churn = [0.08] * n_q
+        mult = 0.45 if "post_change_revenue_decline" in checks else None
+        block = {"unowned_share_by_quarter": curve,
+                 "churn_share_by_quarter": churn,
+                 "owner_pool": ["Rep One", "Rep Two", "Rep Three",
+                                "Rep Four", "Rep Five"]}
+        if mult is not None:
+            block["win_rate_multiplier_after_change"] = mult
+        cfg["ownership"] = block
+        fixes.append("blocks: synthesized ownership block "
+                     f"(unowned curve -> {end * 100:.0f}%, churn 8%/qtr"
+                     + (f", post-change win-rate x{mult}" if mult else "")
+                     + ")")
+
+    if "activity" not in cfg and (
+            "commit_no_engagement_share" in checks
+            or "activity_potential_misalignment" in checks):
+        tilt = -0.7 if "activity_potential_misalignment" in checks else 0.0
+        touches = [round(3 + 0.7 * qi, 2) for qi in range(n_q)]
+        cfg["activity"] = {
+            "mean_touches_per_account_by_quarter": touches,
+            "potential_tilt": tilt}
+        fixes.append("blocks: synthesized activity block"
+                     + (f" with potential_tilt {tilt} (misalignment)"
+                        if tilt else ""))
+
+    if "forecast" not in cfg and (
+            "forecast_vs_actual" in checks
+            or "commit_no_engagement_share" in checks):
+        p = checks.get("forecast_vs_actual", {})
+        ratio = round(float(p.get("target_pct", 109)) / 100.0, 3)
+        cfg["forecast"] = {
+            "commit_ratio_by_quarter": [ratio] * n_q,
+            "commit_share_of_won_by_quarter": [0.35] * n_q,
+            "low_activity_bias":
+                2.5 if "commit_no_engagement_share" in checks else 0.5}
+        fixes.append(f"blocks: synthesized forecast block "
+                     f"(commit running {int(ratio * 100)}% of actual)")
+
+    if "pricing_response" not in cfg and \
+            "elasticity_differential" in checks:
+        step = {"elasticity_differential"}
+        curve = [round(1.5 * qi, 2) for qi in range(n_q)]
+        cfg["pricing_response"] = {
+            "price_change_pct_by_quarter": curve,
+            "elasticity": -1.5, "potential_mitigation": 0.85}
+        fixes.append("blocks: synthesized pricing_response block "
+                     f"(price +{curve[-1]:g}% by Q{n_q}, elasticity -1.5, "
+                     "high-potential mitigated)")
+
+    if "core_vs_headline_growth" in checks:
+        p = checks["core_vs_headline_growth"]
+        need_h = float(p.get("min_headline_growth_pct", 5))
+        cap_c = float(p.get("max_core_growth_pct", 0))
+        o = cfg["opportunities"]
+        # Engine-measured recipe (iter 5 calibration, 5-seed verified):
+        # - CORE won-revenue tracks deal_size medians_by_quarter ~1:1
+        #   (volume_multipliers barely move won revenue);
+        # - WHALES add lift ~linear in share x multiplier
+        #   (.03->.09 x10 measured +33pp over the core path);
+        # - deal-count floor of 1200/quarter is REQUIRED: at n~300 the
+        #   lognormal tail makes even the core aggregate swing +-20pp,
+        #   which no sizing can absorb (5-seed variance data in retro).
+        o["per_quarter"] = max(int(o.get("per_quarter", 0)), 1200)
+        core_target = float(np.clip(cap_c - 8.0, -30.0, -12.0))
+        ratio = 1.0 + core_target / 100.0
+        med0 = float(o["deal_size_lognormal"].get(
+            "median_usd",
+            o["deal_size_lognormal"].get("medians_by_quarter", [45])[0]))
+        medians = [round(med0 * ratio ** (qi / max(1, n_q - 1)), 2)
+                   for qi in range(n_q)]
+        boost_needed = need_h * 1.35 - core_target   # pp of headline lift
+        whale_mult = float(np.clip(10.0 * boost_needed / 20.0, 4.0, 40.0))
+        s_first, s_last = 0.02, 0.09
+        share_curve = [round(s_first + (s_last - s_first) * qi
+                             / max(1, n_q - 1), 4) for qi in range(n_q)]
+        od = {"share_by_quarter": share_curve, "multiplier": whale_mult}
+        existing = o.get("outlier_deals") or {}
+        existing.update(od)
+        o["outlier_deals"] = existing
+        o["deal_size_lognormal"]["medians_by_quarter"] = medians
+        fixes.append(
+            f"blocks: sized outlier_deals share_by_quarter={share_curve} "
+            f"x{whale_mult:g} + medians_by_quarter={medians} + deal-count "
+            f"floor {o['per_quarter']}/qtr for the "
+            "core-declines/headline-grows split")
+
+
+def _autocalibrate_capacity(cfg, criteria_doc, labels, fixes):
+    """Solve effective_capacity targets exactly (R2): eff% =
+    ((A-R)+R*p/100)/P*100. With A=P and ramp productivity p=40, the
+    ramping count R = P*(100-target)/(100-p) hits any sub-100 target;
+    rounding to int heads keeps the residual inside a 1pp band."""
+    caps_needed = [c for c in criteria_doc["criteria"]
+                   if c["check"] == "effective_capacity"]
+    if not caps_needed:
+        return
+    n_q = len(labels)
+    cap_block = cfg.get("capacity")
+    if cap_block is None:
+        units = list(cfg["accounts"].get("territories")
+                     or cfg["accounts"].get("regions") or {})
+        if not units:
+            return
+        dim = "by_territory" if cfg["accounts"].get("territories") \
+            else "by_region"
+        cap_block = {dim: {u: {"headcount_plan": [6] * n_q} for u in units}}
+        cfg["capacity"] = cap_block
+        fixes.append("capacity: synthesized capacity block (6 reps/quarter "
+                     f"plan across {len(units)} units)")
+    key = "by_territory" if "by_territory" in cap_block else "by_region"
+    units_map = cap_block.setdefault(key, {})
+    for c in caps_needed:
+        p = c.get("params", {})
+        target = float(p.get("target_pct", 100.0))
+        band = float(p.get("band_pp", 3.0))
+        unit = p.get("unit")
+        affected = [unit] if unit and unit in units_map else list(units_map)
+        solved_any = False
+        for u in affected:
+            spec = units_map[u]
+            plan = spec.get("headcount_plan") or [6] * n_q
+            if not spec.get("headcount_actual"):
+                spec["headcount_actual"] = list(plan)
+            actual = spec["headcount_actual"]
+            solved = None
+            for prod_pct in (40, 30, 50, 60, 25):
+                r_curve = []
+                ok = True
+                for qi in range(n_q):
+                    P = float(plan[qi])
+                    A = float(actual[qi])
+                    raw_r = (A - P * target / 100.0) / (1.0 - prod_pct / 100.0)
+                    R = int(round(max(0.0, min(A, raw_r))))
+                    eff = ((A - R) + R * prod_pct / 100.0) / P * 100.0
+                    if abs(eff - target) > band * 0.6:
+                        ok = False
+                    r_curve.append(R)
+                if ok:
+                    solved = (prod_pct, r_curve)
+                    break
+            if solved is None:
+                continue
+            prod_pct, r_curve = solved
+            spec["ramping_reps_by_quarter"] = r_curve
+            spec["ramp_productivity_pct"] = prod_pct
+            solved_any = True
+        if solved_any:
+            fixes.append(
+                f"{c['id']}: solved ramping counts for effective capacity "
+                f"~{target:g}% (band +/-{band:g}pp"
+                + (f", unit '{unit}'" if unit else ", all units") + ")")
+
+
 def _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost, rw,
                         fixes, mode, tier_term, bases_sum_at):
-    if mode == "tier":
+    if mode == "blocks":
+        return _autocalibrate_blocks(cfg, criteria_doc, labels, fixes)
+    elif mode == "capacity":
+        return _autocalibrate_capacity(cfg, criteria_doc, labels, fixes)
+    elif mode == "tier":
         wanted = {"tier_share_shift"}
     elif mode == "levels":
         wanted = {"avg_discount_quarter", "realized_vs_list",
