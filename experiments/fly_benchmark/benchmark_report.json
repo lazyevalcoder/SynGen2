@@ -3,23 +3,23 @@
     "stories": 1,
     "landed": 0,
     "unassisted_landing_rate_pct": 0.0,
-    "escalated": 1,
-    "escalation_reasons": [
-      "criteria_coverage"
-    ],
-    "other": []
+    "escalated": 0,
+    "escalation_reasons": [],
+    "other": [
+      "error"
+    ]
   },
   "reports": [
     {
-      "status": "escalated",
-      "reason": "criteria_coverage",
+      "status": "error",
+      "reason": "KeyError: 'sigma'",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-17",
+      "session": null,
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_17",
-      "elapsed_s": 216.5
+      "scenario": "scenario_03",
+      "elapsed_s": 272.8
     }
   ]
 }

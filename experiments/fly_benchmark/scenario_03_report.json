@@ -1,0 +1,52 @@
+{
+  "status": "error",
+  "reason": "KeyError: 'sigma'",
+  "detail": null,
+  "session": null,
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-03",
+      "Pre-check found 7 claims; 5 question(s) for user",
+      "  [+] SMB bookings beat plan by about 5 percent this year - SMB segment bookings vs. plan can be computed from bookings/opportunities data with a plan",
+      "  [-] The quality of the mix deteriorated underneath the headline - Narrative framing; indirectly reflected by computable claims on product mix share and disc",
+      "  [+] The beat was carried by a rising share of low-priced entry-tier products - Share of bookings by product tier (entry vs. others) computable from product/line-item dat",
+      "  [+] Discounting crept upward every quarter - Discount rate by quarter computable from list price vs. booked price in opportunities.",
+      "  [-] Reps leaned on price to close volume - Narrative framing; indirectly reflected by rising discount rates and volume counts.",
+      "  [+] Average deal size in the segment declined accordingly - Average deal size (bookings / deal count) computable and trackable over time.",
+      "  [-] A beat driven by cheap, heavily discounted volume is not the win it appears to be on the scoreboard - Subjective assessment; indirectly reflected by computable claims on mix, discount, and dea",
+      "  ? What defines the 'entry-tier' product category, and how is it labeled in the data model?",
+      "  ? Is there a plan/target field available for the SMB segment, and over what period?",
+      "  ? How is 'discount' defined (e.g., list minus booked price, or a discount % field)?",
+      "  ? What is the definition of a 'deal' for average deal size calculations?",
+      "  ? What time granularity is available for quarterly discount tracking?",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Discounting crept upward every quarter as reps leaned on price to close volume': AC3 uses discount_trend_monotonic with max_dip_pp=1, which permits up to a 1-percentage-point dip between consecutive quarters. The claim asserts monotonic increase 'every quarter' with no dips allowed. A dataset where discounting rose overall but dipped in at least one quarter would satisfy AC3 yet contradict the claim's substance. The parameter tolerance contradicts the claim's stated strictness, so this criterion does not measure the claim as written. (consider check: discount_trend_monotonic)",
+      "  - Uncovered claim 'Average deal size in the segment declined accordingly': AC4 uses deal_size_trend with target_change_pct=-12, requiring a specific 12% decline within a 5pp tolerance. The claim only states that average deal size 'declined' (a direction), with no magnitude specified. A dataset showing a modest decline (e.g., -3%) would fail AC4's -12% target despite genuinely satisfying the claim, and a dataset showing an increase would pass only by coincidence of the tolerance. The parameter's specific magnitude is not derivable from the claim, so it does not reliably measure the claim's substance. (consider check: deal_size_trend)",
+      "Drafted 4 criteria: AC1, AC2, AC3, AC4",
+      "  AC1  SMB bookings beat plan by ~5%\n       check=revenue_vs_plan params={\"segment\": \"SMB\", \"target_pct\": 105, \"band_pct\": 3}\n  AC2  Entry-tier share of won revenue rose\n       check=tier_share_shift params={\"tier\": \"entry\", \"from_share_pct\": 20, \"to_share_pct\": 40, \"tolerance_pp\": 5}\n  AC3  Discount rose monotonically every quarter\n       check=discount_trend_monotonic params={\"max_dip_pp\": 0}\n  AC4  Average deal size declined\n       check=deal_size_trend params={\"target_change_pct\": -1, \"tolerance_pp\": 1}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed."
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_03",
+  "elapsed_s": 272.8
+}

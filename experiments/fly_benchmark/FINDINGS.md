@@ -9,10 +9,12 @@
 
 | Metric | Value |
 |---|---|
-| Flown | 2 / 25 |
-| Landed unassisted | 1 |
-| Escalated | 1 |
-| Unassisted landing rate | 50.0% |
+| Flown | 5 / 25 |
+| Landed unassisted | 1 (scenario_06, post-fix) |
+| Escalated at coverage guard | 3 (17, 01, 02) |
+| Crashed | 1 (scenario_03: KeyError) |
+| Unassisted landing rate | 20.0% |
+| Non-landings killed pre-generation | 4 / 4 |
 
 ---
 
@@ -107,3 +109,92 @@ recovered without human help.
   "none"; drafted criteria not persisted on guard rejection.
 
 **Actions:** logged only. NO code changes (measurement freeze).
+
+### Batch 3 - scenario_01 (territory/capacity/pipeline combo)
+
+**Outcome:** ESCALATED `criteria_coverage`, 268s, zero iterations.
+- Drafter drafted 6 criteria covering nearly everything; ONE claim
+  ("pipeline skewed toward early-stage deals") had no matching check ->
+  single partial gap killed the flight.
+- Genuine vocabulary hole behind it: no stage-distribution-share check
+  exists. -> F6.1 GAP-AUTOMATION (family: pipeline-state).
+
+### Batch 4 - scenario_02 (commit on dead/no-engagement deals)
+
+**Outcome:** ESCALATED `criteria_coverage`, 197s, zero iterations.
+- Auditor demanded a CONJUNCTION check ("inactive AND stalled") for the
+  'dead deals' claim and a forecast-vs-COMMIT divergence check for the
+  'risk higher than headline' claim. The hand-flown landing of #2 passed
+  2/2 on commit_no_engagement_share alone.
+- -> F7.1 BUG-GUARD-CALIBRATION (same family as F5.1): conjunction/
+  strictness pedantry escalating partially-covered stories.
+- -> F7.2 GAP-AUTOMATION (minor): composite dead-deal check;
+  forecast-vs-commit divergence check. Vocabulary notes, not urgent.
+
+### Batch 5 - scenario_03 (SMB entry-mix beat)
+
+**Outcome:** ERROR - unhandled `KeyError: 'sigma'`, 273s.
+- GOOD news: the coverage guard worked AS DESIGNED here - initial draft
+  rejected (audit wanted max_dip_pp=0 for 'no dips', -1% for a
+  direction-only claim), corrective re-draft satisfied it, Gate 1
+  passed. Guard strictness CAN converge when the gap is parameter-shape,
+  not missing-dimension.
+- Crash: drafter wrote deal_size_lognormal as {"medians_by_quarter": ...}
+  with NO sigma key. Config validation accepts it; preflight
+  (_autocalibrate_coverage -> float(dl['sigma'])) crashes. An LLM-shaped
+  input killed the harness instead of becoming a HARD finding.
+- -> F8.1 BUG-PREFLIGHT-ROBUSTNESS: sigma-less configs must be caught at
+  lint/validation (or defaulted), never crash calibration.
+- -> F8.2 INFRA: crash-path reports lose the session reference
+  (report['session']=None even though the session folder exists).
+
+---
+
+## PASS-1 SYNTHESIS (after 5 flights - introspection at pause)
+
+### Scoreboard detail
+
+| Scenario | Outcome | Phase | Root cause |
+|---|---|---|---|
+| 06 | LANDED (after s06 fixes) | converged | - |
+| 17 | escalated | coverage guard | F5.1 guard over-strictness (+F5.2 vocab) |
+| 01 | escalated | coverage guard | F6.1 vocab hole -> fatal partial gap |
+| 02 | escalated | coverage guard | F7.1 conjunction pedantry (+F7.2 vocab) |
+| 03 | CRASHED | calibration | F8.1 unhandled KeyError |
+
+### Common denominator (unambiguous)
+
+**4 of 4 non-landings died in the INTAKE/GUARD layer, before a single
+dataset row was generated.** The engine, autopilot remedies, and
+convergence loop - everything built through iter 5 - have not yet been
+stress-tested by the fleet because the newest gate is the bottleneck.
+The vacuous-convergence fix (R6) over-corrected: it treats ANY uncovered
+sub-claim as flight-fatal, when its original target was ZERO/generic
+coverage.
+
+### Architecture gap vs local patch
+
+This is an ARCHITECTURE gap, not a local patch: guards have one binary
+knob each (pass / escalate). The flight-model doctrine needs graduated
+responses:
+PROCEED (log) -> PROCEED-WITH-NOTE (thin coverage declared up front)
+-> REDRAFT (bounded) -> ESCALATE (only zero-coverage or unrecoverable).
+Concretely: coverage < 100% but above a threshold (e.g., half of
+computable claims covered, including every plan/quota claim) should FLY
+with uncovered claims recorded as delivered-but-unproven. Vocabulary
+holes (auditor cannot name an EXISTING check) are ROADMAP signals, not
+flight failures.
+
+### Candidate fixes queue (Pass 3, NOT executed now)
+
+1. Guard graduation policy (architecture): partial coverage flies with
+   declared caveats; escalate only on ~zero coverage. Covers F5.1/F7.1.
+2. Coverage-audit prompt: equivalence clause + "name an EXISTING check
+   or classify as vocabulary-gap" instruction. Shapes F5.1/F6.1/F7.1.
+3. Preflight/lint hardening: sigma-less deal_size_lognormal -> HARD
+   finding with deterministic default, never a KeyError. Covers F8.1.
+4. Error-path telemetry: crash reports must carry the session dir,
+   and guard rejections must persist criteria.json. Covers F8.2/F5.3.
+5. Vocabulary additions (roadmap, non-blocking):
+   stage_distribution_share, cohort revenue_trend, dead-deal composite,
+   forecast-vs-commit divergence.

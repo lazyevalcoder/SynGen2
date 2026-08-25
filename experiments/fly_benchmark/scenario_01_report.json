@@ -1,0 +1,43 @@
+{
+  "status": "escalated",
+  "reason": "criteria_coverage",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-01",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-01",
+      "Pre-check found 10 claims; 5 question(s) for user",
+      "  [+] NA revenue missed plan by 4% this year - Revenue vs. plan is directly computable from an accounts/opportunities data model with a p",
+      "  [+] The miss was driven primarily by Enterprise - Attributable to segment requires revenue by segment/line-of-business; computable if the mo",
+      "  [+] Pipeline coverage looked healthy at around 3.4x - Pipeline coverage = pipeline value / revenue target; computable from opportunity pipeline ",
+      "  [-] Pipeline was concentrated in lower-potential territories - 'Lower-potential' is a qualitative judgment; cannot be derived from a sales table. Could b",
+      "  [+] Pipeline was skewed toward early-stage deals - Stage distribution is directly computable from an opportunities data model with a stage fi",
+      "  [+] Expected close dates kept slipping into later quarters as the year went on - Close-date slippage is computable by tracking expected_close_date over time (e.g., compari",
+      "  [+] Enterprise AEs were carrying well over plan-relative workload - Plan-relative workload/quota attainment is computable from quota assignments vs. assigned ",
+      "  [-] Ramping hires left effective productive capacity well below the headline headcount - 'Effective productive capacity' and ramp effects are HR/operational constructs not present",
+      "  [+] Reps actually covering Enterprise were effectively carrying about 118% of a fully-ramped capacity-adjusted quota - Capacity-adjusted quota load is computable if quota, ramp factors, and rep assignments are",
+      "  [-] The gap points to a combined territory design, capacity planning, and pipeline quality problem rather than insufficient headline coverage - Causal attribution is narrative framing. Could be indirectly reflected by combining comput",
+      "  ? Does the data model include a segment/line-of-business field to attribute revenue and pipeline to Enterprise?",
+      "  ? Is there a plan/target value available for NA revenue to compute the 4% miss?",
+      "  ? Does the pipeline data include stage and expected_close_date fields to support stage distribution and close-date slippage analysis?",
+      "  ? Are quota assignments and ramp factors available to compute capacity-adjusted quota load (the 118% figure)?",
+      "  ? How is 'lower-potential territory' defined, and is there any proxy (e.g., historical attainment or quota) available?",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Pipeline was skewed toward early-stage deals': AC5 uses stage_aging with stale_threshold_days=120 and max_stale_share_pct=60, which measures deal staleness by days-in-stage, not the distribution of pipeline across pipeline stages. The claim is about the proportion of pipeline sitting in early-stage (e.g., prospecting/qualification) deals. stage_aging cannot fail if the pipeline is dominated by early-stage deals that are all recently created and not stale. No criterion measures the share of pipeline by stage. (consider check: stage_distribution_share)",
+      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
+      "Coverage guard: gaps persist after corrective re-draft.",
+      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_01",
+  "elapsed_s": 267.9
+}
