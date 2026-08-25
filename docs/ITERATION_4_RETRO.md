@@ -123,23 +123,39 @@ before the loop starts.
 
 ## Iteration 5 optimization queue (evidence-backed)
 
-0. **Coverage guard against vacuous convergence** (R6): the loop must not
-   declare STORY LANDED on zero or generic-only criteria.
-1. **Prompt few-shots per new block** in simulator_draft.txt + criteria-draft
-   prompts; keyword-triggered capability hints (headcount/ramp -> capacity;
-   unowned/handed over -> ownership; forecast number vs actual -> forecast).
-   Prioritize the never-used blocks (R7).
-2. **Extend pre-flight auto-calibration solvers to iter-4 primitives**:
-   effective_capacity sizing, quota_vs_potential ratio targeting,
-   attainment_ex_outliers two-step split, ownership/activity curve fitting,
-   and plan-pinning to natural revenue before mix tuning (R8).
-3. **Criteria coherence check** (R10): verify derived quantities (whale
-   budget = headline - core; weighted attainment across units) can
-   simultaneously satisfy all drafted criteria before iterating.
+Status at 2026-08-25 (iter 5 session, commits 986ca62..c620e3f):
+items 0, 1, 2, 3, 5 DONE; item 4 (F29) and item 6 (G3/G4/packaging)
+remain.
+
+0. **Coverage guard against vacuous convergence** (R6): DONE - deterministic
+   rules (zero criteria / generic-only with computable claims) + one
+   strict LLM audit (fails open when unavailable); ONE corrective
+   re-draft then escalate as `criteria_coverage`. Prompt:
+   prompts/coverage_audit.txt; tests test_coverage_guard.py.
+1. **Prompt few-shots per new block** (R7): DONE - decompose.txt now lists
+   ALL 11 iter-4 checks with param contracts and story triggers;
+   simulator_draft.txt gained a block-selection checklist (criterion ->
+   required block) and five worked micro-examples.
+2. **Auto-calibration for iter-4 primitives** (R2): DONE - preflight
+   `_autocalibrate_blocks` synthesizes ownership/activity/forecast/
+   pricing_response/outlier blocks sized to criterion params;
+   `_autocalibrate_capacity` solves ramping counts exactly. Calibration
+   findings: core won-revenue tracks medians_by_quarter ~1:1 while
+   volume_multipliers barely move won revenue; whale wins are lumpy
+   Bernoulli events and the lognormal tail swings aggregates +-20pp at
+   n~300 - the core_vs_headline recipe REQUIRES a >=1200/qtr deal-count
+   floor to be seed-stable. calibrate() now flags missing iter-4 blocks
+   as HARD findings.
+3. **Criteria coherence check** (R10): DONE - config-independent exact
+   rules in intake.coherence_gaps: company attainment within
+   [min unit incl default 1.0, max unit], ex-whale <= headline,
+   realized_vs_list vs avg_discount_quarter complement overlap; wired
+   into enforce_coverage (redraft once, then escalate).
 4. F29 primitive: open-pipeline value composition by lifecycle stage and
    account potential tier (needed by #2's "commit in no-engagement deals"
    and #17's leading-indicator claims beyond what core_vs_headline covers).
-5. Fix session-path resolution (R5).
+5. Fix session-path resolution (R5): DONE - CLI generate resolves relative
+   workbook paths against the config file's directory (converge already did).
 6. Then the standing iter-5 scope: knob-delta proposer (G3), margin-aware
    convergence (G4), packaging (installable CLI, README, prompt library).
 
