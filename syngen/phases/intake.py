@@ -79,9 +79,93 @@ def audit_coverage(client, story, doc, computable_claims, log_fn=print):
     return gaps
 
 
+def coherence_gaps(doc):
+    """M5 iter 5 item 3 (R10): criteria sets that are mathematically
+    impossible regardless of config knobs. Every rule here is
+    config-independent and EXACT - raking makes attainment exact, so
+    derived quantities must satisfy their algebraic constraints:
+
+    - company-wide attainment is a PLAN-WEIGHTED MEAN of unit
+      attainments, hence must lie within [min unit, max unit]
+      (unlisted units count as 1.0);
+    - ex-whale (core) attainment can never exceed headline attainment -
+      whales only add revenue;
+    - realized_vs_list is ~the complement of avg_discount_quarter for
+      the same quarter: pinned values whose tolerance windows do not
+      overlap cannot both hold.
+    """
+    criteria = doc.get("criteria", [])
+    gaps = []
+    by_check = {}
+    for c in criteria:
+        by_check.setdefault(c["check"], []).append(c)
+
+    def att(c):
+        return float(c.get("params", {}).get("target_pct", 100.0)) / 100.0
+
+    rvp = by_check.get("revenue_vs_plan", [])
+    units = {c["params"].get("segment"): att(c) for c in rvp
+             if c["params"].get("segment") not in (None, "_all_")}
+    all_crits = [c for c in rvp
+                 if c["params"].get("segment") == "_all_"
+                 and not c["params"].get("exclude_outlier_deals")]
+    if units and all_crits:
+        # unlisted plan units rake to the default 1.0, so they widen the
+        # achievable range
+        lo = min([*units.values(), 1.0])
+        hi = max([*units.values(), 1.0])
+        for c in all_crits:
+            t = att(c)
+            band = float(c["params"].get("band_pct", 2.0)) / 100.0
+            if t > hi + band or t < lo - band:
+                gaps.append(
+                    f"{c['id']}: company-wide attainment {t:.2f} is "
+                    f"outside the achievable range [{lo:.2f}, {hi:.2f}] "
+                    "implied by the named-unit criteria (weighted means "
+                    "cannot escape the unit range)")
+    core_crits = [c for c in rvp
+                  if c["params"].get("exclude_outlier_deals")]
+    if core_crits and all_crits:
+        head = min(att(c) for c in all_crits)
+        for c in core_crits:
+            if att(c) > head:
+                gaps.append(
+                    f"{c['id']}: ex-outlier (core) attainment "
+                    f"{att(c):.2f} exceeds the headline attainment "
+                    f"{head:.2f} - whales add revenue, so core can never "
+                    "outgrow the total")
+    disc = {}
+    for c in by_check.get("avg_discount_quarter", []):
+        q = c["params"].get("quarter")
+        if q:
+            disc[q] = (float(c["params"].get("target_pct", 0)),
+                       float(c["params"].get("tolerance_pp", 4)), c["id"])
+    for c in by_check.get("realized_vs_list", []):
+        p = c["params"]
+        tol = float(p.get("tolerance_pp", 3))
+        for qkey, tkey in (("quarter_start", "target_start_pct"),
+                           ("quarter_end", "target_end_pct")):
+            q, want = p.get(qkey), p.get(tkey)
+            if q not in disc or want is None:
+                continue
+            d_target, d_tol, did = disc[q]
+            # realized ~= 100 - discount (+~2pp weighting bonus)
+            implied_disc_hi = 100 - float(want) + tol + 2
+            implied_disc_lo = 100 - float(want) - tol + 2
+            if d_target > implied_disc_hi + d_tol or \
+                    d_target < implied_disc_lo - d_tol:
+                gaps.append(
+                    f"{c['id']}/{did}: {q} pins realized/list ~{want:g}% "
+                    f"(implied discount {implied_disc_lo:g}-{implied_disc_hi:g}%)"
+                    f" but avg_discount targets {d_target:g}% +/-{d_tol:g}"
+                    " - the two claims contradict")
+    return gaps
+
+
 def enforce_coverage(client, story, doc, claims, decisions_text="",
                      log_fn=print):
-    """Coverage guard (R6): criteria must express the story's claims.
+    """Coverage guard (R6) + coherence check (R10): criteria must express
+    the story's claims AND be mutually satisfiable.
 
     Deterministic rules first (always authoritative); then one strict LLM
     audit. Any gap triggers ONE corrective criteria re-draft; persistent
@@ -96,6 +180,8 @@ def enforce_coverage(client, story, doc, claims, decisions_text="",
         gaps = deterministic_gaps(doc, computable)
         if not gaps:
             gaps = audit_coverage(client, story, doc, computable, log_fn)
+        if not gaps:
+            gaps = coherence_gaps(doc)
         if not gaps:
             return doc, ("redrafted" if redrafted else "clean")
         if attempt < MAX_COVERAGE_REDRAFTS:

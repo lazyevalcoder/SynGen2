@@ -11,6 +11,7 @@ import pytest
 from syngen.llm.client import FakeLLM, LLMResponse
 from syngen.phases.intake import (
     audit_coverage,
+    coherence_gaps,
     deterministic_gaps,
     enforce_coverage,
 )
@@ -163,3 +164,58 @@ def test_pipeline_escalates_on_vacuous_criteria(tmp_path, monkeypatch):
                            SilentIO(), sessions_dir="sessions", slug="cov")
     assert result["status"] == "escalated"
     assert result["reason"] == "criteria_coverage"
+
+
+def test_coherence_company_attainment_outside_unit_range():
+    doc = {"criteria": [
+        {"id": "AC1", "check": "revenue_vs_plan",
+         "params": {"segment": "Enterprise", "target_pct": 88, "band_pct": 2}},
+        {"id": "AC2", "check": "revenue_vs_plan",
+         "params": {"segment": "SMB", "target_pct": 96, "band_pct": 2}},
+        {"id": "AC3", "check": "revenue_vs_plan",
+         "params": {"segment": "_all_", "target_pct": 110, "band_pct": 2}},
+    ]}
+    gaps = coherence_gaps(doc)
+    assert any("AC3" in g and "achievable range" in g for g in gaps)
+
+
+def test_coherence_core_cannot_exceed_headline():
+    # the live s25 shape: headline 101 while core demands more than that
+    doc = {"criteria": [
+        {"id": "AC1", "check": "revenue_vs_plan",
+         "params": {"segment": "_all_", "target_pct": 101, "band_pct": 1}},
+        {"id": "AC2", "check": "revenue_vs_plan",
+         "params": {"segment": "_all_", "target_pct": 104,
+                    "band_pct": 2, "exclude_outlier_deals": True}},
+    ]}
+    gaps = coherence_gaps(doc)
+    assert any("core" in g for g in gaps)
+
+
+def test_coherence_discount_vs_realized_contradiction():
+    doc = {"criteria": [
+        {"id": "AC1", "check": "avg_discount_quarter",
+         "params": {"quarter": "FY26-Q4", "target_pct": 25, "tolerance_pp": 2}},
+        {"id": "AC2", "check": "realized_vs_list",
+         "params": {"quarter_start": "FY26-Q1", "target_start_pct": 90,
+                    "quarter_end": "FY26-Q4", "target_end_pct": 84,
+                    "tolerance_pp": 3}},
+    ]}
+    gaps = coherence_gaps(doc)
+    assert any("contradict" in g for g in gaps)
+
+
+def test_coherent_set_passes():
+    doc = {"criteria": [
+        {"id": "AC1", "check": "avg_discount_quarter",
+         "params": {"quarter": "FY26-Q4", "target_pct": 16, "tolerance_pp": 2}},
+        {"id": "AC2", "check": "realized_vs_list",
+         "params": {"quarter_start": "FY26-Q1", "target_start_pct": 90,
+                    "quarter_end": "FY26-Q4", "target_end_pct": 84,
+                    "tolerance_pp": 3}},
+        {"id": "AC3", "check": "revenue_vs_plan",
+         "params": {"segment": "SMB", "target_pct": 95, "band_pct": 2}},
+        {"id": "AC4", "check": "revenue_vs_plan",
+         "params": {"segment": "_all_", "target_pct": 101, "band_pct": 2}},
+    ]}
+    assert coherence_gaps(doc) == []
