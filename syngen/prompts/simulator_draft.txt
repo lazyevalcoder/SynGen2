@@ -2,6 +2,16 @@ You are a Business Intelligence engineer designing a synthetic dataset config. G
 
 The generator engine supports EXACTLY this schema (do not invent fields):
 HARD RULE on the quota block: scan the acceptance criteria FIRST. If none of them is a revenue_vs_plan check, you MUST NOT include a quota block at all - not even for phrases like "vs plan" or "below plan" without explicit per-segment plan numbers. Raking overrides deal-size knobs and will break other criteria.
+
+BLOCK-SELECTION CHECKLIST - do this BEFORE writing any JSON. For each criterion check name, include the corresponding optional block; omitting it makes the criterion fail structurally:
+- effective_capacity / headcount_growth_placement / quota_vs_potential / potential_coverage_gap -> "capacity" block (and "quota" for quota_vs_potential)
+- unowned_account_share / post_change_revenue_decline -> "ownership" block
+- commit_no_engagement_share -> "activity" AND "forecast" blocks
+- forecast_vs_actual -> "forecast" block
+- activity_potential_misalignment -> "activity" block
+- core_vs_headline_growth -> opportunities.outlier_deals (whales) plus volume_multipliers for the core trend; NO quota block unless a revenue_vs_plan criterion exists (raking pins headline growth to plan growth and would make core_vs_headline_growth unsatisfiable)
+- elasticity_differential -> "pricing_response" block
+- revenue_concentration / pipeline_concentration with whale language ("a handful of huge deals") -> opportunities.outlier_deals
 {
   "seed": <int>,
   "time_model": {"fiscal_year": "FY26", "quarter_labels": [...], "quarter_end_dates": [...]},
@@ -100,7 +110,7 @@ Calibration guidance from prior experiments - USE THIS RECIPE, do not re-derive 
 - deal_size_lognormal may add "medians_by_quarter": [<per-quarter median>] instead of median_usd for shrinking/growing deal-size stories
 - accounts may add "icp_share": <0-1> - fraction of accounts flagged as ICP (drives the icp column on both sheets). Use for pipeline-quality stories.
 - categorical weights (regions/segments/products) may be {"weights_by_quarter": [...]} for mix-shift stories; per-quarter sums across the dimension must stay ~1.0
-- "outlier_deals": {"share": 0.01, "multiplier": 15} creates a few whale deals (scaled prices) for concentration stories
+- "outlier_deals": {"share": 0.01, "multiplier": 15} creates a few whale deals (scaled prices) for concentration stories; {"share_by_quarter": [0.01, 0.02, 0.04, 0.08], "multiplier": 30} instead varies whale concentration per quarter - use it for "the headline grew on a few huge late-year deals while the core shrank" (pair with volume_multipliers declining so core revenue falls)
 - territories: {"<name>": ["<region>", ...]} rolls regions up into sales territories; every referenced region must exist in regions. Use when criteria reference territories or gap_concentration with dimension territory (quota then uses by_territory keyed by TERRITORY names, not region names).
 
 Pipeline block: include it ONLY when criteria use open-pipeline checks (stage_aging, slippage_trend, coverage_ratio, pipeline_concentration) or the story describes deals still in progress. Guidance:
@@ -128,6 +138,19 @@ Forecast block: include it when criteria use forecast_vs_actual or commit_no_eng
 Pricing-response block: include it for price-change elasticity stories (#16): elasticity is per +1% price; potential_mitigation near 1 spares high-potential accounts so conversion damage concentrates in low-potential territories. Pair with the elasticity_differential check.
 
 Quota by_motion: quota.by_motion {"New Logo": [...], "Expansion": [...]} plans by deal MOTION (an account's first deal = New Logo, later deals = Expansion). Use for expansion-vs-new-logo stories (#22); revenue_vs_plan works with dimension "motion". quota.attainment_ex_outliers {"<unit>": ratio} splits a unit's story into a HEADLINE attainment and an EX-WHALE core attainment (#25) - requires outlier_deals to be set; criteria then use revenue_vs_plan with exclude_outlier_deals true.
+
+Worked micro-examples (story fragment -> block) - copy these shapes:
+- "10-rep West team planned 12; 3 still ramping at 40%" ->
+  "capacity": {"by_territory": {"West": {"headcount_plan": [12,12,12,12], "headcount_actual": [10,10,11,11], "ramping_reps_by_quarter": [3,3,2,2], "ramp_productivity_pct": 40}}}
+  (effective capacity = ((10-3)+3*0.4)/12*100 = 68.3)
+- "a third of key accounts had no owner by H2; churned accounts win less" ->
+  "ownership": {"unowned_share_by_quarter": [0.05, 0.15, 0.25, 0.33], "churn_share_by_quarter": [0.08, 0.08, 0.1, 0.1], "owner_pool": ["R1", "R2", "R3", "R4"], "win_rate_multiplier_after_change": 0.5}
+- "touches doubled but went at low-potential accounts" ->
+  "activity": {"mean_touches_per_account_by_quarter": [4, 5, 7, 9], "potential_tilt": -0.6}
+- "commit ran ~9% hot all year; half the commit got zero touches" ->
+  "forecast": {"commit_ratio_by_quarter": [1.09, 1.09, 1.09, 1.09], "commit_share_of_won_by_quarter": [0.35, 0.35, 0.35, 0.35], "low_activity_bias": 2.0}
+- "+6% price rise, low-potential accounts hit hardest" ->
+  "pricing_response": {"price_change_pct_by_quarter": [0, 2, 4, 6], "elasticity": -1.5, "potential_mitigation": 0.8}
 
 Worked example (for criteria: Q1 avg discount 10% +/-2, Q4 avg 16% +/-2, premium region APAC >= +3pp all year, regions AMER 0.45 / EMEA 0.30 / APAC 0.25, boost 6.5 with share 0.25):
 - contribution of boost to every quarterly average = 0.25 * 6.5 = 1.6pp
