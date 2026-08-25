@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "stories": 1,
+    "landed": 1,
+    "unassisted_landing_rate_pct": 100.0,
+    "escalated": 0,
+    "escalation_reasons": [],
+    "other": []
+  },
+  "reports": [
+    {
+      "status": "converged",
+      "reason": null,
+      "detail": null,
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-06_2",
+      "iterations": 2,
+      "llm_proposals": 0,
+      "thin_margins": [],
+      "scenario": "scenario_06",
+      "elapsed_s": 223.1
+    }
+  ]
+}

@@ -9,10 +9,10 @@
 
 | Metric | Value |
 |---|---|
-| Flown | 1 / 25 (scenario_06 flown twice: v1 escalated, re-fly after fixes) |
-| Landed unassisted | 0 (pending re-fly) |
-| Escalated | 1 |
-| Unassisted landing rate | — |
+| Flown | 1 / 25 (scenario_06: v1 escalated, v2 after fixes LANDED) |
+| Landed unassisted | 1 |
+| Escalated | 0 |
+| Unassisted landing rate | 100.0% (n=1, post-fix) |
 
 ---
 
@@ -55,6 +55,14 @@ MM plan ~40% of potential.
 **Actions:** all four fixed with regression tests
 (test_bench_s06_fixes.py, 274 total green). scenario_06 re-flown as the
 verification flight.
+
+**Verification re-fly:** CONVERGED, 2 iterations, 223s, **0 LLM
+proposals** - the entire flight was deterministic (pre-flight calibration
++ autopilot remedies); the LLM's only work was drafting criteria and the
+config. fly_report.json persisted correctly this time. Notable drafter
+behavior: first draft put a list where quota.attainment wanted a scalar -
+the deterministic repair path caught it and the corrective re-draft
+recovered without human help.
 
 ---
 

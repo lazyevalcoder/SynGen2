@@ -1,0 +1,57 @@
+{
+  "status": "converged",
+  "reason": null,
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-06_2",
+  "iterations": 2,
+  "llm_proposals": 0,
+  "thin_margins": [],
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-06_2",
+      "Pre-check found 5 claims; 4 question(s) for user",
+      "  [+] Enterprise missed its quarterly revenue plan by about 5 percent in every quarter of FY26 - Requires quarterly actuals vs. plan by segment; 'every quarter' and '5%' are precise and c",
+      "  [+] Mid-Market beat its plan by roughly 4 percent each quarter - Requires quarterly actuals vs. plan by segment; 'each quarter' and '4%' are precise and ch",
+      "  [+] The two segments offset each other, so overall revenue looked on target - Verifiable by aggregating segment actuals vs. total plan; 'on target' is a threshold claim",
+      "  [-] Quotas for Enterprise were set too high at annual planning given actual account potential - Narrative framing about planning intent; 'too high' is a judgment. Could indirectly reflec",
+      "  [-] Mid-Market quotas were conservative - Narrative framing about planning intent. Could indirectly reflect via Mid-Market quota att",
+      "  ? Does the data model include a segment field (Enterprise vs. Mid-Market) and quarterly actuals vs. plan?",
+      "  ? Is there a defined plan/target value per segment per quarter, or only actuals?",
+      "  ? Is 'account potential' available as a field, or is it only inferable from quota and attainment?",
+      "  ? What threshold defines 'on target' for overall revenue (e.g., within \u00b1X% of plan)?",
+      "Declared dependencies:\nAC9 <- depends on AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8",
+      "  AC1  Enterprise FY26-Q1 missed plan by ~5%\n       check=revenue_vs_plan params={\"segment\": \"Enterprise\", \"quarter\": \"FY26-Q1\", \"target_pct\": 95, \"band_pct\": 2}\n  AC2  Enterprise FY26-Q2 missed plan by ~5%\n       check=revenue_vs_plan params={\"segment\": \"Enterprise\", \"quarter\": \"FY26-Q2\", \"target_pct\": 95, \"band_pct\": 2}\n  AC3  Enterprise FY26-Q3 missed plan by ~5%\n       check=revenue_vs_plan params={\"segment\": \"Enterprise\", \"quarter\": \"FY26-Q3\", \"target_pct\": 95, \"band_pct\": 2}\n  AC4  Enterprise FY26-Q4 missed plan by ~5%\n       check=revenue_vs_plan params={\"segment\": \"Enterprise\", \"quarter\": \"FY26-Q4\", \"target_pct\": 95, \"band_pct\": 2}\n  AC5  Mid-Market FY26-Q1 beat plan by ~4%\n       check=revenue_vs_plan params={\"segment\": \"Mid-Market\", \"quarter\": \"FY26-Q1\", \"target_pct\": 104, \"band_pct\": 2}\n  AC6  Mid-Market FY26-Q2 beat plan by ~4%\n       check=revenue_vs_plan params={\"segment\": \"Mid-Market\", \"quarter\": \"FY26-Q2\", \"target_pct\": 104, \"band_pct\": 2}\n  AC7  Mid-Market FY26-Q3 beat plan by ~4%\n       check=revenue_vs_plan params={\"segment\": \"Mid-Market\", \"quarter\": \"FY26-Q3\", \"target_pct\": 104, \"band_pct\": 2}\n  AC8  Mid-Market FY26-Q4 beat plan by ~4%\n       check=revenue_vs_plan params={\"segment\": \"Mid-Market\", \"quarter\": \"FY26-Q4\", \"target_pct\": 104, \"band_pct\": 2}\n  AC9  Company-wide FY26 revenue on target (depends_on: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8)\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 100, \"band_pct\": 2}\n  AC10  Enterprise quota exceeds addressable potential\n       check=quota_vs_potential params={\"dimension\": \"segment\", \"unit\": \"Enterprise\", \"target_ratio_pct\": 120, \"band_pp\": 15}\n  AC11  Mid-Market quota conservative vs addressable potential\n       check=quota_vs_potential params={\"dimension\": \"segment\", \"unit\": \"Mid-Market\", \"target_ratio_pct\": 55, \"band_pp\": 15}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market']; real-world taxonomy likely includes ['CSB', 'Consumer', 'SMB', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     95.0% (FY26-Q2)          95% +/-2pp                     +2.00     Enterprise FY26-Q1 missed plan by ~5%\nAC2   PASS     95.0% (FY26-Q2)          95% +/-2pp                     +2.00     Enterprise FY26-Q2 missed plan by ~5%\nAC3   PASS     95.0% (FY26-Q2)          95% +/-2pp                     +2.00     Enterprise FY26-Q3 missed plan by ~5%\nAC4   PASS     95.0% (FY26-Q2)          95% +/-2pp                     +2.00     Enterprise FY26-Q4 missed plan by ~5%\nAC5   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q1 beat plan by ~4%\nAC6   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q2 beat plan by ~4%\nAC7   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q3 beat plan by ~4%\nAC8   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q4 beat plan by ~4%\nAC9   PASS     98.4% (FY26-Q1)          100% +/-2pp                    +0.38     Company-wide FY26 revenue on target\nAC10  FAIL     20% (Enterprise)         120% +/-15pp                   -85.17    Enterprise quota exceeds addressable potential\n      -> Enterprise: 20% of potential\nAC11  FAIL     5% (Mid-Market)          55% +/-15pp                    -34.73    Mid-Market quota conservative vs addressable potential\n      -> Mid-Market: 5% of potential\n------------------------------------------------------------------------------------------\n9/11 criteria passed - STORY NOT LANDED",
+      "AUTOPILOT: scaled plans against measured account potential:\n  - scaled 'Enterprise' segment plan x6.05 (quota/potential 20% -> 120% of measured market)\n  - scaled 'Mid-Market' segment plan x10.44 (quota/potential 5% -> 55% of measured market)",
+      "--- Iteration 2 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     95.0% (FY26-Q1)          95% +/-2pp                     +2.00     Enterprise FY26-Q1 missed plan by ~5%\nAC2   PASS     95.0% (FY26-Q1)          95% +/-2pp                     +2.00     Enterprise FY26-Q2 missed plan by ~5%\nAC3   PASS     95.0% (FY26-Q1)          95% +/-2pp                     +2.00     Enterprise FY26-Q3 missed plan by ~5%\nAC4   PASS     95.0% (FY26-Q1)          95% +/-2pp                     +2.00     Enterprise FY26-Q4 missed plan by ~5%\nAC5   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q1 beat plan by ~4%\nAC6   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q2 beat plan by ~4%\nAC7   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q3 beat plan by ~4%\nAC8   PASS     104.0% (FY26-Q1)         104% +/-2pp                    +2.00     Mid-Market FY26-Q4 beat plan by ~4%\nAC9   PASS     99.6% (FY26-Q2)          100% +/-2pp                    +1.58     Company-wide FY26 revenue on target\nAC10  PASS     120% (Enterprise)        120% +/-15pp                   +15.00    Enterprise quota exceeds addressable potential\nAC11  PASS     55% (Mid-Market)         55% +/-15pp                    +15.00    Mid-Market quota conservative vs addressable potential\n------------------------------------------------------------------------------------------\n11/11 criteria passed - STORY LANDED",
+      "\nDeliverables in experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-06_2",
+      "  dataset:   experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-06_2\\output\\dataset.xlsx",
+      "  proof:     validation_report.md",
+      "  config:    simulator.json (tweak knobs anytime, regenerate)"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Inspect and accept delivery?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_06",
+  "elapsed_s": 223.1
+}
