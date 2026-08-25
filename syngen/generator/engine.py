@@ -26,6 +26,24 @@ DEFAULT_POTENTIAL_RANGE_USD = (25_000, 250_000)
 # keeps the column present for the static sheet contract without injecting
 # business meaning into unconfigured runs.
 DEFAULT_ICP_SHARE = 0.0
+# WS7 (M5 iter 4): canonical motion labels - an account's first won deal
+# in the window is New Logo, every later one Expansion.
+NEW_LOGO = "New Logo"
+EXPANSION = "Expansion"
+CLOSED_STAGES_ENGINE = {"Closed Won", "Closed Lost"}
+
+
+# M5 iter 4 (WS1 rest): rep-name pools for the canonical Rep roster.
+# Deterministic picks from the named stream [seed, 8] - same discipline as
+# account potentials and product mixes.
+REP_FIRST_NAMES = [
+    "Alex", "Jordan", "Taylor", "Casey", "Riley",
+    "Morgan", "Avery", "Quinn", "Dana", "Jamie",
+]
+REP_LAST_NAMES = [
+    "Nguyen", "Patel", "Garcia", "Kim", "Okafor",
+    "Silva", "Haddad", "Novak", "Iyer", "Brooks",
+]
 
 
 def _weight_curve(value, n_quarters):
@@ -107,10 +125,95 @@ def build_accounts(cfg, rng):
             return group[int(split_rng.integers(0, len(group)))]
 
         df["territory"] = [pick_terr(r) for r in df["region"]]
+    # M5 iter 4 (F28, landing s4): optional per-territory / per-region
+    # potential overrides. The global uniform draw is remapped affinely so
+    # whitespace stories can concentrate market potential where pipeline
+    # sampling doesn't reach - the two are otherwise proportionally locked
+    # (both follow region weights), leaving potential_coverage_gap with no
+    # expressible signal. Same stream, same ranks, deterministic.
+    pot_overrides = {}
+    if pot_cfg:
+        pot_overrides = pot_cfg.get("by_territory") or \
+            pot_cfg.get("by_region") or {}
+    if pot_overrides:
+        key_col = "territory" if "territory" in df.columns else "region"
+        keys = df[key_col].to_numpy()
+        for i in range(n):
+            r_spec = pot_overrides.get(keys[i])
+            if not r_spec:
+                continue
+            u = (potential[i] - lo) / (hi - lo)
+            rlo, rhi = float(r_spec["min"]), float(r_spec["max"])
+            potential[i] = round(rlo + u * (rhi - rlo), 2)
+        df["market_potential_usd"] = potential
     return df
 
 
-def build_opportunities(cfg, accounts_df, rng):
+def build_ownership(cfg, accounts_df):
+    """WS7 temporal entity (M5 iter 4): dated rep-account ownership.
+
+    One row per account x fiscal quarter: who owned it that quarter
+    (owner NaN = unowned - consolidation stories leave strategic accounts
+    without one). Deterministic via named stream [seed, 9]:
+
+      - Q1: uniform draw from the owner pool, then unowned_share[0]
+            of accounts dropped to unowned
+      - Q>1: churn_share[qi] of owned accounts reassigned to a DIFFERENT
+            owner; then unowned_share[qi] set unowned
+
+    Returns (ownership_df, changed_map) where changed_map[qi] is the set
+    of account_ids whose owner changed vs the previous quarter (used for
+    the optional post-change win-rate coupling in #9-style stories).
+    """
+    spec = cfg.get("ownership")
+    if not spec:
+        return None, None
+    labels = cfg["time_model"]["quarter_labels"]
+    pool = list(spec.get("owner_pool") or cfg["opportunities"]["owners"])
+    unowned_curve = spec.get("unowned_share_by_quarter") or [0.0] * len(labels)
+    churn_curve = spec.get("churn_share_by_quarter") or [0.0] * len(labels)
+    rng = np.random.default_rng([int(cfg["seed"]), 9])
+    ids = accounts_df["account_id"].to_numpy()
+    # object dtype so unowned stays real None (a str array would store
+    # the literal string "None" and every downstream isna() would lie)
+    owners = np.array([str(rng.choice(pool)) for _ in ids], dtype=object)
+
+    def drop_unowned(cur_owners, share):
+        k = int(round(len(ids) * float(share)))
+        if k <= 0:
+            return cur_owners, np.array([], dtype=int)
+        pick = rng.choice(len(ids), size=k, replace=False)
+        cur = cur_owners.copy()
+        cur[pick] = None
+        return cur, pick
+
+    owners, _ = drop_unowned(owners, unowned_curve[0])
+    rows = [(ids[i], labels[0], owners[i]) for i in range(len(ids))]
+    changed_by_q = {}
+    for qi in range(1, len(labels)):
+        changed = set()
+        k = int(round(len(ids) * float(churn_curve[qi])))
+        if k > 0:
+            pick = rng.choice(len(ids), size=k, replace=False)
+            for i in pick:
+                old = owners[i]
+                if old is not None and len(pool) > 1:
+                    new = str(rng.choice([p for p in pool if p != old]))
+                elif old is None:
+                    new = str(rng.choice(pool))
+                else:
+                    new = old  # single-owner pool: cannot reassign
+                if new != old:
+                    owners[i] = new
+                    changed.add(str(ids[i]))
+        owners, _ = drop_unowned(owners, unowned_curve[qi])
+        rows += [(ids[i], labels[qi], owners[i]) for i in range(len(ids))]
+        changed_by_q[labels[qi]] = changed
+    df = pd.DataFrame(rows, columns=["account_id", "fiscal_quarter", "owner"])
+    return df, changed_by_q
+
+
+def build_opportunities(cfg, accounts_df, rng, ownership=None):
     spec = cfg["opportunities"]
     dspec = spec["discount"]
     quarters = cfg["time_model"]["quarter_labels"]
@@ -183,6 +286,7 @@ def build_opportunities(cfg, accounts_df, rng):
     rows = []
     seq = 0
     stage_history = []  # canonical Opportunity Stage History entity (P4)
+    ownership_cfg = cfg.get("ownership") or {}
     pipe_spec = cfg.get("pipeline")
     if pipe_spec:
         p_open = pipe_spec["share_open_by_quarter"]
@@ -228,7 +332,35 @@ def build_opportunities(cfg, accounts_df, rng):
         win_rate_q = spec["win_rate"] + rng.uniform(
             -spec["win_rate_jitter"], spec["win_rate_jitter"]
         )
-        won = rng.random(n) < win_rate_q
+        # WS7 (#9 coupling): accounts whose owner changed THIS quarter may
+        # convert worse for a while - same rng draw, shifted threshold, so
+        # streams stay aligned with and without the block.
+        wr_mult = 1.0
+        changed_now = None
+        if ownership is not None:
+            wr_mult = float(ownership_cfg.get(
+                "win_rate_multiplier_after_change", 1.0))
+            changed_now = ownership[1].get(label, set())
+        # WS8/#16 coupling: a price change bites harder where market
+        # potential is low - high-potential territories hold conversion.
+        price_resp = cfg.get("pricing_response")
+        if price_resp:
+            d_p = float(price_resp["price_change_pct_by_quarter"][qi])
+            elas = float(price_resp["elasticity"])
+            mit = float(price_resp.get("potential_mitigation", 0.0))
+            pot = accts["market_potential_usd"].to_numpy(dtype=float)
+            lo, hi = pot.min(), pot.max()
+            normed = (pot - lo) / (hi - lo) if hi > lo else \
+                np.full(n, 0.5)
+            mults = 1.0 + (elas * d_p / 100.0) * \
+                (1.0 - mit * normed)
+            won = rng.random(n) < np.clip(win_rate_q * mults, 0.0, 1.0)
+        elif wr_mult != 1.0 and changed_now:
+            mults = np.where(
+                accts["account_id"].isin(changed_now), wr_mult, 1.0)
+            won = rng.random(n) < np.clip(win_rate_q * mults, 0.0, 1.0)
+        else:
+            won = rng.random(n) < win_rate_q
 
         early_offsets = rng.integers(0, q_len_days - window_days, size=n)
         eoq_offsets = rng.integers(q_len_days - window_days, q_len_days, size=n)
@@ -365,7 +497,6 @@ def build_opportunities(cfg, accounts_df, rng):
                     "fiscal_quarter": label,
                 })
             rows.append(row)
-
     df = pd.DataFrame(rows)
     df.attrs["stage_history"] = pd.DataFrame(stage_history) \
         if stage_history else None
@@ -373,11 +504,205 @@ def build_opportunities(cfg, accounts_df, rng):
 
 
 def _quota_dimension(cfg):
-    """Quota plan units: 'segment' (legacy default) or 'territory'."""
+    """Quota plan units: 'segment' (legacy default), 'territory', or
+    'motion' (New Logo / Expansion, WS7 #22)."""
     quota = cfg.get("quota") or {}
     if quota.get("by_territory"):
         return "territory", quota["by_territory"]
+    if quota.get("by_motion"):
+        return "motion", quota["by_motion"]
     return "segment", quota.get("by_segment")
+
+
+def _capacity_dimension(cfg):
+    """Capacity plan units: 'territory' or 'region'."""
+    cap = cfg.get("capacity") or {}
+    if cap.get("by_territory"):
+        return "territory", cap["by_territory"]
+    return "region", cap.get("by_region")
+
+
+def build_activity(cfg, accounts_df):
+    """WS7 (#13): account-activity fact table. Per account x quarter a
+    touch count ~ Poisson(mean_touches[qi] * tilt_factor), where
+    potential_tilt biases activity toward LOW-potential accounts
+    (negative tilt) or high (positive). Named stream [seed, 10]."""
+    spec = cfg.get("activity")
+    if not spec:
+        return None
+    labels = cfg["time_model"]["quarter_labels"]
+    means = spec["mean_touches_per_account_by_quarter"]
+    tilt = float(spec.get("potential_tilt", 0.0))
+    rng = np.random.default_rng([int(cfg["seed"]), 10])
+    pot = accounts_df["market_potential_usd"].to_numpy(dtype=float)
+    lo, hi = pot.min(), pot.max()
+    normed = (pot - lo) / (hi - lo) if hi > lo else \
+        np.full(len(pot), 0.5)
+    factor = np.exp(tilt * (normed - 0.5) * 2.0) if tilt != 0.0 else \
+        np.ones(len(pot))
+    touches = rng.poisson(np.array(means)[np.newaxis, :] * factor[:, np.newaxis])
+    ids = accounts_df["account_id"].to_numpy()
+    rows = [
+        (ids[i], labels[qi], int(touches[i, qi]))
+        for i in range(len(ids)) for qi in range(len(labels))
+    ]
+    return pd.DataFrame(rows, columns=["account_id", "fiscal_quarter",
+                                       "touches"])
+
+
+def _apply_commit_flags(opp_df, cfg, activity_df):
+    """WS7 (#14/#2): flag a share of each quarter's WON deals as the
+    sales org's commit. With low_activity_bias > 0, selection is biased
+    toward zero-touch accounts (the 'commit concentrated where nothing is
+    happening' pathology). Named stream [seed, 11]."""
+    spec = cfg["forecast"]
+    labels = cfg["time_model"]["quarter_labels"]
+    shares = spec.get("commit_share_of_won_by_quarter") or [1.0] * len(labels)
+    bias = float(spec.get("low_activity_bias", 0.0))
+    rng = np.random.default_rng([int(cfg["seed"]), 11])
+    touch_key = None
+    if activity_df is not None and bias != 0.0:
+        touch_key = activity_df.set_index(
+            ["account_id", "fiscal_quarter"])["touches"]
+    opp_df["in_commit"] = False
+    for qi, label in enumerate(labels):
+        share = float(shares[qi])
+        if share <= 0:
+            continue
+        m = (opp_df["fiscal_quarter"] == label) & \
+            (opp_df["stage"] == "Closed Won")
+        idx = opp_df.index[m].to_numpy()
+        if not len(idx):
+            continue
+        k = max(1, int(round(len(idx) * min(share, 1.0))))
+        if touch_key is not None:
+            pairs = list(zip(opp_df.loc[idx, "account_id"],
+                             [label] * len(idx)))
+            t = np.array([float(touch_key.get(p, 0)) for p in pairs])
+            w = 1.0 / (1.0 + t) ** bias
+            total = w.sum()
+            if total <= 0:
+                pick = rng.choice(len(idx), size=k, replace=False)
+            else:
+                pick = rng.choice(len(idx), size=min(k, len(idx)),
+                                  replace=False, p=w / total)
+        else:
+            pick = rng.choice(len(idx), size=k, replace=False)
+        opp_df.loc[idx[pick], "in_commit"] = True
+    return opp_df
+
+
+def build_forecast_snapshot(cfg, opp_df):
+    """WS7 (#14): forecast snapshot entity. committed_usd is the story's
+    claim (actual x commit_ratio[qi]) - plan-like semantics, same
+    philosophy as quota_plan; actual_usd is measured from the data."""
+    spec = cfg.get("forecast")
+    if not spec:
+        return None
+    labels = cfg["time_model"]["quarter_labels"]
+    ratios = spec["commit_ratio_by_quarter"]
+    won = opp_df[opp_df["stage"] == "Closed Won"]
+    rows = []
+    for qi, label in enumerate(labels):
+        actual = float(won.loc[won["fiscal_quarter"] == label,
+                               "realized_price"].sum())
+        ratio = float(ratios[qi])
+        rows.append({
+            "fiscal_quarter": label,
+            "committed_usd": round(actual * ratio, 2),
+            "actual_usd": round(actual, 2),
+            "commit_vs_actual_pct": round(ratio * 100.0, 2),
+        })
+    return pd.DataFrame(rows)
+
+
+def _derive_motion(opp_df):
+    """Canonical Revenue Motion classification (#22): an account's FIRST
+    deal of any kind in the window is New Logo, every later one
+    Expansion. Rows are emitted in chronological order, so a single pass
+    with a seen-set is deterministic."""
+    seen = set()
+    motions = []
+    for acct in opp_df["account_id"]:
+        motions.append(NEW_LOGO if acct not in seen else EXPANSION)
+        seen.add(acct)
+    return motions
+
+
+def build_capacity(cfg):
+    """WS1 remainder (M5 iter 4): the canonical Rep entity plus the
+    capacity_plan sheet from the optional config capacity block.
+
+    Two frames:
+      reps          - one row per rep ever on staff in the sim window
+                      (initial cohort + net hires between quarters;
+                      attrition is not modeled - no scenario needs it)
+      capacity_plan - per unit x quarter: planned vs actual headcount,
+                      ramping-rep count, ramp productivity, and the DERIVED
+                      effective_capacity_pct = ((actual - ramping) +
+                      ramping * ramp_pct/100) / plan * 100
+
+    Effective capacity is where story #19's "headcount at 98% of plan but
+    effective capacity 85-90%" lives: the shortfall AND the ramp drag are
+    both relative to what the annual plan assumed (all heads fully
+    productive). Like quota, this block adds sheets only - sampling streams
+    untouched, so existing sessions reproduce byte-identically.
+    """
+    dim, units = _capacity_dimension(cfg)
+    if not units:
+        return None
+    labels = cfg["time_model"]["quarter_labels"]
+    name_rng = np.random.default_rng([int(cfg["seed"]), 8])
+
+    def new_rep(seq, unit):
+        first = str(name_rng.choice(REP_FIRST_NAMES))
+        last = str(name_rng.choice(REP_LAST_NAMES))
+        return {
+            "rep_id": f"REP-{seq:04d}",
+            "rep_name": f"{first} {last}",
+            dim: unit,
+            "hire_fiscal_quarter": None,  # tenured before the sim window
+        }
+
+    rep_rows = []
+    cap_rows = []
+    seq = 0
+    for unit, spec in units.items():
+        plan_hc = [int(v) for v in spec["headcount_plan"]]
+        actual_hc = [int(v) for v in spec.get("headcount_actual") or plan_hc]
+        ramping = [int(v) for v in spec.get(
+            "ramping_reps_by_quarter") or [0] * len(labels)]
+        ramp_prod = float(spec.get("ramp_productivity_pct", 100.0))
+        prev = actual_hc[0]
+        for _ in range(prev):
+            seq += 1
+            rep_rows.append(new_rep(seq, unit))
+        for qi in range(1, len(labels)):
+            hires = actual_hc[qi] - prev
+            for _ in range(max(hires, 0)):
+                seq += 1
+                row = new_rep(seq, unit)
+                row["hire_fiscal_quarter"] = labels[qi]
+                rep_rows.append(row)
+            prev = actual_hc[qi]
+        for qi, label in enumerate(labels):
+            productive = actual_hc[qi] - ramping[qi]
+            eff = ((productive + ramping[qi] * ramp_prod / 100.0)
+                   / plan_hc[qi] * 100.0)
+            cap_rows.append({
+                "fiscal_quarter": label,
+                "plan_unit_type": dim,
+                "plan_unit": unit,
+                "headcount_plan": plan_hc[qi],
+                "headcount_actual": actual_hc[qi],
+                "ramping_reps": ramping[qi],
+                "ramp_productivity_pct": ramp_prod,
+                "effective_capacity_pct": round(eff, 2),
+            })
+    return {
+        "reps": pd.DataFrame(rep_rows),
+        "capacity_plan": pd.DataFrame(cap_rows),
+    }
 
 
 def build_quota_plan(cfg):
@@ -398,6 +723,28 @@ def build_quota_plan(cfg):
         for label, t in zip(quarters, curve)
     ]
     return pd.DataFrame(rows)
+
+
+def _outlier_mask(opp_df, cfg):
+    """Replay the in-loop whale selection ([seed, 3, qi] stream) to attach
+    a persistent is_outlier flag (#25/#17). The replay is exact: whales
+    were chosen per quarter from range(n_rows_that_quarter)."""
+    spec = cfg["opportunities"].get("outlier_deals")
+    if not spec:
+        return None
+    labels = cfg["time_model"]["quarter_labels"]
+    mask = pd.Series(False, index=opp_df.index)
+    for qi, label in enumerate(labels):
+        grp = opp_df.index[opp_df["fiscal_quarter"] == label]
+        n = len(grp)
+        if not n:
+            continue
+        k = max(1, int(round(n * float(spec["share"]))))
+        k = min(k, n)
+        wh_rng = np.random.default_rng([int(cfg["seed"]), 3, qi])
+        pick = wh_rng.choice(n, size=k, replace=False)
+        mask.loc[grp[pick]] = True
+    return mask
 
 
 def apply_raking(opp_df, cfg):
@@ -425,13 +772,82 @@ def apply_raking(opp_df, cfg):
     dim, targets = _quota_dimension(cfg)
     attainment = cfg["quota"].get("attainment") or \
         cfg["quota"].get("attainment_by_segment", {})
+    # WS8 mixtures (#25): optional EX-WHALE attainment - the story's
+    # underlying (core) rate distinct from the headline number whales
+    # inflate. Two-step solve per stratum: core deals rake to
+    # ex_outlier ratio, then whales scale to make the TOTAL hit the
+    # headline ratio.
+    ex_ratios = cfg["quota"].get("attainment_ex_outliers")
     df = opp_df.copy()
+    if ex_ratios and "is_outlier" in df.columns:
+        for unit, curve in targets.items():
+            raw_ex = ex_ratios.get(unit)
+            if raw_ex is None:
+                continue  # no ex-whale claim for this unit -> legacy path
+            raw_head = attainment.get(unit, 1.0)
+            try:
+                r_ex = float(raw_ex) if raw_ex is not None else None
+                r_head = float(raw_head)
+            except (TypeError, ValueError):
+                continue
+            for qi, label in enumerate(quarters):
+                plan_t = float(curve[qi])
+                m = (df[dim] == unit) & (df["fiscal_quarter"] == label)
+                closed_m = m & df["stage"].isin(["Closed Won", "Closed Lost"])
+                out_m = closed_m & df["is_outlier"]
+                core_m = closed_m & ~df["is_outlier"]
+                won_core = core_m & (df["stage"] == "Closed Won")
+                won_out = out_m & (df["stage"] == "Closed Won")
+                core_sum = df.loc[won_core, "realized_price"].sum()
+                if plan_t <= 0 or core_sum <= 0:
+                    continue
+                # step 1: core -> ex-outlier target
+                k_core = (plan_t * r_ex) / core_sum
+                keep_c = 1 - df.loc[core_m, "discount_pct"] / 100
+                df.loc[core_m, "list_price"] = (
+                    df.loc[core_m, "list_price"] * k_core).round(2)
+                df.loc[core_m, "realized_price"] = (
+                    df.loc[core_m, "list_price"] * keep_c).round(2)
+                resid = round(plan_t * r_ex -
+                              df.loc[won_core, "realized_price"].sum(), 2)
+                if resid:
+                    idx = df.loc[won_core, "realized_price"].idxmax()
+                    kf = 1 - df.at[idx, "discount_pct"] / 100
+                    df.loc[idx, "list_price"] = round(
+                        df.loc[idx, "list_price"] + resid / kf, 2)
+                    df.loc[idx, "realized_price"] = round(
+                        df.loc[idx, "list_price"] * kf, 2)
+                # step 2: whales absorb the rest of the headline target
+                whale_sum = df.loc[won_out, "realized_price"].sum()
+                want_total = plan_t * r_head
+                have_total = df.loc[won_core, "realized_price"].sum() + \
+                    whale_sum
+                if whale_sum > 0 and want_total > 0:
+                    k_w = want_total / have_total
+                    keep_w = 1 - df.loc[out_m, "discount_pct"] / 100
+                    df.loc[out_m, "list_price"] = (
+                        df.loc[out_m, "list_price"] * k_w).round(2)
+                    df.loc[out_m, "realized_price"] = (
+                        df.loc[out_m, "list_price"] * keep_w).round(2)
+                    resid_w = round(
+                        want_total -
+                        df.loc[won_core, "realized_price"].sum() -
+                        df.loc[won_out, "realized_price"].sum(), 2)
+                    if resid_w:
+                        idx = df.loc[won_out, "realized_price"].idxmax()
+                        kf = 1 - df.at[idx, "discount_pct"] / 100
+                        df.loc[idx, "list_price"] = round(
+                            df.loc[idx, "list_price"] + resid_w / kf, 2)
+                        df.loc[idx, "realized_price"] = round(
+                            df.loc[idx, "list_price"] * kf, 2)
     for unit, curve in targets.items():
         raw_ratio = attainment.get(unit, 1.0)
         try:
             ratio = float(raw_ratio)
         except (TypeError, ValueError):
             ratio = 1.0  # defense in depth: never crash raking on a bad type
+        if ex_ratios and ex_ratios.get(unit) is not None:
+            continue  # handled by the mixture path above
         for qi, label in enumerate(quarters):
             target = float(curve[qi]) * ratio
             mask = (df[dim] == unit) & (df["fiscal_quarter"] == label)
@@ -498,10 +914,27 @@ def generate(cfg_or_path):
     cfg = load_simulator(cfg_or_path) if isinstance(cfg_or_path, (str, Path)) else cfg_or_path
     rng = np.random.default_rng(cfg["seed"])
     accounts_df = build_accounts(cfg, rng)
-    opp_df = build_opportunities(cfg, accounts_df, rng)
+    ownership_df, changed_by_q = build_ownership(cfg, accounts_df)
+    opp_df = build_opportunities(
+        cfg, accounts_df, rng,
+        ownership=(ownership_df, changed_by_q)
+        if ownership_df is not None else None)
     quota_df = build_quota_plan(cfg)
+    # WS8 mixtures: persistent whale flag whenever outlier_deals is set
+    if spec_outliers := cfg["opportunities"].get("outlier_deals"):
+        opp_df["is_outlier"] = _outlier_mask(opp_df, cfg)
+    # motion must exist BEFORE raking when the plan dimension is motion;
+    # commit flags come AFTER (they depend on final actuals)
+    if quota_df is not None and _quota_dimension(cfg)[0] == "motion":
+        opp_df["motion"] = _derive_motion(opp_df)
     if quota_df is not None:
         opp_df = apply_raking(opp_df, cfg)
+    activity_df = build_activity(cfg, accounts_df)
+    if cfg.get("forecast"):
+        opp_df = _apply_commit_flags(opp_df, cfg, activity_df)
+        forecast_df = build_forecast_snapshot(cfg, opp_df)
+    else:
+        forecast_df = None
     summary_df = build_summary(opp_df, cfg["time_model"]["quarter_labels"])
     frames = {
         "accounts": accounts_df,
@@ -510,6 +943,15 @@ def generate(cfg_or_path):
     }
     if quota_df is not None:
         frames["quota_plan"] = quota_df
+    cap_frames = build_capacity(cfg)
+    if cap_frames is not None:
+        frames.update(cap_frames)
+    if ownership_df is not None:
+        frames["account_ownership"] = ownership_df
+    if activity_df is not None:
+        frames["account_activity"] = activity_df
+    if forecast_df is not None:
+        frames["forecast_snapshot"] = forecast_df
     hist = opp_df.attrs.get("stage_history")
     if hist is not None:
         frames["opportunity_stage_history"] = hist
@@ -530,7 +972,10 @@ def write_workbook(frames, workbook_path, meta=None):
     out_path = Path(workbook_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     sheet_order = ["accounts", "opportunities", "quarterly_summary",
-                   "quota_plan", "opportunity_stage_history", "_synngen_meta"]
+                   "quota_plan", "reps", "capacity_plan",
+                   "account_ownership", "account_activity",
+                   "forecast_snapshot", "opportunity_stage_history",
+                   "_synngen_meta"]
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         for name in sheet_order:
             if name in frames:

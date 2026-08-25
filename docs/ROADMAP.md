@@ -69,9 +69,11 @@
 
 ## M5 — Automation & Polish
 
-**Status:** Iteration 3 of 5 complete (2026-08-25). Iter 3: CANONICAL_MODEL adoption, pre-flight calibration gate + auto-calibration suite, P4 open-pipeline state machine. Landings: #8, #18, #20, #11, #5, #21. Scorecard: 10/25 - P4 stories fully landed. Remaining: C/D/E workstreams (capacity/reps, temporal entities, elasticity/mixtures).
+**Status:** Iteration 3 of 5 complete (2026-08-25). Iter 3: CANONICAL_MODEL adoption, pre-flight calibration gate + auto-calibration suite, P4 open-pipeline state machine. Landings: #8, #18, #20, #11, #5, #21. Scorecard: 10/25 - P4 stories fully landed.
 
-**Status:** Iteration 3 of 5 complete (2026-08-24). Iter 3: CANONICAL_MODEL adoption (Option A), pre-flight calibration gate + deterministic auto-calibration suite (F17 theme), P4 open-pipeline state machine (lifecycle stages, expected_close_date, stage-history entity, aging/slippage/coverage/concentration checks). Landings: #8, #18, #20. Scorecard: 7/25. Remaining for P4 stories (#5/#11/#21): empirical stale-distribution correction + coverage-aware plan sizing (F25).
+**Status:** Iteration 4 build phase complete (2026-08-25, offline). C/D/E workstreams landed as primitives: WS1 rest (rep entity + capacity/ramp model, quota_vs_potential / potential_coverage_gap / headcount_growth_placement checks), WS7 temporal entities (ownership history, activity facts, forecast snapshots + commit flags, motion dimension via quota.by_motion), WS8 finish (is_outlier flag + mixture-aware two-step raking via attainment_ex_outliers, pricing_response elasticity coupling, core-vs-headline growth check).
+
+**Status:** Iteration 4 live landings, workstream C complete (2026-08-25). Landings: #19 (s19, 2/2), #10 (s10, 4/4), #15 (s15, 5/5), #4 (s4, 4/4), #1 (s1, 6/6). Scorecard: 15/25. Live findings: F28 per-territory market_potential_usd overrides (potential was proportionally locked to pipeline sampling); headcount_growth_placement re-ranked by booked revenue not rev/rep; F29 open-value concentration by stage/potential needs a primitive (deferred to iter 5). Remaining: D/E live landings (#3, #9, #13, #14, #22, #24, #2, #16, #17, #25-finish).
 
 **Status:** Iteration 2 of 5 complete (2026-08-24). Iter 1: convergence intelligence + distribution extensions (#7, #23 landed; #6 earlier). Iter 2: WS2 products/margins, WS4 correlation, WS5 territories + full planning dimension (#12 landed; #3/#8 escalated on drafter variance - F17). Scorecard: 4/25 landed. Iter 3 opens with the drafter pre-flight calibration theme (F17) plus deferred #18/#20 live landings.
 

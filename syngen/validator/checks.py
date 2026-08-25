@@ -199,13 +199,24 @@ def check_revenue_vs_plan(opp, accounts, params):
     runner as '_quota_df'; unified schema: plan_unit_type/plan_unit).
     params['segment'] is the plan unit value; optional params['dimension']
     selects segment (default) or territory plans. "_all_" aggregates every
-    row of the requested dimension. Attainment = closed-won realized /
-    target * 100 per quarter; worst quarter decides.
+    row of the requested dimension. params['exclude_outlier_deals']=True
+    measures the ex-whale (core) attainment for mixture stories (#25).
+    Attainment = closed-won realized / target * 100 per quarter; worst
+    quarter decides.
     """
     plan = params.get("_quota_df")
     seg = params["segment"]
     band = float(params["band_pct"])
     target_pct = float(params.get("target_pct", 100.0))
+    if params.get("exclude_outlier_deals"):
+        if "is_outlier" not in opp.columns:
+            r = _result(False, "no is_outlier column",
+                        f"{target_pct}% +/-{band:g}pp",
+                        "criterion requires outlier_deals in simulator.json",
+                        -band)
+            r["structural"] = True
+            return r
+        opp = opp[~opp["is_outlier"].astype(bool)]
     if plan is None or not len(plan):
         r = _result(False, "no quota_plan sheet",
                     f"{target_pct}% +/-{band:g}pp",
@@ -240,7 +251,7 @@ def check_revenue_vs_plan(opp, accounts, params):
         seg_plan[agg_col] = seg
     won_all = won_deals(opp)
     attainments = {}
-    unit_col = dim if dim in ("territory",) else "segment"
+    unit_col = dim if dim in ("territory", "motion", "region") else "segment"
     for _, row in seg_plan.iterrows():
         label = row["fiscal_quarter"]
         won_q = won_all[won_all["fiscal_quarter"] == label]
@@ -668,6 +679,405 @@ def check_pipeline_concentration(opp, accounts, params):
     return _result(share >= needed, f"{share:.1f}% top-{n_top}",
                    f">= {needed}%", detail, share - needed)
 
+def _structural_no_capacity(what):
+    r = _result(False, "no capacity_plan sheet", what,
+                "criterion requires a capacity block in simulator.json "
+                "(reps/capacity_plan sheets absent)", -1.0)
+    r["structural"] = True
+    return r
+
+
+def check_quota_vs_potential(opp, accounts, params):
+    """WS1 (#15): a plan unit's total quota vs its addressable market
+    (summed account market_potential_usd). ratio_pct = sum(targets) /
+    sum(potential) * 100 must sit within band_pp of target_ratio_pct
+    (e.g. 120-125 = quotas set above the market)."""
+    plan = params.get("_quota_df")
+    if plan is None or not len(plan):
+        return _result(False, "no quota_plan sheet", "-",
+                       "criterion requires a quota block in simulator.json",
+                       -1.0)
+    if "market_potential_usd" not in accounts.columns:
+        r = _result(False, "no market_potential_usd column", "-",
+                    "criterion requires account market potential",
+                    -1.0)
+        r["structural"] = True
+        return r
+    dim = params.get("dimension", "territory")
+    unit = params.get("unit")
+    if dim == "territory" and dim not in accounts.columns:
+        # fall back to region-level analysis when no territories exist
+        dim = "region"
+    pot = accounts.groupby(dim)["market_potential_usd"].sum()
+    if unit is not None:
+        pot = pot[pot.index == unit]
+        if not len(pot):
+            r = _result(False, f"unit '{unit}' absent from accounts", "-",
+                        f"criterion unit '{unit}' not found; known: "
+                        f"{sorted(accounts[dim].unique())}", -1.0)
+            r["structural"] = True
+            return r
+        plan = plan[plan["plan_unit"] == unit]
+        if not len(plan):
+            r = _result(False, f"unit '{unit}' absent from plan", "-",
+                        "criterion unit has no quota rows", -1.0)
+            r["structural"] = True
+            return r
+    targets = plan.groupby("plan_unit")["target_realized_usd"].sum() \
+        if "plan_unit" in plan.columns else \
+        plan.groupby(dim)["target_realized_usd"].sum()
+    ratios = {}
+    for name in targets.index:
+        p = float(pot.get(name, 0.0))
+        # v != v is the NaN sentinel: unit has no account potential
+        ratios[name] = (float(targets[name]) / p * 100.0) if p else float("nan")
+    target_ratio = float(params["target_ratio_pct"])
+    band = float(params["band_pp"])
+
+    def _dev(v):
+        return abs(v - target_ratio) if v == v else float("inf")
+
+    worst_name = min(ratios, key=lambda k: _dev(ratios[k]))
+    worst_dev = _dev(ratios[worst_name])
+    detail = "; ".join(f"{k}: {v:.0f}% of potential"
+                       for k, v in sorted(ratios.items()))
+    return _result(worst_dev <= band,
+                   f"{ratios[worst_name]:.0f}% ({worst_name})",
+                   f"{target_ratio:g}% +/-{band:g}pp", detail,
+                   band - worst_dev)
+
+
+def check_potential_coverage_gap(opp, accounts, params):
+    """WS1 (#4): whitespace under-coverage. Units are ranked by summed
+    account market potential; the top half's share of CREATED pipeline
+    must lag its share of market potential by at least min_gap_pp -
+    capacity went where the whitespace wasn't."""
+    dim = params.get("dimension", "territory")
+    need = float(params["min_gap_pp"])
+    if "market_potential_usd" not in accounts.columns:
+        r = _result(False, "no market_potential_usd column",
+                    f">= {need:g}pp gap",
+                    "criterion requires account market potential", -need)
+        r["structural"] = True
+        return r
+    if dim not in accounts.columns:
+        r = _result(False, f"no '{dim}' column on accounts",
+                    f">= {need:g}pp gap",
+                    "config lacks territories; use dimension region",
+                    -need)
+        r["structural"] = True
+        return r
+    pot = accounts.groupby(dim)["market_potential_usd"].sum()
+    pot_share = pot / pot.sum() * 100
+    created = opp.groupby(dim).size()
+    created_share = created / created.sum() * 100
+    ranked = pot_share.sort_values(ascending=False)
+    top = list(ranked.index[:max(1, len(ranked) // 2)])
+    pot_top = float(sum(pot_share[u] for u in top))
+    cre_top = float(sum(created_share.get(u, 0.0) for u in top))
+    gap = pot_top - cre_top
+    detail = (f"top-potential units [{', '.join(top)}] hold "
+              f"{pot_top:.1f}% of market potential but only "
+              f"{cre_top:.1f}% of created pipeline")
+    return _result(gap >= need, f"{gap:+.1f}pp under-coverage",
+                   f">= {need:g}pp gap", detail, gap - need)
+
+
+def check_headcount_growth_placement(opp, accounts, params):
+    """WS1 (#10/#4): headcount additions concentrated in historically
+    strong units - the ones that produced the bulk of first-quarter
+    closed-won revenue (the 'historical bookings' the org staffs against).
+    Those units must absorb at least min_growth_share_pct of all net
+    headcount additions."""
+    cap = params.get("_capacity_df")
+    need = float(params["min_growth_share_pct"])
+    if cap is None or not len(cap):
+        return _structural_no_capacity(f">= {need:g}% of additions")
+    dim = str(cap["plan_unit_type"].iloc[0])
+    if dim not in opp.columns:
+        r = _result(False, f"no '{dim}' column on opportunities",
+                    f">= {need:g}% of additions",
+                    "capacity dimension missing on facts", -need)
+        r["structural"] = True
+        return r
+    # the sheet's own row order defines first/last - never trust the
+    # criteria calendar to know how many quarters were simulated
+    labels = list(pd.unique(cap["fiscal_quarter"]))
+    first, last = labels[0], labels[-1]
+    q1 = cap[cap["fiscal_quarter"] == first].set_index("plan_unit")
+    ql = cap[cap["fiscal_quarter"] == last].set_index("plan_unit")
+    won_q1 = won_deals(opp)
+    won_q1 = won_q1[won_q1["fiscal_quarter"] == first]
+    rev = won_q1.groupby(dim)["realized_price"].sum()
+    strength, additions = {}, {}
+    for unit in q1.index:
+        strength[unit] = float(rev.get(unit, 0.0))
+        additions[unit] = (float(ql.loc[unit, "headcount_actual"])
+                            - float(q1.loc[unit, "headcount_actual"]))
+    total_add = sum(v for v in additions.values() if v > 0)
+    if total_add <= 0:
+        r = _result(False, "no headcount additions",
+                    f">= {need:g}% of additions",
+                    f"headcount unchanged {first} -> {last}", -need)
+        r["structural"] = True
+        return r
+    ranked = sorted(strength, key=strength.get, reverse=True)
+    strong = set(ranked[:max(1, len(ranked) // 2)])
+    strong_add = sum(max(additions[u], 0.0) for u in strong)
+    share = strong_add / total_add * 100
+    detail = (f"strong units [{', '.join(sorted(strong))}] took "
+              f"{share:.0f}% of +{total_add:.0f} added heads "
+              f"(ranked by {first} booked revenue)")
+    return _result(share >= need, f"{share:.0f}% to strong units",
+                   f">= {need:g}% of additions", detail, share - need)
+
+
+def check_effective_capacity(opp, accounts, params):
+    """WS1 rest (M5 iter 4, #19/#10): effective capacity pct from the
+    capacity_plan sheet must sit within band_pp of target_pct for every
+    plan-unit x quarter row (worst row decides). params['unit'] narrows to
+    one territory/region; absent = all rows."""
+    cap = params.get("_capacity_df")
+    target = float(params.get("target_pct", 100.0))
+    band = float(params["band_pp"])
+    if cap is None or not len(cap):
+        r = _result(False, "no capacity_plan sheet",
+                    f"{target:g}% +/-{band:g}pp",
+                    "criterion requires a capacity block in simulator.json",
+                    -band)
+        r["structural"] = True
+        return r
+    unit = params.get("unit")
+    if unit:
+        known_units = sorted(cap["plan_unit"].unique())
+        cap = cap[cap["plan_unit"] == unit]
+        if not len(cap):
+            r = _result(False, f"unit '{unit}' absent from capacity_plan",
+                        f"{target:g}% +/-{band:g}pp",
+                        f"capacity_plan covers units: {known_units}",
+                        -band)
+            r["structural"] = True
+            return r
+    devs = (cap["effective_capacity_pct"] - target).abs()
+    worst_idx = devs.idxmax()
+    worst_dev = float(devs.loc[worst_idx])
+    worst_row = cap.loc[worst_idx]
+    detail = "; ".join(
+        f"{r['fiscal_quarter']} {r['plan_unit']}: {r['effective_capacity_pct']:.1f}%"
+        for _, r in cap.iterrows())
+    display = (f"{worst_row['effective_capacity_pct']:.1f}% "
+               f"({worst_row['fiscal_quarter']} {worst_row['plan_unit']})")
+    return _result(worst_dev <= band, display,
+                   f"{target:g}% +/-{band:g}pp", detail, band - worst_dev)
+
+
+def _structural_no_ownership(what):
+    r = _result(False, "no account_ownership sheet", what,
+                "criterion requires an ownership block in simulator.json",
+                -1.0)
+    r["structural"] = True
+    return r
+
+
+def check_unowned_account_share(opp, accounts, params):
+    """WS7 (#24): among the top-value accounts (top_value_pct by total
+    closed-won revenue), the share with NO owner in the evaluation quarter
+    must be at least min_unowned_share_pct. quarter defaults to the last
+    one present on the ownership sheet."""
+    own = params.get("_ownership_df")
+    if own is None or not len(own):
+        return _structural_no_ownership(
+            f">= {params['min_unowned_share_pct']:g}% unowned")
+    labels = list(pd.unique(own["fiscal_quarter"]))
+    quarter = params.get("quarter") or labels[-1]
+    snap = own[own["fiscal_quarter"] == quarter].set_index("account_id")
+    won_all = won_deals(opp)
+    rev = won_all.groupby("account_id")["realized_price"].sum() \
+        .sort_values(ascending=False)
+    top_n = max(1, int(np.ceil(len(rev) * float(
+        params.get("top_value_pct", 20.0)) / 100.0)))
+    top_ids = list(rev.index[:top_n])
+    top_rows = snap.reindex(top_ids)
+    unowned = top_rows["owner"].isna().sum()
+    share = unowned / len(top_ids) * 100
+    need = float(params["min_unowned_share_pct"])
+    detail = (f"{int(unowned)}/{len(top_ids)} top-revenue accounts unowned "
+              f"in {quarter}")
+    return _result(share >= need, f"{share:.0f}% unowned",
+                   f">= {need:g}% unowned", detail, share - need)
+
+
+def check_post_change_revenue_decline(opp, accounts, params):
+    """WS7 (#9): accounts whose owner changed in the last recorded
+    transition must show a mean won-revenue change (last vs previous
+    quarter) at least min_gap_pp below stable-owner accounts'."""
+    own = params.get("_ownership_df")
+    if own is None or not len(own):
+        return _structural_no_ownership("revenue decline after change")
+    labels = list(pd.unique(own["fiscal_quarter"]))
+    if len(labels) < 2:
+        return _structural_no_ownership(
+            "ownership history spans a single quarter")
+    prev_q, last_q = labels[-2], labels[-1]
+    prev_own = own[own["fiscal_quarter"] == prev_q].set_index("account_id")[
+        "owner"]
+    last_own = own[own["fiscal_quarter"] == last_q].set_index("account_id")[
+        "owner"]
+    changed = set(last_own[(last_own != prev_own) |
+                           (last_own.isna() != prev_own.isna())].index)
+    won = won_deals(opp)
+    won = won[won["fiscal_quarter"].isin([prev_q, last_q])]
+    per_acct = won.pivot_table(index="account_id", columns="fiscal_quarter",
+                               values="realized_price", aggfunc="sum") \
+        .reindex(columns=[prev_q, last_q])
+    per_acct = per_acct.dropna()  # both quarters must have revenue
+    if not len(per_acct):
+        return _result(False, "no comparable accounts", "-",
+                       "no account has closed-won revenue in both "
+                       f"{prev_q} and {last_q}", -1.0)
+    change = (per_acct[last_q] - per_acct[prev_q]) / per_acct[prev_q] * 100
+    ch_mask = per_acct.index.isin(changed)
+    changed_mean = float(change[ch_mask].mean()) if ch_mask.any() else 0.0
+    stable_mean = float(change[~ch_mask].mean()) if (~ch_mask).any() else 0.0
+    gap = stable_mean - changed_mean  # positive = changers declined more
+    need = float(params["min_gap_pp"])
+    detail = (f"{int(ch_mask.sum())} changed-owner accounts "
+              f"{changed_mean:+.1f}% vs {int((~ch_mask).sum())} stable "
+              f"{stable_mean:+.1f}% ({prev_q} -> {last_q})")
+    display = f"{changed_mean:+.1f}% vs {stable_mean:+.1f}%"
+    return _result(gap >= need, display, f"gap >= {need:g}pp",
+                   detail, gap - need)
+
+
+def check_forecast_vs_actual(opp, accounts, params):
+    """WS7 (#14): the forecast snapshot's commit_vs_actual_pct must sit
+    within band_pp of target_pct for every quarter (worst decides).
+    E.g. committed 109% of actual = 'forecast +9%'."""
+    fc = params.get("_forecast_df")
+    if fc is None or not len(fc):
+        r = _result(False, "no forecast_snapshot sheet", "-",
+                    "criterion requires a forecast block in simulator.json",
+                    -1.0)
+        r["structural"] = True
+        return r
+    target = float(params["target_pct"])
+    band = float(params["band_pp"])
+    devs = (fc["commit_vs_actual_pct"] - target).abs()
+    worst_idx = devs.idxmax()
+    worst_dev = float(devs.loc[worst_idx])
+    detail = "; ".join(f"{r['fiscal_quarter']}: {r['commit_vs_actual_pct']:.1f}%"
+                       for _, r in fc.iterrows())
+    return _result(worst_dev <= band,
+                   f"{fc.loc[worst_idx, 'commit_vs_actual_pct']:.1f}% "
+                   f"({fc.loc[worst_idx, 'fiscal_quarter']})",
+                   f"{target:g}% +/-{band:g}pp", detail, band - worst_dev)
+
+
+def check_commit_no_engagement_share(opp, accounts, params):
+    """WS7 (#2): share of COMMIT deal VALUE whose account recorded zero
+    touches that quarter must be at least min_share_pct. Requires both
+    forecast (in_commit column) and activity blocks."""
+    if "in_commit" not in opp.columns:
+        r = _result(False, "no in_commit column", f">= {params['min_share_pct']:g}%",
+                    "criterion requires a forecast block", -1.0)
+        r["structural"] = True
+        return r
+    act = params.get("_activity_df")
+    if act is None or not len(act):
+        r = _result(False, "no account_activity sheet",
+                    f">= {params['min_share_pct']:g}%",
+                    "criterion requires an activity block", -1.0)
+        r["structural"] = True
+        return r
+    commit = opp[opp["in_commit"] == True]  # noqa: E712 - bool sheet column
+    if not len(commit):
+        return _result(False, "no commit deals", f">= {params['min_share_pct']:g}%",
+                       "no rows flagged in_commit", -1.0)
+    touches = act.set_index(["account_id", "fiscal_quarter"])["touches"]
+    t = np.array([float(touches.get((a, q), 0))
+                  for a, q in zip(commit["account_id"],
+                                  commit["fiscal_quarter"])])
+    value = commit["realized_price"].to_numpy(dtype=float)
+    dead_value = value[t == 0].sum()
+    total = value.sum()
+    share = dead_value / total * 100 if total else 0.0
+    need = float(params["min_share_pct"])
+    detail = (f"{int((t == 0).sum())}/{len(commit)} commit deals on "
+              f"zero-touch accounts = {share:.1f}% of commit value")
+    return _result(share >= need, f"{share:.1f}% zero-touch",
+                   f">= {need:g}%", detail, share - need)
+
+
+def check_core_vs_headline_growth(opp, accounts, params):
+    """WS8 (#17): whale-driven beat masks core decline. Total won-revenue
+    growth (first -> last quarter) must be at least min_headline_growth_pct
+    while ex-outlier (core) growth stays at or below max_core_growth_pct
+    (typically negative)."""
+    if "is_outlier" not in opp.columns:
+        r = _result(False, "no is_outlier column", "-",
+                    "criterion requires outlier_deals in simulator.json",
+                    -1.0)
+        r["structural"] = True
+        return r
+    labels = list(pd.unique(opp["fiscal_quarter"]))
+    first, last = labels[0], labels[-1]
+    won = won_deals(opp)
+    w_first = won[won["fiscal_quarter"] == first]["realized_price"].sum()
+    w_last = won[won["fiscal_quarter"] == last]["realized_price"].sum()
+    c_first = won.loc[~won["is_outlier"].astype(bool) &
+                      (won["fiscal_quarter"] == first),
+                      "realized_price"].sum()
+    c_last = won.loc[~won["is_outlier"].astype(bool) &
+                     (won["fiscal_quarter"] == last),
+                     "realized_price"].sum()
+    if not (w_first and c_first):
+        return _result(False, "no baseline revenue", "-",
+                       f"no closed-won revenue in {first}", -1.0)
+    headline = (w_last / w_first - 1) * 100
+    core = (c_last / c_first - 1) * 100
+    need_h = float(params["min_headline_growth_pct"])
+    cap_c = float(params["max_core_growth_pct"])
+    ok = headline >= need_h and core <= cap_c
+    detail = (f"headline {headline:+.1f}% vs core (ex-whale) {core:+.1f}% "
+              f"({first} -> {last})")
+    margin = min(headline - need_h, cap_c - core)
+    return _result(ok, f"{headline:+.1f}% / {core:+.1f}%",
+                   f">= {need_h:g}% headline, <= {cap_c:g}% core",
+                   detail, margin)
+
+
+def check_elasticity_differential(opp, accounts, params):
+    """WS8/#16: conversion response to pricing must differ by market
+    potential. Won-rate change (first -> last quarter) of LOW-potential
+    accounts must trail HIGH-potential accounts' by at least min_gap_pp.
+    Accounts split at the median market_potential_usd."""
+    if "market_potential_usd" not in accounts.columns:
+        r = _result(False, "no market_potential_usd column", "-",
+                    "criterion requires account market potential", -1.0)
+        r["structural"] = True
+        return r
+    labels = list(pd.unique(opp["fiscal_quarter"]))
+    first, last = labels[0], labels[-1]
+    med = accounts["market_potential_usd"].median()
+    closed = opp.merge(accounts[["account_id", "market_potential_usd"]],
+                       on="account_id", how="left")
+    closed = closed[closed["stage"].isin(["Closed Won", "Closed Lost"])]
+    hi_mask = closed["market_potential_usd"] > med
+
+    def wr(q, high):
+        d = closed[(closed["fiscal_quarter"] == q) & (hi_mask == high)]
+        return (d["stage"] == "Closed Won").mean() if len(d) else float("nan")
+
+    hi_change = wr(last, True) - wr(first, True)
+    lo_change = wr(last, False) - wr(first, False)
+    need = float(params["min_gap_pp"])
+    gap = (hi_change - lo_change) * 100  # positive = low-pot fell further
+    detail = (f"high-pot wr change {hi_change * 100:+.1f}pp vs low-pot "
+              f"{lo_change * 100:+.1f}pp")
+    return _result(gap >= need, f"{gap:+.1f}pp differential",
+                   f">= {need:g}pp gap", detail, gap - need)
+
+
 CHECKS = {
     'win_rate_flat': check_win_rate_flat,
     'avg_discount_quarter': check_avg_discount_quarter,
@@ -691,4 +1101,14 @@ CHECKS = {
     'slippage_trend': check_slippage_trend,
     'coverage_ratio': check_coverage_ratio,
     'pipeline_concentration': check_pipeline_concentration,
+    'effective_capacity': check_effective_capacity,
+    'quota_vs_potential': check_quota_vs_potential,
+    'potential_coverage_gap': check_potential_coverage_gap,
+    'headcount_growth_placement': check_headcount_growth_placement,
+    'unowned_account_share': check_unowned_account_share,
+    'post_change_revenue_decline': check_post_change_revenue_decline,
+    'forecast_vs_actual': check_forecast_vs_actual,
+    'commit_no_engagement_share': check_commit_no_engagement_share,
+    'core_vs_headline_growth': check_core_vs_headline_growth,
+    'elasticity_differential': check_elasticity_differential,
 }

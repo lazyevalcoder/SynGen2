@@ -47,6 +47,27 @@ CRITERIA_PARAMS = {
     "coverage_ratio": {"quarter": "FY26-Q4", "min_multiple": 0.005},
     "pipeline_concentration": {"top_n_accounts": 45,
                                "min_top_share_pct": 50.0},
+    # M5 iter 4 WS1-rest check (capacity df injected at runtime, see
+    # run_check): fully staffed fixture rows -> 100% effective capacity
+    "effective_capacity": {"target_pct": 100.0, "band_pp": 2.0},
+    # WS1-rest checks with runtime-injected fixtures (see run_check):
+    # quota ratio + potential column derived from the data itself
+    "quota_vs_potential": {},
+    "potential_coverage_gap": {},
+    "headcount_growth_placement": {"min_growth_share_pct": 0.0},
+    # WS7 checks (ownership df injected at runtime, see run_check)
+    "unowned_account_share": {"top_value_pct": 100,
+                              "min_unowned_share_pct": 0.0},
+    "post_change_revenue_decline": {"min_gap_pp": -10_000.0},
+    # WS7 forecast/activity checks (dfs injected at runtime, see run_check)
+    "forecast_vs_actual": {"target_pct": 100.0, "band_pp": 5.0},
+    "commit_no_engagement_share": {"min_share_pct": 0.0},
+    # WS8 checks: fixture carries no whales -> structural-fail paths are
+    # covered in test_capacity.py; skip via impossible bands is not
+    # possible here, so give a flat synthetic flag column instead
+    "core_vs_headline_growth": {"min_headline_growth_pct": -100.0,
+                                "max_core_growth_pct": 100.0},
+    "elasticity_differential": {"min_gap_pp": -10_000.0},
 }
 
 
@@ -179,6 +200,117 @@ def run_check(name, opp, accounts):
             quota = combined.rename(columns={"segment": "plan_unit"})
             quota.insert(0, "plan_unit_type", "segment")
             params["_quota_df"] = quota
+    if name == "effective_capacity":
+        # fully-staffed capacity plan (plan == actual, no ramping) so the
+        # fixture's 100% effective capacity matches the params above
+        quarters = ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]
+        params["_capacity_df"] = pd.DataFrame([{
+            "fiscal_quarter": q, "plan_unit_type": "territory",
+            "plan_unit": "East", "headcount_plan": 10,
+            "headcount_actual": 10, "ramping_reps": 0,
+            "ramp_productivity_pct": 100.0,
+            "effective_capacity_pct": 100.0} for q in quarters])
+    if name == "quota_vs_potential":
+        # per-segment potential set EXACTLY proportional to that segment's
+        # plan -> every unit's ratio is uniformly 50%, arithmetic under test
+        acc2 = accounts.copy()
+        won = opp[opp["stage"] == "Closed Won"]
+        agg = (won.groupby(["segment", "fiscal_quarter"])["realized_price"]
+               .sum().reset_index())
+        agg.columns = ["segment", "fiscal_quarter", "target_realized_usd"]
+        seg_targets = agg.groupby("segment")["target_realized_usd"].sum()
+        per_acct = seg_targets / accounts.groupby("segment").size()
+        acc2["market_potential_usd"] = acc2["segment"].map(
+            per_acct).astype(float) / 0.5
+        params["_quota_df"] = agg
+        params["dimension"] = "segment"
+        params["target_ratio_pct"] = 50.0
+        params["band_pp"] = 0.5
+        return CHECKS[name](opp, acc2, params)
+    if name == "potential_coverage_gap":
+        # potential proportional to actual creation per region -> zero
+        # gap, which satisfies min_gap_pp of 0
+        acc2 = accounts.copy()
+        counts = opp.groupby("region").size()
+        acc2["market_potential_usd"] = acc2["region"].map(
+            counts).astype(float)
+        params["dimension"] = "region"
+        params["min_gap_pp"] = 0.0
+        return CHECKS[name](opp, acc2, params)
+    if name == "headcount_growth_placement":
+        # capacity df derived from the fixture's regions with flat
+        # headcount -> zero additions; min_growth_share_pct 0 passes on
+        # the "no additions" structural path being data-shaped, so give a
+        # real growth plan instead: +1 head in every region
+        regions = sorted(accounts["region"].unique())
+        rows = []
+        for qi, q in enumerate(["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]):
+            for r in regions:
+                hc = 10 + qi  # steady +1/quarter everywhere
+                rows.append({
+                    "fiscal_quarter": q, "plan_unit_type": "region",
+                    "plan_unit": r, "headcount_plan": hc,
+                    "headcount_actual": hc, "ramping_reps": 0,
+                    "ramp_productivity_pct": 100.0,
+                    "effective_capacity_pct": 100.0})
+        params["_capacity_df"] = pd.DataFrame(rows)
+        # all units grow equally; strong-half share ~= 100/n_units
+        # (rounding of the half-split), so sit the band just under it
+        params["min_growth_share_pct"] = 90.0 / len(regions)
+    if name in ("unowned_account_share", "post_change_revenue_decline"):
+        # fully-owned stable history: exercises the checks' arithmetic
+        # paths without inventing a second dataset (both directions are
+        # covered in test_capacity.py)
+        ids = sorted(accounts["account_id"].unique())
+        rows = []
+        # every 9th account goes unowned in the last quarter -> ~11%
+        # unowned among top-value accounts vs a 5% floor: positive margin
+        for q in ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]:
+            for i, acct in enumerate(ids):
+                owner = None if (q == "FY26-Q4" and i % 9 == 0) \
+                    else f"Rep {i % 5}"
+                rows.append({"account_id": acct, "fiscal_quarter": q,
+                             "owner": owner})
+        params["_ownership_df"] = pd.DataFrame(rows)
+        if name == "unowned_account_share":
+            params["min_unowned_share_pct"] = 5.0
+    if name == "forecast_vs_actual":
+        # snapshot built at ratio exactly 1.0 -> matches the params above
+        rows = [{"fiscal_quarter": q, "committed_usd": 100.0,
+                 "actual_usd": 100.0, "commit_vs_actual_pct": 100.0}
+                for q in ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]]
+        params["_forecast_df"] = pd.DataFrame(rows)
+    if name == "core_vs_headline_growth":
+        opp2 = opp.copy()
+        # flag the single largest won deal per quarter as a whale
+        opp2["is_outlier"] = False
+        won_idx = opp2.index[opp2["stage"] == "Closed Won"]
+        for q in opp2["fiscal_quarter"].unique():
+            q_won = opp2.loc[won_idx][
+                opp2.loc[won_idx]["fiscal_quarter"] == q]
+            top = q_won["realized_price"].idxmax()
+            opp2.at[top, "is_outlier"] = True
+        return CHECKS[name](opp2, accounts, params)
+    if name == "commit_no_engagement_share":
+        # activity df with zero touches everywhere + in_commit column on
+        # all won rows: every commit deal is zero-touch -> share 100%
+        act_rows = [{"account_id": a, "fiscal_quarter": q, "touches": 0}
+                    for a in sorted(accounts["account_id"].unique())
+                    for q in ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]]
+        params["_activity_df"] = pd.DataFrame(act_rows)
+        opp2 = opp.copy()
+        opp2["in_commit"] = opp2["stage"] == "Closed Won"
+        params["min_share_pct"] = 50.0
+        return CHECKS[name](opp2, accounts, params)
+    if name == "elasticity_differential":
+        # synthetic potential so the differential arithmetic runs; the
+        # huge negative band tolerates the fixture's random conversion
+        acc2 = accounts.copy()
+        pot_rng = np.random.default_rng(6)
+        acc2["market_potential_usd"] = pot_rng.uniform(
+            10_000, 900_000, len(acc2))
+        params["min_gap_pp"] = -10_000.0
+        return CHECKS[name](opp, acc2, params)
     return CHECKS[name](opp, accounts, params)
 
 

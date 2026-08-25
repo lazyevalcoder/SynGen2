@@ -71,6 +71,30 @@ def validate_simulator_doc(cfg, source="simulator"):
         if lo is None or hi is None or not (0 <= lo < hi):
             raise ConfigError(
                 "accounts.market_potential_usd must be {min, max} with 0 <= min < max")
+        # F28: optional per-territory / per-region overrides {min, max}
+        pot_overrides = potential.get("by_territory") or \
+            potential.get("by_region")
+        if pot_overrides is not None:
+            if not isinstance(pot_overrides, dict):
+                raise ConfigError(
+                    "market_potential_usd.by_territory/by_region must be a "
+                    "map of unit to {min, max}")
+            if potential.get("by_territory"):
+                known_units = set(cfg["accounts"].get("territories", {}))
+                label = "by_territory"
+            else:
+                known_units = set(cfg["accounts"].get("regions", {}))
+                label = "by_region"
+            for r, r_spec in pot_overrides.items():
+                if r not in known_units:
+                    raise ConfigError(
+                        f"market_potential_usd.{label}['{r}'] is not a "
+                        f"known unit (known: {sorted(known_units)})")
+                rlo, rhi = r_spec.get("min"), r_spec.get("max")
+                if rlo is None or rhi is None or not (0 <= rlo < rhi):
+                    raise ConfigError(
+                        f"market_potential_usd.{label}['{r}'] must be "
+                        "{min, max} with 0 <= min < max")
 
     # M4 domain B: deal_duration_days is [lo, hi] or {means: [...], spread}
     dur = cfg["opportunities"]["deal_duration_days"]
@@ -189,16 +213,24 @@ def validate_simulator_doc(cfg, source="simulator"):
     if quota is not None:
         by_segment = quota.get("by_segment")
         by_territory = quota.get("by_territory")
-        if bool(by_segment) == bool(by_territory):
+        by_motion = quota.get("by_motion")
+        dims = {"segment": by_segment, "territory": by_territory,
+                "motion": by_motion}
+        chosen = [k for k, v in dims.items() if v]
+        if len(chosen) != 1:
             raise ConfigError(
-                "quota must define exactly one of by_segment / by_territory")
-        dim_name = "segment" if by_segment else "territory"
-        targets = by_segment or by_territory
+                "quota must define exactly one of by_segment / "
+                "by_territory / by_motion")
+        dim_name = chosen[0]
+        targets = dims[dim_name]
         if not isinstance(targets, dict) or not targets:
             raise ConfigError(
                 f"quota.by_{dim_name} must define at least one unit curve")
-        known_units = set(cfg["accounts"].get(
-            "segments" if by_segment else "territories", {}))
+        if dim_name == "motion":
+            known_units = {"New Logo", "Expansion"}
+        else:
+            known_units = set(cfg["accounts"].get(
+                "territories" if dim_name == "territory" else "segments", {}))
         for unit, curve in targets.items():
             if unit not in known_units:
                 raise ConfigError(
@@ -227,6 +259,23 @@ def validate_simulator_doc(cfg, source="simulator"):
                 raise ConfigError(
                     f"quota.attainment['{unit}'] must be a sane "
                     "ratio (0 < r < 3)")
+        # WS8 mixtures (#25): ex-outlier attainment ratios
+        ex_ratios = quota.get("attainment_ex_outliers")
+        if ex_ratios is not None:
+            if not isinstance(ex_ratios, dict):
+                raise ConfigError(
+                    "quota.attainment_ex_outliers must be a dict")
+            for unit, ratio in ex_ratios.items():
+                if unit not in targets:
+                    raise ConfigError(
+                        f"quota.attainment_ex_outliers['{unit}'] has no "
+                        f"matching by_{dim_name} entry")
+                if not isinstance(ratio, (int, float)) or \
+                        isinstance(ratio, bool) or \
+                        not (0 < float(ratio) < 3):
+                    raise ConfigError(
+                        f"quota.attainment_ex_outliers['{unit}'] must be a "
+                        "sane ratio (0 < r < 3)")
 
     # M5 iteration 2: products, territories -------------------------------
 
@@ -349,6 +398,141 @@ def validate_simulator_doc(cfg, source="simulator"):
             raise ConfigError(
                 "pipeline.share_open_by_quarter is required when a "
                 "pipeline block is present")
+
+    # M5 iter 4 (WS1 rest): rep/capacity block ------------------------------
+    cap = cfg.get("capacity")
+    if cap is not None:
+        by_territory = cap.get("by_territory")
+        by_region = cap.get("by_region")
+        if bool(by_territory) == bool(by_region):
+            raise ConfigError(
+                "capacity must define exactly one of by_territory / by_region")
+        dim_name = "territory" if by_territory else "region"
+        units = by_territory or by_region
+        if not isinstance(units, dict) or not units:
+            raise ConfigError(
+                f"capacity.by_{dim_name} must define at least one unit spec")
+        known_units = set(cfg["accounts"].get(
+            "territories" if by_territory else "regions", {}))
+        for unit, spec in units.items():
+            label = f"capacity.by_{dim_name}['{unit}']"
+            if unit not in known_units:
+                raise ConfigError(
+                    f"{label} is not a known account {dim_name} "
+                    f"(known: {sorted(known_units)})")
+            if not isinstance(spec, dict):
+                raise ConfigError(f"{label} must be an object")
+            hc = spec.get("headcount_plan")
+            if not isinstance(hc, list) or len(hc) != len(labels):
+                raise ConfigError(
+                    f"{label}.headcount_plan needs one value per quarter "
+                    f"({len(labels)} expected)")
+            if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0
+                   for v in hc):
+                raise ConfigError(
+                    f"{label}.headcount_plan values must be positive integers")
+            actual = spec.get("headcount_actual")
+            if actual is not None:
+                if not isinstance(actual, list) or len(actual) != len(labels):
+                    raise ConfigError(
+                        f"{label}.headcount_actual needs one value per "
+                        f"quarter ({len(labels)} expected)")
+                if any(isinstance(v, bool) or not isinstance(v, int) or v < 0
+                       for v in actual):
+                    raise ConfigError(
+                        f"{label}.headcount_actual values must be "
+                        "non-negative integers")
+            ramping = spec.get("ramping_reps_by_quarter")
+            if ramping is not None:
+                if not isinstance(ramping, list) or len(ramping) != len(labels):
+                    raise ConfigError(
+                        f"{label}.ramping_reps_by_quarter needs one value "
+                        f"per quarter ({len(labels)} expected)")
+                for qi, v in enumerate(ramping):
+                    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+                        raise ConfigError(
+                            f"{label}.ramping_reps_by_quarter values must be "
+                            "non-negative integers")
+                    ref = actual if actual is not None else hc
+                    if v > ref[qi]:
+                        raise ConfigError(
+                            f"{label}.ramping_reps_by_quarter[{qi}] exceeds "
+                            "actual headcount that quarter")
+            prod = spec.get("ramp_productivity_pct")
+            if prod is not None and not (0 < float(prod) <= 100):
+                raise ConfigError(
+                    f"{label}.ramp_productivity_pct must be within (0, 100]")
+
+    # M5 iter 4 (WS7): ownership-history block ------------------------------
+    own = cfg.get("ownership")
+    if own is not None:
+        if not isinstance(own, dict):
+            raise ConfigError("ownership must be an object")
+        for key in ("unowned_share_by_quarter", "churn_share_by_quarter"):
+            curve = own.get(key)
+            if curve is None:
+                continue
+            if not isinstance(curve, list) or len(curve) != len(labels):
+                raise ConfigError(
+                    f"ownership.{key} needs one value per quarter "
+                    f"({len(labels)} expected)")
+            if any(not (0 <= float(v) <= 1) for v in curve):
+                raise ConfigError(f"ownership.{key} values must be 0..1")
+        pool = own.get("owner_pool")
+        if pool is not None:
+            if not isinstance(pool, list) or \
+                    not all(isinstance(p, str) and p for p in pool) or not pool:
+                raise ConfigError(
+                    "ownership.owner_pool must be a non-empty list of names")
+
+    # M5 iter 4 (WS7): activity, forecast blocks ----------------------------
+    act = cfg.get("activity")
+    if act is not None:
+        means = act.get("mean_touches_per_account_by_quarter")
+        if not isinstance(means, list) or len(means) != len(labels):
+            raise ConfigError(
+                f"activity.mean_touches_per_account_by_quarter needs one "
+                f"value per quarter ({len(labels)} expected)")
+        if any(float(m) < 0 for m in means):
+            raise ConfigError("activity mean touches must be >= 0")
+    fc = cfg.get("forecast")
+    if fc is not None:
+        ratios = fc.get("commit_ratio_by_quarter")
+        if not isinstance(ratios, list) or len(ratios) != len(labels):
+            raise ConfigError(
+                f"forecast.commit_ratio_by_quarter needs one value per "
+                f"quarter ({len(labels)} expected)")
+        if any(float(r) <= 0 for r in ratios):
+            raise ConfigError("commit ratios must be positive")
+        shares = fc.get("commit_share_of_won_by_quarter")
+        if shares is not None:
+            if not isinstance(shares, list) or len(shares) != len(labels):
+                raise ConfigError(
+                    f"forecast.commit_share_of_won_by_quarter needs one "
+                    f"value per quarter ({len(labels)} expected)")
+            if any(not (0 <= float(s) <= 1) for s in shares):
+                raise ConfigError(
+                    "commit shares must be within [0, 1]")
+        bias = fc.get("low_activity_bias")
+        if bias is not None and float(bias) < 0:
+            raise ConfigError("low_activity_bias must be >= 0")
+
+    # M5 iter 4 (WS8 mixtures / demand response) ----------------------------
+    pr = cfg.get("pricing_response")
+    if pr is not None:
+        curve = pr.get("price_change_pct_by_quarter")
+        if not isinstance(curve, list) or len(curve) != len(labels):
+            raise ConfigError(
+                f"pricing_response.price_change_pct_by_quarter needs one "
+                f"value per quarter ({len(labels)} expected)")
+        elas = pr.get("elasticity")
+        if elas is None or float(elas) >= 0:
+            raise ConfigError(
+                "pricing_response.elasticity must be negative "
+                "(higher price -> lower conversion)")
+        mit = pr.get("potential_mitigation")
+        if mit is not None and not (0 <= float(mit) <= 1):
+            raise ConfigError("potential_mitigation must be within [0, 1]")
 
     return cfg
 

@@ -27,14 +27,14 @@ built - no scenario among the 25 demands them.
 | Quota | ✅ built | `quota` block + `quota_plan` sheet |
 | Product | 🟡 columns | product_id/tier/cogs_ratio on opportunities (iter 2); standalone catalog sheet only if a scenario demands it |
 | Opportunity | 🟡 closed facts only | won/lost fact rows; **lifecycle lands in Iter 3 (P4)** |
-| Rep | 🟡 strings | `owners` list; **entity + capacity/ramp lands in Iter 3/4 (WS1 rest)** |
-| Revenue Motion | ❌ | **Iter 4 (WS7)**: motion classification on opportunities (#22) |
+| Rep | ✅ built (iter 4) | `reps` roster + `capacity_plan` sheet (WS1 rest) |
+| Revenue Motion | ✅ built (iter 4) | `motion` column via quota.by_motion (#22) |
 | Booking | implicit | won opportunities ARE bookings; separate booking facts only if a scenario demands them |
-| Activity | ❌ | **Iter 4 (WS7)**: activity/meeting fact table (#13) |
-| Stage History | ❌ | **Iter 3 (P4)**: open-pipeline state machine (#5/#11/#21) |
-| Forecast snapshot | ❌ | **Iter 4 (WS7)** (#14) |
-| Ownership history | ❌ | **Iter 4 (WS7)** dated rep-account ownership (#9/#24) |
-| Penetration / Whitespace | ❌ | derived views when #22 needs them |
+| Activity | ✅ built (iter 4) | `account_activity` fact table, touches per account x quarter (#13) |
+| Stage History | ✅ built | Iter 3 (P4): open-pipeline state machine (#5/#11/#21) |
+| Forecast snapshot | ✅ built (iter 4) | `forecast_snapshot` sheet + `in_commit` flags (#14/#2) |
+| Ownership history | ✅ built (iter 4) | `account_ownership`, dated rep-account ownership (#9/#24) |
+| Penetration / Whitespace | 🟡 partial | market_potential_usd on accounts + potential_coverage_gap check; deeper views when landing demands |
 
 ## Rule going forward
 

@@ -26,12 +26,33 @@ def run_validation(workbook_path, criteria_path):
     # quota_plan is read only when some criterion needs it (black-box rule:
     # everything still comes from the workbook, nothing from the config)
     quota_df = None
+    capacity_df = None
+    ownership_df = None
+    activity_df = None
+    forecast_df = None
     try:
         sheets = pd.ExcelFile(workbook_path).sheet_names
         if "quota_plan" in sheets:
             quota_df = pd.read_excel(workbook_path, sheet_name="quota_plan")
+        # same black-box rule for the M5 iter 4 sheets
+        if "capacity_plan" in sheets:
+            capacity_df = pd.read_excel(
+                workbook_path, sheet_name="capacity_plan")
+        if "account_ownership" in sheets:
+            ownership_df = pd.read_excel(
+                workbook_path, sheet_name="account_ownership")
+        if "account_activity" in sheets:
+            activity_df = pd.read_excel(
+                workbook_path, sheet_name="account_activity")
+        if "forecast_snapshot" in sheets:
+            forecast_df = pd.read_excel(
+                workbook_path, sheet_name="forecast_snapshot")
     except Exception:
         quota_df = None
+        capacity_df = None
+        ownership_df = None
+        activity_df = None
+        forecast_df = None
 
     results = []
     for c in doc["criteria"]:
@@ -48,6 +69,14 @@ def run_validation(workbook_path, criteria_path):
             params.setdefault("quarter_ends", calendar)
         if quota_df is not None:
             params.setdefault("_quota_df", quota_df)
+        if capacity_df is not None:
+            params.setdefault("_capacity_df", capacity_df)
+        if ownership_df is not None:
+            params.setdefault("_ownership_df", ownership_df)
+        if activity_df is not None:
+            params.setdefault("_activity_df", activity_df)
+        if forecast_df is not None:
+            params.setdefault("_forecast_df", forecast_df)
         try:
             r = fn(opp, accounts, params)
             entry = {

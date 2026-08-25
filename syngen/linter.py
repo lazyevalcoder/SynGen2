@@ -22,7 +22,8 @@ Experiment F's structure_check.py).
 import re
 
 KNOWN_BLOCKS = {"seed", "time_model", "output", "accounts", "opportunities",
-                "products", "pipeline", "quota"}
+                "products", "pipeline", "quota", "capacity", "ownership",
+                "activity", "forecast", "pricing_response"}
 
 FACT_SYNONYMS = re.compile(
     r"(deals?|pipeline|opps?|transactions?|records?|activities?)$", re.I)
@@ -175,10 +176,21 @@ EXPECTED_SHEETS = {
     "quarterly_summary": None,  # derived view; presence checked, columns free
     "quota_plan": ["plan_unit_type", "plan_unit", "fiscal_quarter",
                    "target_realized_usd"],
+    "capacity_plan": ["fiscal_quarter", "plan_unit_type", "plan_unit",
+                      "headcount_plan", "headcount_actual", "ramping_reps",
+                      "ramp_productivity_pct", "effective_capacity_pct"],
     "_synngen_meta": None,
 }
 OPTIONAL_SHEETS = {"quota_plan",  # present only when the config has quotas
-                   "opportunity_stage_history"}  # P4 pipeline block
+                   "opportunity_stage_history",  # P4 pipeline block
+                   "reps", "capacity_plan",  # M5 iter 4 capacity block
+                   "account_ownership",  # M5 iter 4 ownership block
+                   "account_activity",  # WS7 activity fact table
+                   "forecast_snapshot"}  # WS7 commit vs actual
+
+
+def _reps_columns(dim):
+    return ["rep_id", "rep_name", dim, "hire_fiscal_quarter"]
 
 
 def expected_sheets_for(cfg):
@@ -205,6 +217,26 @@ def expected_sheets_for(cfg):
                 opp.insert(opp.index(anchor), "territory")
             else:
                 opp.append("territory")
+        cap = cfg.get("capacity")
+        if cap:
+            dim = "territory" if cap.get("by_territory") else "region"
+            sheets["reps"] = _reps_columns(dim)
+        if cfg.get("ownership"):
+            sheets["account_ownership"] = [
+                "account_id", "fiscal_quarter", "owner"]
+        if cfg.get("activity"):
+            sheets["account_activity"] = [
+                "account_id", "fiscal_quarter", "touches"]
+        # order mirrors generate(): motion derives before commit flags
+        if cfg.get("quota", {}).get("by_motion"):
+            sheets["opportunities"].append("motion")
+        if cfg.get("forecast"):
+            sheets["opportunities"] += ["in_commit"]
+            sheets["forecast_snapshot"] = [
+                "fiscal_quarter", "committed_usd", "actual_usd",
+                "commit_vs_actual_pct"]
+        if cfg.get("opportunities", {}).get("outlier_deals"):
+            sheets["opportunities"] += ["is_outlier"]
     return sheets
 
 

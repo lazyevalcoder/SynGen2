@@ -39,6 +39,36 @@ HARD RULE on the quota block: scan the acceptance criteria FIRST. If none of the
   },
   "quota": {
     "by_segment": {"<segment>": [<revenue target per quarter>], ...}
+  },
+  "capacity": {
+    "by_territory": {
+      "<territory>": {
+        "headcount_plan": [<one per quarter>],
+        "headcount_actual": [<one per quarter, optional>],
+        "ramping_reps_by_quarter": [<one per quarter, optional>],
+        "ramp_productivity_pct": <0-100, optional>
+      }
+    }
+  },
+  "ownership": {
+    "unowned_share_by_quarter": [<one per quarter, 0-1>],
+    "churn_share_by_quarter": [<one per quarter, 0-1>],
+    "owner_pool": ["<name>", ...],
+    "win_rate_multiplier_after_change": <0-1 for decline stories>
+  },
+  "activity": {
+    "mean_touches_per_account_by_quarter": [<one per quarter>],
+    "potential_tilt": <negative = activity aimed at LOW-potential accounts>
+  },
+  "forecast": {
+    "commit_ratio_by_quarter": [<committed vs actual, one per quarter>],
+    "commit_share_of_won_by_quarter": [<share of won deals flagged as commit>],
+    "low_activity_bias": <0+; higher = commit biased toward zero-touch accounts>
+  },
+  "pricing_response": {
+    "price_change_pct_by_quarter": [<one per quarter>],
+    "elasticity": <negative>, 
+    "potential_mitigation": <0-1>
   }
 }
 
@@ -78,6 +108,26 @@ Pipeline block: include it ONLY when criteria use open-pipeline checks (stage_ag
 - open deals do NOT count toward closed-won revenue - quota targets apply only to the (1-share) that closes, so size per_quarter UP accordingly
 - slippage_rate_by_quarter pushes that fraction of open deals' expected close dates past their creation quarter's end (rising rates = "deals slipping" stories)
 - stage_names are your lifecycle stages; keep them conventional unless the story names specific ones
+
+Capacity block: include it when criteria use the effective_capacity check or the story discusses AE headcount, ramp, hiring, or capacity planning. Guidance:
+- exactly one of "by_territory" / "by_region", keyed by existing territory (or region) names
+- headcount_plan is what the annual plan assumed (fully productive heads); headcount_actual is who was really on staff - omit to make actual = plan
+- ramping_reps_by_quarter counts reps still ramping each quarter; ramp_productivity_pct is a ramping rep's output vs steady state (e.g. 45)
+- effective_capacity_pct is DERIVED: ((actual - ramping) + ramping * ramp_pct/100) / plan * 100. Story says "headcount at 98% of plan but effective capacity 85-90%" -> headcount_actual ~ 0.98*plan plus enough ramping reps at low productivity to drag the ratio into the band. Solve BEFORE drafting:
+  eff% = ((A - R) + R*p/100) / P * 100
+
+Ownership block: include it when criteria use unowned_account_share or post_change_revenue_decline, or the story discusses accounts changing hands or being left unowned. Guidance:
+- unowned_share_by_quarter: share of accounts with NO owner that quarter (owner blank in the account_ownership sheet)
+- churn_share_by_quarter: share of owned accounts reassigned a DIFFERENT owner vs the prior quarter
+- win_rate_multiplier_after_change (e.g. 0.5): won-rate drag on accounts whose owner changed THIS quarter - use it for "expansion fell where AE ownership changed" stories (#9)
+
+Activity block: include it when criteria use commit_no_engagement_share or the story discusses meetings/touches/engagement vs potential (#13). potential_tilt negative points activity at LOW-potential accounts ("activity up but aimed at the wrong accounts").
+
+Forecast block: include it when criteria use forecast_vs_actual or commit_no_engagement_share, or the story quotes a forecast number vs actual ("forecast +9%"). commit_ratio_by_quarter IS the story's claim: 1.09 means committed ran 9% hot vs actual.
+
+Pricing-response block: include it for price-change elasticity stories (#16): elasticity is per +1% price; potential_mitigation near 1 spares high-potential accounts so conversion damage concentrates in low-potential territories. Pair with the elasticity_differential check.
+
+Quota by_motion: quota.by_motion {"New Logo": [...], "Expansion": [...]} plans by deal MOTION (an account's first deal = New Logo, later deals = Expansion). Use for expansion-vs-new-logo stories (#22); revenue_vs_plan works with dimension "motion". quota.attainment_ex_outliers {"<unit>": ratio} splits a unit's story into a HEADLINE attainment and an EX-WHALE core attainment (#25) - requires outlier_deals to be set; criteria then use revenue_vs_plan with exclude_outlier_deals true.
 
 Worked example (for criteria: Q1 avg discount 10% +/-2, Q4 avg 16% +/-2, premium region APAC >= +3pp all year, regions AMER 0.45 / EMEA 0.30 / APAC 0.25, boost 6.5 with share 0.25):
 - contribution of boost to every quarterly average = 0.25 * 6.5 = 1.6pp
