@@ -473,6 +473,9 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
     if cov_status == "redrafted":
         session.log("COVERAGE GUARD: criteria re-drafted to cover the "
                     "story's claims.")
+    if cov_status == "proceeded_with_notes":
+        session.log("COVERAGE GUARD: proceeding with noted vocabulary/"
+                    "qualifier gaps (see session log).")
 
     deps_note = consistency_report(doc).strip()
     if deps_note != "(no dependencies declared)":

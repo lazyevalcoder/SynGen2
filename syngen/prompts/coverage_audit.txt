@@ -8,18 +8,26 @@ You will receive:
 For EACH computable claim, decide whether at least one criterion would FAIL if the claim were false in the generated data. A criterion covers a claim only if it measures the claim's substance (right entity, right metric, right direction). These do NOT count as coverage:
 - generic hygiene checks (data_sanity) - they pass on almost any dataset;
 - trend/level checks on unrelated metrics that merely coexist with the claim;
-- criteria whose parameters contradict the claim's stated magnitudes.
+- criteria whose parameters contradict the claim's stated magnitudes (e.g. a forecast_vs_actual target above 100% against a claim that the forecast MISSED).
 
 Available validation checks:
 {{checks}}
 
-Be strict: when unsure whether a criterion would catch the claim being false, mark the claim UNCOVERED. An honest false alarm costs one re-draft; a missed gap ships a meaningless dataset.
+For every UNCOVERED claim you must classify the gap. Pick EXACTLY ONE:
+
+- "PARAMETRIC" - an EXISTING check from the list CAN prove this claim, but the drafted criteria do not (missing criterion, wrong direction, wrong parameters, or contradictory magnitudes). You MUST name the existing check in "existing_check". Do not invent check names.
+- "VOCAB_GAP" - NO existing check can express the claim's substance (a missing metric primitive). Leave "existing_check" null. This is a roadmap signal, not a drafter failure.
+- "QUALIFIER" - the claim's substance IS covered by existing criteria; what is uncovered is a narrative qualifier or detail beyond the measurable substance. Leave "existing_check" null.
+
+Be strict on PARAMETRIC: when unsure whether a criterion would catch the claim being false, mark it uncovered. An honest false alarm costs one re-draft; a missed gap ships a meaningless dataset. But do NOT demand verification of narrative color that no metric could express - classify those QUALIFIER instead.
 
 Respond with ONLY a JSON object:
 {
   "uncovered": [
-    {"claim": "<verbatim claim>", "reason": "<why no criterion captures it>",
-     "suggested_check": "<check name from the list above, or your best guess>"}
+    {"claim": "<verbatim claim>",
+     "classification": "PARAMETRIC | VOCAB_GAP | QUALIFIER",
+     "existing_check": "<check name from the list, or null>",
+     "reason": "<why it is uncovered>"}
   ],
   "covered": ["<verbatim claim>", "..."]
 }

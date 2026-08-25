@@ -44,15 +44,44 @@ def deterministic_gaps(doc, computable_claims):
     return []
 
 
-def audit_coverage(client, story, doc, computable_claims, log_fn=print):
-    """LLM audit: does any criterion actually test each computable claim?
+def _normalize_audit_item(item, known_checks):
+    """Normalize one auditor gap to the graduated classification.
 
-    Fails OPEN: if the audit call itself fails (endpoint down, unparseable
-    output), the deterministic rules remain the active guard rather than
-    blocking every session on auditor availability.
+    New contract: explicit PARAMETRIC / VOCAB_GAP / QUALIFIER with an
+    existing_check for PARAMETRIC. Legacy shape (suggested_check only) is
+    mapped: a valid check name implies PARAMETRIC; anything else - including
+    hallucinated names (benchmark F9.2) - degrades to VOCAB_GAP, which
+    notes instead of blocking.
+    """
+    claim = item.get("claim", "?")
+    reason = item.get("reason", "")
+    classification = item.get("classification")
+    check = item.get("existing_check") or item.get("suggested_check") or None
+    if classification not in ("PARAMETRIC", "VOCAB_GAP", "QUALIFIER"):
+        classification = ("PARAMETRIC" if check in known_checks
+                          else "VOCAB_GAP")
+    if classification == "PARAMETRIC" and check not in known_checks:
+        # auditor violated the naming contract - degrade to note, log loudly
+        classification = "VOCAB_GAP"
+        reason += " [auditor named a non-existent check; treated as vocab gap]"
+        check = None
+    if classification != "PARAMETRIC":
+        check = None
+    return {"claim": claim, "reason": reason,
+            "classification": classification, "check": check}
+
+
+def audit_coverage_structured(client, story, doc, computable_claims,
+                              log_fn=print):
+    """LLM audit returning classified gaps.
+
+    Returns (gaps, covered_claims) where gaps carry the normalized
+    classification. Fails OPEN on transport/parse errors: returns
+    (None, None) so the caller keeps deterministic rules authoritative
+    without inventing coverage knowledge.
     """
     if not computable_claims:
-        return []
+        return [], []
     crit_lines = "\n".join(
         f"- {c['id']} check={c['check']} params={json.dumps(c['params'])} "
         f"(claim: {c.get('source_claim', 'n/a')})"
@@ -68,15 +97,27 @@ def audit_coverage(client, story, doc, computable_claims, log_fn=print):
     except (ValueError, KeyError) as e:
         log_fn(f"WARN coverage audit unavailable ({e}); "
                "falling back to deterministic rules only")
+        return None, None
+    gaps = [_normalize_audit_item(item, set(CHECKS))
+            for item in result.get("uncovered", [])]
+    return gaps, list(result.get("covered", []))
+
+
+def format_gap(gap):
+    text = (f"Uncovered claim '{gap['claim']}' "
+            f"[{gap['classification']}]: {gap['reason']}")
+    if gap.get("check"):
+        text += f" (consider check: {gap['check']})"
+    return text
+
+
+def audit_coverage(client, story, doc, computable_claims, log_fn=print):
+    """Compat wrapper: string-formatted gaps from the structured audit."""
+    gaps, _ = audit_coverage_structured(client, story, doc,
+                                        computable_claims, log_fn)
+    if gaps is None:
         return []
-    gaps = []
-    for item in result.get("uncovered", []):
-        claim = item.get("claim", "?")
-        reason = item.get("reason", "")
-        hint = item.get("suggested_check", "")
-        gaps.append(f"Uncovered claim '{claim}': {reason}"
-                    + (f" (consider check: {hint})" if hint else ""))
-    return gaps
+    return [format_gap(g) for g in gaps]
 
 
 def coherence_gaps(doc):
@@ -164,40 +205,89 @@ def coherence_gaps(doc):
 
 def enforce_coverage(client, story, doc, claims, decisions_text="",
                      log_fn=print):
-    """Coverage guard (R6) + coherence check (R10): criteria must express
-    the story's claims AND be mutually satisfiable.
+    """Graduated coverage guard (M6 P1, DOMAIN_PACKS.md): replaces the
+    binary pass/escalate gate that killed 5 of 6 benchmark flights.
 
-    Deterministic rules first (always authoritative); then one strict LLM
-    audit. Any gap triggers ONE corrective criteria re-draft; persistent
-    gaps return status 'uncovered' for the pipeline to escalate instead of
-    burning a convergence loop on criteria that prove nothing.
-    Returns (doc, status) with status in {"clean", "redrafted", "uncovered"}.
+    Gap classes and their dispositions:
+      - deterministic vacuous shapes (no criteria / generic-only):
+        always blocking -> ESCALATE when they persist (near-zero coverage).
+      - PARAMETRIC gaps (an existing check could prove the claim but the
+        draft does not): trigger ONE bounded corrective re-draft with
+        targeted feedback. Persistent parametric gaps with OTHER claims
+        still covered = partial coverage -> PROCEED-WITH-NOTE.
+      - VOCAB_GAP / QUALIFIER: never fatal; logged as coverage notes
+        (roadmap signals), never block a flight.
+      - coherence violations (mathematically impossible criteria):
+        redraft-worthy; persistent ones ESCALATE - impossible math cannot
+        ship honestly.
+    Returns (doc, status), status in {"clean", "redrafted",
+    "proceeded_with_notes", "uncovered"}.
     """
     computable = [c["claim"] for c in claims.get("claims", [])
                   if c.get("classification") == "COMPUTABLE"]
     redrafted = False
     for attempt in range(MAX_COVERAGE_REDRAFTS + 1):
-        gaps = deterministic_gaps(doc, computable)
-        if not gaps:
-            gaps = audit_coverage(client, story, doc, computable, log_fn)
-        if not gaps:
-            gaps = coherence_gaps(doc)
-        if not gaps:
-            return doc, ("redrafted" if redrafted else "clean")
+        fatal = deterministic_gaps(doc, computable)
+        audit_gaps, covered, coherence = [], None, []
+        if not fatal:
+            audit_gaps, covered = audit_coverage_structured(
+                client, story, doc, computable, log_fn)
+        if not fatal:
+            coherence = coherence_gaps(doc)
+
+        parametric = [g for g in (audit_gaps or [])
+                      if g["classification"] == "PARAMETRIC"]
+        notes = [g for g in (audit_gaps or [])
+                 if g["classification"] in ("VOCAB_GAP", "QUALIFIER")]
+        zero_coverage = (audit_gaps is not None and computable
+                         and not covered)
+
+        if not fatal and not parametric and not coherence and not zero_coverage:
+            _log_notes(notes, log_fn)
+            if redrafted:
+                return doc, "redrafted"
+            return doc, ("proceeded_with_notes" if notes else "clean")
+
         if attempt < MAX_COVERAGE_REDRAFTS:
-            log_fn(f"Coverage guard: {len(gaps)} gap(s); corrective re-draft...")
-            for g in gaps:
-                log_fn(f"  - {g}")
-            notes = (decisions_text or ""
-                     + "\n\nCOVERAGE GAPS - the criteria above were rejected "
-                     "because they do not express these claims. Add criteria "
-                     "(with proper checks and parameters) that would FAIL if "
-                     "each claim below were false:\n- "
-                     + "\n- ".join(gaps))
-            doc = draft_criteria(client, story, notes, log_fn=log_fn)
-            redrafted = True
-    log_fn("Coverage guard: gaps persist after corrective re-draft.")
-    return doc, "uncovered"
+            feedback = list(fatal) + list(coherence) + \
+                [format_gap(g) for g in parametric]
+            if zero_coverage:
+                feedback.append(
+                    "The criteria express NONE of the story's computable "
+                    "claims. Add criteria (with proper checks and "
+                    "parameters) that would FAIL if each claim were false.")
+            if feedback:
+                log_fn(f"Coverage guard: {len(feedback)} gap(s); "
+                       "corrective re-draft...")
+                for g in feedback:
+                    log_fn(f"  - {g}")
+                notes_text = (decisions_text or ""
+                              + "\n\nCOVERAGE GAPS - the criteria above were "
+                              "rejected because they do not express these "
+                              "claims. Add criteria that would FAIL if each "
+                              "claim below were false:\n- "
+                              + "\n- ".join(feedback))
+                doc = draft_criteria(client, story, notes_text,
+                                     log_fn=log_fn)
+                redrafted = True
+                continue
+
+        # redraft budget exhausted (or nothing actionable to redraft on)
+        if fatal or zero_coverage or coherence:
+            log_fn("Coverage guard: blocking gaps persist after "
+                   "corrective re-draft.")
+            return doc, "uncovered"
+        _log_notes(notes + parametric, log_fn)
+        return doc, "proceeded_with_notes"
+
+
+def _log_notes(gaps, log_fn):
+    """VOCAB_GAP/QUALIFIER items surface as notes, never as failures."""
+    if not gaps:
+        return
+    log_fn(f"Coverage guard: {len(gaps)} note(s) - proceeding:")
+    for g in gaps:
+        log_fn(f"  [note] {format_gap(g)}")
 
 
 def draft_criteria(client, story, decisions_text="", criteria_path=None, log_fn=print):

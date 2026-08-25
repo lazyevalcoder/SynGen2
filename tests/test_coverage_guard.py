@@ -92,6 +92,30 @@ def test_audit_fails_open_on_unparsable_output():
     assert gaps == []
 
 
+def test_enforce_escalates_when_zero_coverage_persists():
+    # plausible-looking criteria that pass the deterministic rules but
+    # express none of the claims (the live #9/#13 shape): near-zero
+    # coverage is the one LLM-audit shape that still escalates
+    off_target = {"definitions": {}, "criteria": [
+        {"id": "AC1", "name": "win rate", "check": "win_rate_flat",
+         "params": {"band_pp": 10}, "source_claim": "narrative"},
+        {"id": "AC2", "name": "sanity", "check": "data_sanity",
+         "params": {}, "source_claim": "realism"},
+    ]}
+    uncovered = llm_json({"uncovered": [
+        {"claim": "c", "classification": "VOCAB_GAP", "existing_check": None,
+         "reason": "r"}],
+        "covered": []})
+    client = FakeLLM([
+        uncovered,                 # initial audit: nothing covered
+        llm_json(off_target),      # corrective re-draft misses again
+        uncovered,                 # re-audit still fails
+    ])
+    doc, status = enforce_coverage(client, "story", off_target, CLAIMS,
+                                   log_fn=lambda *_: None)
+    assert status == "uncovered"
+
+
 def test_enforce_redrafts_once_and_passes():
     # generic-only doc -> deterministic gap fires immediately (no audit
     # call); corrective re-draft -> re-audit covers
@@ -104,25 +128,125 @@ def test_enforce_redrafts_once_and_passes():
     assert status == "redrafted"
     assert {c["check"] for c in doc["criteria"]} >= {
         "unowned_account_share"}
+    assert len(client.calls) == 2
 
 
-def test_enforce_escalates_when_gaps_persist():
-    # plausible-looking criteria that pass the deterministic rules but
-    # express none of the claims (the live #9/#13 shape)
-    off_target = {"definitions": {}, "criteria": [
-        {"id": "AC1", "name": "win rate", "check": "win_rate_flat",
-         "params": {"band_pp": 10}, "source_claim": "narrative"},
-        {"id": "AC2", "name": "sanity", "check": "data_sanity",
-         "params": {}, "source_claim": "realism"},
+def test_vocab_gap_never_blocks_a_flight():
+    # benchmark scenario_17/01/02 shape: real criteria cover most claims;
+    # one claim needs a metric primitive that does not exist -> NOTE
+    audit = llm_json({"uncovered": [
+        {"claim": "commit definition loosened",
+         "classification": "VOCAB_GAP", "existing_check": None,
+         "reason": "no stage-composition check exists"}],
+        "covered": ["unowned accounts ballooned in H2",
+                    "changed-owner revenue collapsed"]})
+    client = FakeLLM([audit])
+    logs = []
+    doc, status = enforce_coverage(client, "story", REAL_CRITERIA, CLAIMS,
+                                   log_fn=logs.append)
+    assert status == "proceeded_with_notes"
+    assert any("VOCAB_GAP" in line for line in logs)
+    assert len(client.calls) == 1
+
+
+def test_qualifier_pedantry_never_blocks_a_flight():
+    # benchmark scenario_04/F5.1 shape: substance covered, auditor demands
+    # a narrative qualifier
+    audit = llm_json({"uncovered": [
+        {"claim": "gaps concentrated in newly assigned Enterprise",
+         "classification": "QUALIFIER", "existing_check": None,
+         "reason": "qualifier not verified"}],
+        "covered": ["unowned accounts ballooned in H2",
+                    "changed-owner revenue collapsed"]})
+    client = FakeLLM([audit])
+    doc, status = enforce_coverage(client, "story", REAL_CRITERIA, CLAIMS,
+                                   log_fn=lambda *_: None)
+    assert status == "proceeded_with_notes"
+
+
+def test_parametric_gap_triggers_bounded_redraft():
+    # benchmark F10.1 shape: direction inversion an EXISTING check can fix
+    bad_direction = {"definitions": {}, "criteria": [
+        {"id": "AC1", "name": "forecast vs actual",
+         "check": "forecast_vs_actual",
+         "params": {"target_pct": 108}, "source_claim": "n/a"}]}
+    fixed = REAL_CRITERIA
+    first = llm_json({"uncovered": [
+        {"claim": "changed-owner revenue collapsed",
+         "classification": "PARAMETRIC",
+         "existing_check": "post_change_revenue_decline",
+         "reason": "direction inverted; no decline criterion"}],
+        "covered": ["unowned accounts ballooned in H2"]})
+    second = llm_json({"uncovered": [], "covered": CLAIMS["claims"][0]["claim"]})
+    client = FakeLLM([first, llm_json(fixed), second])
+    doc, status = enforce_coverage(client, "story", bad_direction, CLAIMS,
+                                   log_fn=lambda *_: None)
+    assert status == "redrafted"
+    assert {c["check"] for c in doc["criteria"]} >= {
+        "post_change_revenue_decline"}
+
+
+def test_persistent_parametric_with_partial_coverage_proceeds():
+    # after the bounded redraft the parametric gap persists but other
+    # claims ARE covered: partial coverage flies with notes (doctrine)
+    persist = llm_json({"uncovered": [
+        {"claim": "changed-owner revenue collapsed",
+         "classification": "PARAMETRIC",
+         "existing_check": "post_change_revenue_decline",
+         "reason": "still missing"}],
+        "covered": ["unowned accounts ballooned in H2"]})
+    client = FakeLLM([persist, llm_json(REAL_CRITERIA), persist])
+    doc, status = enforce_coverage(client, "story", REAL_CRITERIA, CLAIMS,
+                                   log_fn=lambda *_: None)
+    assert status == "proceeded_with_notes"
+
+
+def test_hallucinated_check_name_degrades_to_vocab_gap():
+    # benchmark F9.2: auditor invented unowned_account_share for a
+    # portfolio-composition claim; must NOT trigger a redraft on a ghost
+    audit = llm_json({"uncovered": [
+        {"claim": "AEs over-indexed to mature accounts",
+         "classification": "PARAMETRIC",
+         "existing_check": "portfolio_maturity_mix",
+         "reason": "no criterion measures portfolio composition"}],
+        "covered": ["unowned accounts ballooned in H2",
+                    "changed-owner revenue collapsed"]})
+    client = FakeLLM([audit])
+    logs = []
+    doc, status = enforce_coverage(client, "story", REAL_CRITERIA, CLAIMS,
+                                   log_fn=logs.append)
+    assert status == "proceeded_with_notes"
+    assert any("non-existent check" in line for line in logs)
+
+
+def test_legacy_audit_format_still_understood():
+    # old-style suggested_check output maps to PARAMETRIC when the name is real
+    gaps = audit_coverage(
+        FakeLLM([llm_json({"uncovered": [
+            {"claim": "changed-owner revenue collapsed",
+             "reason": "no criterion measures owner-change cohorts",
+             "suggested_check": "post_change_revenue_decline"}],
+            "covered": ["unowned accounts"]})]),
+        "story text", GENERIC_ONLY,
+        ["unowned accounts", "changed-owner revenue collapsed"],
+        log_fn=lambda *_: None)
+    assert len(gaps) == 1
+    assert "PARAMETRIC" in gaps[0]
+    assert "post_change_revenue_decline" in gaps[0]
+
+
+def test_coherence_persistence_escalates_even_with_coverage():
+    impossible = {"definitions": {}, "criteria": [
+        {"id": "AC1", "name": "enterprise plan", "check": "revenue_vs_plan",
+         "params": {"segment": "Enterprise", "target_pct": 88, "band_pct": 2}},
+        {"id": "AC2", "name": "company plan", "check": "revenue_vs_plan",
+         "params": {"segment": "_all_", "target_pct": 110, "band_pct": 2}},
     ]}
-    uncovered = llm_json({"uncovered": [{"claim": "c", "reason": "r"}],
-                          "covered": []})
-    client = FakeLLM([
-        uncovered,                 # initial audit: uncovered
-        llm_json(off_target),      # corrective re-draft misses again
-        uncovered,                 # re-audit still fails
-    ])
-    doc, status = enforce_coverage(client, "story", off_target, CLAIMS,
+    clean_audit = llm_json({"uncovered": [],
+                            "covered": [c["claim"] for c in CLAIMS["claims"]
+                                        if c["classification"] == "COMPUTABLE"]})
+    client = FakeLLM([clean_audit, llm_json(impossible), clean_audit])
+    doc, status = enforce_coverage(client, "story", impossible, CLAIMS,
                                    log_fn=lambda *_: None)
     assert status == "uncovered"
 
