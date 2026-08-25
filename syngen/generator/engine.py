@@ -419,7 +419,9 @@ def build_opportunities(cfg, accounts_df, rng, ownership=None):
         # rounding would break the derived-field identity by up to
         # multiplier * $0.005 (caught by test).
         if outliers and n:
-            k = max(1, int(round(n * float(outliers["share"]))))
+            _share_q = outliers.get("share_by_quarter") or \
+                [outliers.get("share")] * len(quarters)
+            k = max(1, int(round(n * float(_share_q[qi]))))
             wh_rng = np.random.default_rng([int(cfg["seed"]), 3, qi])
             whale_local = wh_rng.choice(n, size=k, replace=False)
             mult = float(outliers["multiplier"])
@@ -733,13 +735,15 @@ def _outlier_mask(opp_df, cfg):
     if not spec:
         return None
     labels = cfg["time_model"]["quarter_labels"]
+    shares = spec.get("share_by_quarter") or \
+        [spec.get("share")] * len(labels)
     mask = pd.Series(False, index=opp_df.index)
     for qi, label in enumerate(labels):
         grp = opp_df.index[opp_df["fiscal_quarter"] == label]
         n = len(grp)
         if not n:
             continue
-        k = max(1, int(round(n * float(spec["share"]))))
+        k = max(1, int(round(n * float(shares[qi]))))
         k = min(k, n)
         wh_rng = np.random.default_rng([int(cfg["seed"]), 3, qi])
         pick = wh_rng.choice(n, size=k, replace=False)
@@ -771,6 +775,7 @@ def apply_raking(opp_df, cfg):
     quarters = cfg["time_model"]["quarter_labels"]
     dim, targets = _quota_dimension(cfg)
     attainment = cfg["quota"].get("attainment") or \
+        cfg["quota"].get(f"attainment_by_{dim}") or \
         cfg["quota"].get("attainment_by_segment", {})
     # WS8 mixtures (#25): optional EX-WHALE attainment - the story's
     # underlying (core) rate distinct from the headline number whales

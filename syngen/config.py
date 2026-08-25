@@ -178,9 +178,19 @@ def validate_simulator_doc(cfg, source="simulator"):
     out = cfg["opportunities"].get("outlier_deals")
     if out is not None:
         share = out.get("share")
-        multiplier = out.get("multiplier")
-        if share is None or not (0 < float(share) < 0.5):
+        share_q = out.get("share_by_quarter")
+        if share_q is not None:
+            if not isinstance(share_q, list) or len(share_q) != len(labels):
+                raise ConfigError(
+                    f"outlier_deals.share_by_quarter needs one value per "
+                    f"quarter ({len(labels)} expected)")
+            if any(not (0 <= float(v) < 0.5) for v in share_q):
+                raise ConfigError(
+                    "outlier_deals.share_by_quarter values must be within "
+                    "[0, 0.5)")
+        elif share is None or not (0 < float(share) < 0.5):
             raise ConfigError("outlier_deals.share must be between 0 and 0.5")
+        multiplier = out.get("multiplier")
         if multiplier is None or float(multiplier) <= 1:
             raise ConfigError("outlier_deals.multiplier must be > 1")
 

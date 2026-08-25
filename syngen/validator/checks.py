@@ -909,8 +909,10 @@ def check_unowned_account_share(opp, accounts, params):
 
 def check_post_change_revenue_decline(opp, accounts, params):
     """WS7 (#9): accounts whose owner changed in the last recorded
-    transition must show a mean won-revenue change (last vs previous
-    quarter) at least min_gap_pp below stable-owner accounts'."""
+    transition must show weaker won-revenue GROWTH (last vs previous
+    quarter) than stable-owner accounts. Growth is measured on each
+    GROUP'S AGGREGATE revenue (dollar-weighted) - mean of per-account
+    percentages is dominated by small-account noise."""
     own = params.get("_ownership_df")
     if own is None or not len(own):
         return _structural_no_ownership("revenue decline after change")
@@ -929,22 +931,29 @@ def check_post_change_revenue_decline(opp, accounts, params):
     won = won[won["fiscal_quarter"].isin([prev_q, last_q])]
     per_acct = won.pivot_table(index="account_id", columns="fiscal_quarter",
                                values="realized_price", aggfunc="sum") \
-        .reindex(columns=[prev_q, last_q])
-    per_acct = per_acct.dropna()  # both quarters must have revenue
-    if not len(per_acct):
-        return _result(False, "no comparable accounts", "-",
-                       "no account has closed-won revenue in both "
-                       f"{prev_q} and {last_q}", -1.0)
-    change = (per_acct[last_q] - per_acct[prev_q]) / per_acct[prev_q] * 100
+        .reindex(columns=[prev_q, last_q]).fillna(0.0)
     ch_mask = per_acct.index.isin(changed)
-    changed_mean = float(change[ch_mask].mean()) if ch_mask.any() else 0.0
-    stable_mean = float(change[~ch_mask].mean()) if (~ch_mask).any() else 0.0
-    gap = stable_mean - changed_mean  # positive = changers declined more
+    if not len(per_acct) or per_acct[prev_q].sum() <= 0:
+        return _result(False, "no comparable accounts", "-",
+                       f"no closed-won revenue in {prev_q}", -1.0)
+
+    def _growth(mask):
+        base = float(per_acct.loc[mask, prev_q].sum())
+        return ((float(per_acct.loc[mask, last_q].sum()) / base) - 1.0) * 100 \
+            if base > 0 else float("nan")
+
+    changed_growth = _growth(ch_mask)
+    stable_growth = _growth(~ch_mask)
+    n_ch, n_st = int(ch_mask.sum()), int((~ch_mask).sum())
+    if pd.isna(stable_growth):
+        # nobody is stable: compare changers against flat zero instead
+        stable_growth = 0.0
+    gap = stable_growth - changed_growth
     need = float(params["min_gap_pp"])
-    detail = (f"{int(ch_mask.sum())} changed-owner accounts "
-              f"{changed_mean:+.1f}% vs {int((~ch_mask).sum())} stable "
-              f"{stable_mean:+.1f}% ({prev_q} -> {last_q})")
-    display = f"{changed_mean:+.1f}% vs {stable_mean:+.1f}%"
+    detail = (f"{n_ch} changed-owner accounts {changed_growth:+.1f}% vs "
+              f"{n_st} stable {stable_growth:+.1f}% aggregate growth "
+              f"({prev_q} -> {last_q})")
+    display = f"{changed_growth:+.1f}% vs {stable_growth:+.1f}%"
     return _result(gap >= need, display, f"gap >= {need:g}pp",
                    detail, gap - need)
 
@@ -1078,6 +1087,45 @@ def check_elasticity_differential(opp, accounts, params):
                    f">= {need:g}pp gap", detail, gap - need)
 
 
+def check_activity_potential_misalignment(opp, accounts, params):
+    """WS7 (#13): activity aimed away from potential. Accounts are split
+    at the median market potential; the LOW-potential half's share of all
+    recorded touches must exceed its fair share (its share of ACCOUNT
+    COUNT) by at least min_gap_pp - effort flowing toward accounts that
+    hold below-average potential."""
+    act = params.get("_activity_df")
+    if act is None or not len(act):
+        r = _result(False, "no account_activity sheet", "-",
+                    "criterion requires an activity block in simulator.json",
+                    -1.0)
+        r["structural"] = True
+        return r
+    if "market_potential_usd" not in accounts.columns:
+        r = _result(False, "no market_potential_usd column", "-",
+                    "criterion requires account market potential", -1.0)
+        r["structural"] = True
+        return r
+    pot = accounts.set_index("account_id")["market_potential_usd"]
+    med = pot.median()
+    hi_ids = set(pot[pot > med].index)
+    touches = act.groupby("account_id")["touches"].sum()
+    total_t = float(touches.sum())
+    if total_t <= 0:
+        return _result(False, "no activity", "-", "empty activity sheet",
+                       -1.0)
+    lo_t = float(touches[~touches.index.isin(hi_ids)].sum())
+    n_lo = float(len(pot) - len(hi_ids))
+    fair_share = n_lo / len(pot) * 100  # 50% at an even median split
+    t_share = lo_t / total_t * 100
+    gap = t_share - fair_share
+    need = float(params["min_gap_pp"])
+    detail = (f"low-potential half ({n_lo:.0f} accounts, {fair_share:.0f}% "
+              f"fair share) receives {t_share:.1f}% of all touches")
+    return _result(gap >= need, f"{gap:+.1f}pp misalignment",
+                   f">= {need:g}pp toward low potential", detail,
+                   gap - need)
+
+
 CHECKS = {
     'win_rate_flat': check_win_rate_flat,
     'avg_discount_quarter': check_avg_discount_quarter,
@@ -1111,4 +1159,5 @@ CHECKS = {
     'commit_no_engagement_share': check_commit_no_engagement_share,
     'core_vs_headline_growth': check_core_vs_headline_growth,
     'elasticity_differential': check_elasticity_differential,
+    'activity_potential_misalignment': check_activity_potential_misalignment,
 }

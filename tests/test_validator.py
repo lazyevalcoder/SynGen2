@@ -68,6 +68,9 @@ CRITERIA_PARAMS = {
     "core_vs_headline_growth": {"min_headline_growth_pct": -100.0,
                                 "max_core_growth_pct": 100.0},
     "elasticity_differential": {"min_gap_pp": -10_000.0},
+    # WS7 activity alignment: flat fixture touches -> zero tilt, so a
+    # negative band passes with positive margin
+    "activity_potential_misalignment": {"min_gap_pp": -10_000.0},
 }
 
 
@@ -302,6 +305,16 @@ def run_check(name, opp, accounts):
         opp2["in_commit"] = opp2["stage"] == "Closed Won"
         params["min_share_pct"] = 50.0
         return CHECKS[name](opp2, accounts, params)
+    if name == "activity_potential_misalignment":
+        acc2 = accounts.copy()
+        pot_rng = np.random.default_rng(7)
+        acc2["market_potential_usd"] = pot_rng.uniform(
+            10_000, 900_000, len(acc2))
+        act_rows = [{"account_id": a, "fiscal_quarter": q, "touches": 5}
+                    for a in sorted(accounts["account_id"].unique())
+                    for q in ["FY26-Q1", "FY26-Q2", "FY26-Q3", "FY26-Q4"]]
+        params["_activity_df"] = pd.DataFrame(act_rows)
+        return CHECKS[name](opp, acc2, params)
     if name == "elasticity_differential":
         # synthetic potential so the differential arithmetic runs; the
         # huge negative band tolerates the fixture's random conversion

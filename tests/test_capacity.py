@@ -636,6 +636,25 @@ def test_negative_tilt_points_activity_at_low_potential():
     assert bottom_share(2.5) < 45
 
 
+def test_activity_misalignment_check_two_directions():
+    from syngen.validator.checks import CHECKS
+    cfg = validate_simulator_doc(base_cfg(validate=False, **{
+        "activity": {"mean_touches_per_account_by_quarter": [5.0, 5.0],
+                     "potential_tilt": -2.5}}))
+    frames = generate(cfg)
+    r = CHECKS["activity_potential_misalignment"](
+        frames["opportunities"], frames["accounts"],
+        {"_activity_df": frames["account_activity"], "min_gap_pp": 15.0})
+    assert r["ok"], r["detail"]
+    flat = validate_simulator_doc(base_cfg(validate=False, **{
+        "activity": {"mean_touches_per_account_by_quarter": [5.0, 5.0]}}))
+    f2 = generate(flat)
+    r2 = CHECKS["activity_potential_misalignment"](
+        f2["opportunities"], f2["accounts"],
+        {"_activity_df": f2["account_activity"], "min_gap_pp": 15.0})
+    assert not r2["ok"]
+
+
 def test_forecast_snapshot_and_commit_flags():
     frames = generate(base_cfg(**ACTIVITY))
     fc = frames["forecast_snapshot"]
@@ -907,3 +926,24 @@ def test_core_vs_headline_structural_without_outliers(tmp_path):
     results, _ = _validate(tmp_path, base_cfg(), criteria)
     assert results[0]["verdict"] == "FAIL"
     assert "outlier_deals" in results[0]["detail"]
+
+
+def test_outlier_share_by_quarter_concentrates_whales_late():
+    """#17 lever: whales concentrated in the back half while core volume
+    shrinks -> headline grows, core declines."""
+    from syngen.validator.checks import CHECKS
+    cfg = base_cfg(validate=False)
+    cfg["opportunities"]["volume_multipliers"] = [1.0, 0.85]
+    cfg["opportunities"]["outlier_deals"] = {
+        "share_by_quarter": [0.01, 0.05],
+        "multiplier": 25}
+    frames = generate(validate_simulator_doc(cfg))
+    opp = frames["opportunities"]
+    r = CHECKS["core_vs_headline_growth"](
+        opp, frames["accounts"],
+        {"min_headline_growth_pct": 10, "max_core_growth_pct": -3})
+    assert r["ok"], r["detail"]
+    # replay consistency: is_outlier matches the per-quarter shares
+    for label, share in zip(["FY26-Q1", "FY26-Q2"], [0.01, 0.05]):
+        q = opp[opp["fiscal_quarter"] == label]
+        assert q["is_outlier"].mean() == pytest.approx(share, abs=0.01)
