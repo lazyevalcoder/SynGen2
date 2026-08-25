@@ -1,0 +1,46 @@
+{
+  "version": "0.1.0",
+  "note": "Claim matrix v0 (M6 P1): canonical claim cells {entity x metric x cohort} bound to proof checks and solver families. One cell per check; KPI names match docs/ENTITY_SCHEMA.md section 6. Vocabulary gaps are deliberately NOT cells - they live in ENTITY_SCHEMA.md section 7 until implemented.",
+  "cells": [
+    {"id": "opportunity.win_rate.closed", "kpi": "win_rate", "entity": "opportunity", "metric": "level", "cohort": "closed", "direction": "flat", "checks": ["win_rate_flat"], "solved_by": []},
+    {"id": "opportunity.creation_volume.all", "kpi": "creation_volume", "entity": "opportunity", "metric": "trend", "cohort": "all", "direction": null, "checks": ["creation_volume_trend"], "solved_by": []},
+    {"id": "opportunity.deal_size.all", "kpi": "deal_size", "entity": "opportunity", "metric": "trend", "cohort": "all", "direction": null, "checks": ["deal_size_trend"], "solved_by": ["concentration"]},
+    {"id": "opportunity.revenue_concentration.all", "kpi": "revenue_concentration", "entity": "opportunity", "metric": "concentration", "cohort": "won", "direction": "up", "checks": ["revenue_concentration"], "solved_by": ["concentration"]},
+    {"id": "opportunity.icp_creation_share.all", "kpi": "icp_creation_shift", "entity": "opportunity", "metric": "share", "cohort": "all", "direction": null, "checks": ["icp_creation_shift"], "solved_by": []},
+
+    {"id": "opportunity.avg_discount.won", "kpi": "average_discount", "entity": "opportunity", "metric": "level", "cohort": "won", "direction": null, "checks": ["avg_discount_quarter"], "solved_by": ["discount_path"]},
+    {"id": "opportunity.discount_trend.won", "kpi": "discount_trend", "entity": "opportunity", "metric": "trend", "cohort": "won", "direction": null, "checks": ["discount_trend_monotonic"], "solved_by": []},
+    {"id": "opportunity.region_price_premium.won", "kpi": "regional_price_premium", "entity": "opportunity", "metric": "divergence", "cohort": "won", "dimension": "region", "direction": null, "checks": ["region_discount_premium"], "solved_by": ["discount_path"]},
+    {"id": "opportunity.realized_vs_list.won", "kpi": "realized_vs_list", "entity": "opportunity", "metric": "ratio", "cohort": "won", "direction": null, "checks": ["realized_vs_list"], "solved_by": ["discount_path"]},
+    {"id": "opportunity.price_by_tier.won", "kpi": "price_by_tier", "entity": "product", "metric": "level", "cohort": "won", "dimension": "product_tier", "direction": null, "checks": ["avg_price_by_tier"], "solved_by": ["price_solve"]},
+    {"id": "opportunity.tier_share_shift.all", "kpi": "tier_share_shift", "entity": "product", "metric": "share", "cohort": "all", "dimension": "product_tier", "direction": null, "checks": ["tier_share_shift"], "solved_by": ["tier_mix"]},
+    {"id": "opportunity.discount_margin_link.won", "kpi": "discount_margin_link", "entity": "opportunity", "metric": "correlation", "cohort": "won", "direction": null, "checks": ["discount_margin_link"], "solved_by": ["margin"]},
+    {"id": "opportunity.blended_margin.all", "kpi": "blended_margin", "entity": "opportunity", "metric": "trend", "cohort": "won", "direction": null, "checks": ["blended_margin_trend"], "solved_by": ["margin"]},
+    {"id": "opportunity.elasticity_differential.segment", "kpi": "elasticity_differential", "entity": "opportunity", "metric": "divergence", "cohort": "won", "dimension": "segment", "direction": null, "checks": ["elasticity_differential"], "solved_by": ["pricing_response"]},
+    {"id": "opportunity.eoq_close_timing.all", "kpi": "end_of_quarter_effect", "entity": "opportunity", "metric": "timing", "cohort": "closed", "direction": null, "checks": ["end_of_quarter_effect"], "solved_by": []},
+
+    {"id": "pipeline.coverage.open", "kpi": "pipeline_coverage", "entity": "opportunity", "metric": "ratio", "cohort": "open_pipeline", "dimension": "quota_plan", "direction": null, "checks": ["coverage_ratio"], "solved_by": ["pipeline_joint"]},
+    {"id": "pipeline.cycle_length.closed", "kpi": "sales_cycle", "entity": "opportunity", "metric": "trend", "cohort": "closed", "direction": null, "checks": ["cycle_length_trend"], "solved_by": []},
+    {"id": "pipeline.stage_aging.open", "kpi": "stage_aging", "entity": "stage_history", "metric": "aging", "cohort": "open_pipeline", "direction": null, "checks": ["stage_aging"], "solved_by": ["pipeline_joint"]},
+    {"id": "pipeline.slippage.open", "kpi": "slippage_rate", "entity": "opportunity", "metric": "trend", "cohort": "open_pipeline", "direction": null, "checks": ["slippage_trend"], "solved_by": ["pipeline_joint"]},
+    {"id": "pipeline.concentration.open", "kpi": "pipeline_concentration", "entity": "opportunity", "metric": "concentration", "cohort": "open_pipeline", "dimension": "account", "direction": "up", "checks": ["pipeline_concentration"], "solved_by": ["concentration"]},
+
+    {"id": "quota.attainment.plan_unit", "kpi": "plan_attainment", "entity": "quota", "metric": "ratio", "cohort": "won", "dimension": "plan_unit", "direction": null, "checks": ["revenue_vs_plan"], "solved_by": ["planning"]},
+    {"id": "capacity.effective_capacity.unit_quarter", "kpi": "effective_capacity", "entity": "rep", "metric": "level", "cohort": "all", "dimension": "plan_unit", "direction": "flat", "checks": ["effective_capacity"], "solved_by": ["capacity_synthesis"]},
+    {"id": "capacity.headcount_growth_placement.unit", "kpi": "headcount_growth_placement", "entity": "rep", "metric": "correlation", "cohort": "all", "dimension": "plan_unit", "direction": null, "checks": ["headcount_growth_placement"], "solved_by": ["capacity_synthesis"]},
+    {"id": "ownership.unowned_share.account", "kpi": "unowned_share", "entity": "ownership_history", "metric": "share", "cohort": "all", "dimension": "account", "direction": "down", "checks": ["unowned_account_share"], "solved_by": ["block_synthesis"]},
+    {"id": "territory.quota_vs_potential.territory", "kpi": "quota_vs_potential", "entity": "territory", "metric": "ratio", "cohort": "all", "dimension": "territory", "direction": null, "checks": ["quota_vs_potential"], "solved_by": ["planning"]},
+
+    {"id": "whitespace.potential_coverage_gap.high_potential", "kpi": "potential_coverage_gap", "entity": "penetration_whitespace", "metric": "share", "cohort": "open_pipeline", "dimension": "account_potential_rank", "direction": null, "checks": ["potential_coverage_gap"], "solved_by": ["block_synthesis"]},
+    {"id": "whitespace.gap_concentration.bottom_territories", "kpi": "gap_concentration", "entity": "penetration_whitespace", "metric": "concentration", "cohort": "open_pipeline", "direction": "up", "checks": ["gap_concentration"], "solved_by": []},
+
+    {"id": "forecast.commit_vs_actual.quarter", "kpi": "forecast_vs_actual", "entity": "forecast_snapshot", "metric": "ratio", "cohort": "all", "dimension": "quarter", "direction": null, "checks": ["forecast_vs_actual"], "solved_by": ["block_synthesis"]},
+    {"id": "commit.commit_no_engagement.won_commit", "kpi": "commit_engagement", "entity": "opportunity", "metric": "share", "cohort": "in_commit", "direction": "down", "checks": ["commit_no_engagement_share"], "solved_by": ["commit_flags"]},
+    {"id": "growth.core_vs_headline.ex_outlier", "kpi": "core_vs_headline_growth", "entity": "opportunity", "metric": "divergence", "cohort": "ex_outlier", "direction": null, "checks": ["core_vs_headline_growth"], "solved_by": ["whale_sizing"]},
+
+    {"id": "ownership.post_change_revenue.changed_accounts", "kpi": "post_change_revenue", "entity": "ownership_history", "metric": "trend", "cohort": "closed", "direction": "down", "checks": ["post_change_revenue_decline"], "solved_by": ["ownership_synthesis"]},
+    {"id": "activity.potential_alignment.low_half", "kpi": "activity_potential_alignment", "entity": "activity", "metric": "divergence", "cohort": "all", "dimension": "account_potential_rank", "direction": "down", "checks": ["activity_potential_misalignment"], "solved_by": ["activity_synthesis"]},
+
+    {"id": "hygiene.data_sanity.all", "kpi": "data_sanity", "entity": "opportunity", "metric": "generic", "cohort": "all", "direction": null, "checks": ["data_sanity"], "generic": true, "solved_by": []}
+  ]
+}

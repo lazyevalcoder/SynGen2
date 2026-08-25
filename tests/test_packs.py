@@ -1,19 +1,22 @@
-"""Domain pack loader and manifest validation (M6 P0)."""
+"""Domain pack loader and manifest validation (M6 P0/P1)."""
 import json
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from syngen.packs import (
     DomainPack,
+    PackTaxonomy,
     PackValidationError,
     load_pack,
     resolve_pack_path,
 )
 from syngen.packs.loader import ensure_valid, parse_manifest, validate_against_kernel
+from syngen.packs.cohorts import UnknownCohortError, apply, combined_mask, describe, mask
 
 REPO_PACK = Path(__file__).resolve().parents[1] / "packs" / "revops"
 
@@ -54,6 +57,10 @@ def _write_pack(tmp_path, **overrides):
     d = tmp_path / "pack_under_test"
     d.mkdir()
     (d / "pack.json").write_text(json.dumps(base), encoding="utf-8")
+    (d / "claims").mkdir()
+    (d / "claims" / "matrix.json").write_text(
+        (REPO_PACK / "claims" / "matrix.json").read_text(encoding="utf-8"),
+        encoding="utf-8")
     return d
 
 
@@ -75,11 +82,11 @@ def test_missing_prompt_fragment_is_hard_error(tmp_path):
         ensure_valid(pack_dir)
 
 
-def test_kernel_extra_checks_surface_as_warnings_not_errors(tmp_path):
+def test_kernel_extra_checks_surface_as_warnings_not_errors():
     trimmed = [c for c in load_pack(REPO_PACK).checks if c != "data_sanity"]
     pack = parse_manifest(
         {**json.loads((REPO_PACK / "pack.json").read_text(encoding="utf-8")),
-         "checks": trimmed}
+         "checks": trimmed, "claims_matrix": None}
     )
     errors, warnings = validate_against_kernel(pack)
     assert errors == []
@@ -133,3 +140,135 @@ def test_resolve_default_path():
 def test_missing_manifest_rejected(tmp_path):
     with pytest.raises(PackValidationError, match="not found"):
         load_pack(tmp_path)
+
+
+# --- claim matrix (M6 P1) ----------------------------------------------------
+
+
+def test_repo_matrix_loads_and_covers_every_check():
+    from syngen.validator.checks import CHECKS
+
+    pack = load_pack(REPO_PACK)
+    assert isinstance(pack.claims_matrix, dict)
+    cells = pack.claims_matrix["cells"]
+    assert len(cells) == len(CHECKS)
+    errors, warnings = validate_against_kernel(pack)
+    assert errors == []
+    assert warnings == []
+    proven = {c for cell in cells for c in cell["checks"]}
+    assert proven == set(CHECKS)
+
+
+def test_taxonomy_adapter_roundtrip(revops):
+    taxonomy = PackTaxonomy(revops)
+    assert len(taxonomy.cells()) == 33
+    hits = taxonomy.cells_for_check("revenue_vs_plan")
+    assert hits and hits[0]["kpi"] == "plan_attainment"
+    assert "ex_outlier" in taxonomy.cohorts()
+
+
+def test_matrix_file_reference_resolved_relative_to_manifest():
+    pack = load_pack(REPO_PACK)
+    assert pack.claims_matrix_path.endswith("matrix.json")
+    assert isinstance(pack.claims_matrix["cells"], list)
+
+
+def _write_matrix_variant(tmp_path, mutate):
+    base = json.loads((REPO_PACK / "claims" / "matrix.json").read_text(encoding="utf-8"))
+    mutate(base)
+    d = _write_pack(tmp_path)
+    (d / "claims" / "matrix.json").write_text(json.dumps(base), encoding="utf-8")
+    return d
+
+
+def test_duplicate_cell_id_rejected(tmp_path):
+    def dup(m):
+        m["cells"].append(dict(m["cells"][0]))
+    with pytest.raises(PackValidationError, match="duplicated"):
+        ensure_valid(_write_matrix_variant(tmp_path, dup))
+
+
+def test_unknown_check_in_cell_rejected(tmp_path):
+    def bad(m):
+        m["cells"][0]["checks"] = ["no_such_check"]
+        m["cells"][0]["id"] = "x.unique.id"
+    with pytest.raises(PackValidationError, match="unknown check"):
+        ensure_valid(_write_matrix_variant(tmp_path, bad))
+
+
+def test_unknown_entity_in_cell_rejected(tmp_path):
+    def bad(m):
+        m["cells"][0]["entity"] = "unicorn"
+        m["cells"][0]["id"] = "x.unique.id"
+    with pytest.raises(PackValidationError, match="unknown entity"):
+        ensure_valid(_write_matrix_variant(tmp_path, bad))
+
+
+def test_unknown_cohort_in_cell_rejected(tmp_path):
+    def bad(m):
+        m["cells"][0]["cohort"] = "left_handed_accounts"
+        m["cells"][0]["id"] = "x.unique.id"
+    with pytest.raises(PackValidationError, match="unknown cohort"):
+        ensure_valid(_write_matrix_variant(tmp_path, bad))
+
+
+def test_unknown_metric_in_cell_rejected(tmp_path):
+    def bad(m):
+        m["cells"][0]["metric"] = "vibes"
+        m["cells"][0]["id"] = "x.unique.id"
+    with pytest.raises(PackValidationError, match="unknown metric"):
+        ensure_valid(_write_matrix_variant(tmp_path, bad))
+
+
+def test_uncovered_check_surfaces_as_warning(tmp_path):
+    def drop_last(m):
+        m["cells"] = [c for c in m["cells"] if c["checks"] != ["data_sanity"]]
+    pack = load_pack(_write_matrix_variant(tmp_path, drop_last))
+    _, warnings = validate_against_kernel(pack)
+    assert any("data_sanity" in w for w in warnings)
+
+
+def test_generic_flag_marks_hygiene_cell(revops):
+    taxonomy = PackTaxonomy(revops)
+    sanity = taxonomy.cells()["hygiene.data_sanity.all"]
+    assert sanity.get("generic") is True
+
+
+# --- cohort algebra ----------------------------------------------------------
+
+
+def _sample_frame():
+    return pd.DataFrame({
+        "stage": ["Closed Won", "Closed Lost", "Proposal", "Negotiation"],
+        "is_outlier": [True, False, False, False],
+        "icp": [True, False, True, False],
+        "in_commit": [True, None, None, None],
+    })
+
+
+def test_cohort_masks_basic_partitions():
+    df = _sample_frame()
+    assert mask(df, "won").tolist() == [True, False, False, False]
+    assert mask(df, "lost").tolist() == [False, True, False, False]
+    assert mask(df, "closed").tolist() == [True, True, False, False]
+    assert mask(df, "open_pipeline").tolist() == [False, False, True, True]
+    assert mask(df, "outliers").tolist() == [True, False, False, False]
+
+
+def test_missing_column_defaults_match_engine_semantics():
+    no_flags = pd.DataFrame({"stage": ["Closed Won", "Proposal"]})
+    assert mask(no_flags, "ex_outlier").all()
+    assert not mask(pd.DataFrame({"stage": ["Closed Won"]}), "in_commit").any()
+
+
+def test_combined_mask_is_conjunction():
+    df = _sample_frame()
+    got = combined_mask(df, ["closed", "ex_outlier"])
+    assert got.tolist() == [False, True, False, False]
+    assert len(apply(df, ["icp"])) == 2
+
+
+def test_unknown_cohort_raises_with_known_names():
+    with pytest.raises(UnknownCohortError, match="known"):
+        mask(pd.DataFrame({"a": [1]}), "bogus")
+    assert "open_pipeline" in describe()

@@ -23,6 +23,12 @@ KNOWN_MANIFEST_KEYS = REQUIRED_MANIFEST_KEYS | {
 }
 LIST_MANIFEST_KEYS = ("blocks", "checks", "prompts", "cohorts", "solvers", "recipes", "examples")
 
+METRIC_VOCAB = frozenset({
+    "level", "trend", "share", "ratio", "divergence", "concentration",
+    "correlation", "timing", "aging", "composite", "generic",
+})
+DIRECTION_VOCAB = frozenset({"up", "down", "flat", None})
+
 
 class PackValidationError(ValueError):
     pass

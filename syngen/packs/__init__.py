@@ -16,11 +16,13 @@ from .api import (
     SolverPlugin,
 )
 from .loader import PackValidationError, load_pack, resolve_pack_path
+from .taxonomy import PackTaxonomy
 
 __all__ = [
     "CaseMemory",
     "ClaimTaxonomy",
     "DomainPack",
+    "PackTaxonomy",
     "PackValidationError",
     "ProofPlugin",
     "RecipeLibrary",

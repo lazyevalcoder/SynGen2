@@ -40,7 +40,18 @@ def load_pack(path=None):
         manifest = load_json(manifest_path)
     except ConfigError as exc:
         raise PackValidationError(str(exc)) from exc
-    return parse_manifest(manifest, path=str(manifest_path))
+    pack = parse_manifest(manifest, path=str(manifest_path))
+    if isinstance(pack.claims_matrix, str):
+        matrix_path = (manifest_path.parent / pack.claims_matrix).resolve()
+        if not matrix_path.exists():
+            raise PackValidationError(
+                f"{manifest_path}: claims_matrix file not found: {matrix_path}")
+        try:
+            pack.claims_matrix = load_json(matrix_path)
+        except ConfigError as exc:
+            raise PackValidationError(str(exc)) from exc
+        pack.claims_matrix_path = str(matrix_path)
+    return pack
 
 
 def parse_manifest(manifest, *, path="<manifest>"):
@@ -109,8 +120,8 @@ def parse_manifest(manifest, *, path="<manifest>"):
             )
 
     matrix = manifest.get("claims_matrix")
-    if matrix is not None and not isinstance(matrix, dict):
-        err("claims_matrix must be an object when present")
+    if matrix is not None and not isinstance(matrix, (dict, str)):
+        err("claims_matrix must be an object or a path string when present")
 
     if errors:
         raise PackValidationError("; ".join(errors))
@@ -172,12 +183,81 @@ def validate_against_kernel(pack):
         if not (PROMPT_DIR / f"{prompt}.txt").exists():
             errors.append(f"prompt fragment '{prompt}' does not exist")
 
+    matrix_errors, matrix_warnings = validate_claims_matrix(pack)
+    errors.extend(matrix_errors)
+    warnings.extend(matrix_warnings)
+
     if not _compat_satisfied(pack.kernel_compat):
         errors.append(
             f"pack requires kernel {pack.kernel_compat}; "
             f"this kernel may be incompatible"
         )
 
+    return errors, warnings
+
+
+def validate_claims_matrix(pack):
+    """Structural validation of the claim matrix against the pack.
+
+    Errors: malformed cells, unknown ids (entity/cohort/check), duplicate
+    cell ids, unknown metric/direction vocabulary.
+    Warnings: pack checks no cell proves; cells with no checks.
+    """
+    from .api import DIRECTION_VOCAB, METRIC_VOCAB
+    from .cohorts import names as cohort_names
+
+    errors, warnings = [], []
+    matrix = pack.claims_matrix
+    if not matrix:
+        warnings.append("pack declares no claim matrix")
+        return errors, warnings
+    if not isinstance(matrix, dict) or not isinstance(
+            matrix.get("cells"), list):
+        return [f"{pack.path}: claims_matrix must contain a 'cells' list"], []
+
+    seen_ids = set()
+    covered_checks = set()
+    entity_names = set(pack.entities)
+    known_cohorts = set(cohort_names())
+    for cell in matrix["cells"]:
+        cid = cell.get("id")
+        where = f"cell {cid!r}" if cid else "unnamed cell"
+        if not isinstance(cid, str) or not re.fullmatch(r"[a-z0-9_.]+", cid):
+            errors.append(f"{where}: invalid cell id")
+            continue
+        if cid in seen_ids:
+            errors.append(f"cell id duplicated: {cid}")
+        seen_ids.add(cid)
+        for key in ("kpi", "entity", "metric", "cohort"):
+            if not isinstance(cell.get(key), str) or not cell[key]:
+                errors.append(f"{where}: missing required field '{key}'")
+        if errors and where.startswith("cell None"):
+            continue
+        checks = cell.get("checks", [])
+        if not isinstance(checks, list) or not checks:
+            errors.append(f"{where}: 'checks' must be a non-empty list")
+            continue
+        if not all(isinstance(c, str) for c in checks):
+            errors.append(f"{where}: 'checks' entries must be strings")
+            continue
+        unknown_checks = [c for c in checks if c not in pack.checks]
+        if unknown_checks:
+            errors.append(f"{where}: unknown check(s): {', '.join(unknown_checks)}")
+        covered_checks.update(checks)
+        if cell.get("entity") not in entity_names:
+            errors.append(f"{where}: unknown entity '{cell.get('entity')}'")
+        if cell.get("cohort") not in known_cohorts:
+            errors.append(f"{where}: unknown cohort '{cell.get('cohort')}'")
+        if cell.get("metric") not in METRIC_VOCAB:
+            errors.append(f"{where}: unknown metric '{cell.get('metric')}'")
+        direction = cell.get("direction")
+        if direction is not None and direction not in DIRECTION_VOCAB:
+            errors.append(f"{where}: unknown direction {direction!r}")
+
+    uncovered = sorted(set(pack.checks) - covered_checks)
+    if uncovered:
+        warnings.append("checks proven by no matrix cell: "
+                        + ", ".join(uncovered))
     return errors, warnings
 
 

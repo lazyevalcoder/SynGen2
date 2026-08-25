@@ -94,5 +94,5 @@
   "solvers": [],
   "recipes": [],
   "examples": [],
-  "claims_matrix": null
+  "claims_matrix": "claims/matrix.json"
 }
