@@ -23,6 +23,9 @@ LLM proposal, exactly as stall recovery precedes calling maintenance:
 import copy
 import json
 from pathlib import Path
+
+import pandas as pd
+
 from syngen.config import ConfigError, validate_simulator_doc
 from syngen.generator.engine import generate_to_workbook
 from syngen.phases.json_task import chat_json
@@ -196,6 +199,79 @@ def _worst_margins(results, n=3):
     return ", ".join(f"{cid} {m:+.2f}" for cid, m in failing[:n])
 
 
+def _remedy_quota_potential(cfg, criteria_doc, results, workbook_path,
+                            log_fn, session):
+    """Bench s06 remedy (D2): quota_vs_potential failures are unfixable by
+    knob turns (plan levels are plan-of-record, potential is generated) -
+    but once the workbook exists, the unit's actual addressable market is
+    MEASURED data. Scale the named units' plan curves so
+    sum(targets)/sum(potential) lands exactly on the criterion's target
+    ratio. Deterministic, closed-form, one shot per session.
+
+    Returns a list of fix descriptions; None = no failing
+    quota_vs_potential criterion (cheap exit, no I/O); empty list =
+    measured but nothing applicable."""
+    wanted = {}
+    for c in criteria_doc.get("criteria", []):
+        if c["check"] == "quota_vs_potential" and \
+                any(r["id"] == c["id"] and r["verdict"] == "FAIL"
+                    for r in results):
+            p = c["params"]
+            dim = p.get("dimension", "territory")
+            wanted.setdefault(dim, []).append(p)
+    if not wanted:
+        return None
+    try:
+        accounts = pd.read_excel(workbook_path, sheet_name="accounts")
+    except Exception:  # noqa: BLE001 - no measurable sheet -> no remedy
+        return []
+    quota = cfg.get("quota") or {}
+    fixes = []
+    pot_col = "market_potential_usd"
+    if pot_col not in accounts.columns:
+        return []
+    for dim, params_list in wanted.items():
+        targets_map = (quota.get("by_territory") if dim == "territory"
+                       else quota.get("by_segment"))
+        if not targets_map:
+            continue
+        unit_col = dim
+        if unit_col not in accounts.columns:
+            continue
+        for p in params_list:
+            unit = p.get("unit")
+            if not unit or unit not in targets_map:
+                # a whole-dimension claim: scale every plan unit uniformly
+                # toward the target ratio using measured totals
+                unit_names = list(targets_map)
+            else:
+                unit_names = [unit]
+            want_ratio = float(p.get("target_ratio_pct", 100.0)) / 100.0
+            for u in unit_names:
+                pot_sum = float(
+                    accounts.loc[accounts[unit_col] == u, pot_col].sum())
+                curve = targets_map.get(u)
+                if pot_sum <= 0 or not curve:
+                    continue
+                cur_ratio = sum(float(v) for v in curve) / pot_sum
+                f = want_ratio / cur_ratio if cur_ratio > 0 else 1.0
+                if abs(1.0 - f) < 0.02:
+                    continue  # already inside any sane band
+                new_curve = [round(float(v) * f, 2) for v in curve]
+                targets_map[u] = new_curve
+                fixes.append(
+                    f"scaled '{u}' {dim} plan x{f:.2f} "
+                    f"(quota/potential {cur_ratio * 100:.0f}% -> "
+                    f"{want_ratio * 100:.0f}% of measured market)")
+    if fixes:
+        cfg["quota"] = quota
+        session.log("## AUTOPILOT: quota-vs-potential plan scaling\n"
+                    + "\n".join(f"- {x}" for x in fixes))
+        log_fn("AUTOPILOT: scaled plans against measured account "
+               "potential:\n" + "\n".join(f"  - {x}" for x in fixes))
+    return fixes
+
+
 def run_convergence(session, client, sim_path, criteria_path,
                     max_iterations=10, max_llm_proposals=5, log_fn=print,
                     thin_margin_pp=0.5, max_hardening_rounds=2):
@@ -218,8 +294,10 @@ def run_convergence(session, client, sim_path, criteria_path,
     history_lines = []
     remediations = []
     recal_done = False
+    qp_done = False
     seed_bump_done = False
     stall_count = 0
+    since_improve = 0
     last_score = None
     llm_proposals = 0
     prev_margins = {}
@@ -343,17 +421,21 @@ def run_convergence(session, client, sim_path, criteria_path,
         score = _score(results)
         if best_partial is None or score > best_partial["score"]:
             best_partial = {"cfg": copy.deepcopy(cfg), "score": score}
-        elif score < best_partial["score"]:
-            log_fn(f"Proposal regressed ({score[0]} vs "
-                   f"{best_partial['score'][0]} passing) - reverting to "
-                   "best partial state before next proposal.")
-            session.log(f"REGRESSION REVERTED after iteration {iteration}: "
-                        f"score={score} vs best={best_partial['score']}")
-            cfg.clear()
-            cfg.update(copy.deepcopy(best_partial["cfg"]))
-            history_lines.append(
-                f"iter {iteration}: REGRESSED to {score[0]} passing; "
-                f"reverted to {best_partial['score'][0]}-passing state")
+            since_improve = 0
+        else:
+            since_improve += 1
+            if score < best_partial["score"]:
+                log_fn(f"Proposal regressed ({score[0]} vs "
+                       f"{best_partial['score'][0]} passing) - reverting to "
+                       "best partial state before next proposal.")
+                session.log(f"REGRESSION REVERTED after iteration "
+                            f"{iteration}: score={score} vs "
+                            f"best={best_partial['score']}")
+                cfg.clear()
+                cfg.update(copy.deepcopy(best_partial["cfg"]))
+                history_lines.append(
+                    f"iter {iteration}: REGRESSED to {score[0]} passing; "
+                    f"reverted to {best_partial['score'][0]}-passing state")
 
         # --- stall telemetry (autopilot): identical score across
         # consecutive proposal cycles means knob turns are not moving
@@ -423,11 +505,39 @@ def run_convergence(session, client, sim_path, criteria_path,
                                       encoding="utf-8")
             continue
 
+        # --- AUTOPILOT remedy A2 (measured plan scaling): quota_vs_
+        # potential claims compare PLAN against GENERATED market potential
+        # - unfixable by knob turns, exact once the workbook exists.
+        # One attempt per session; None (cheap exit) while no such
+        # criterion is failing.
+        if not qp_done:
+            qp_fixes = _remedy_quota_potential(
+                cfg, criteria_doc, results, wb, log_fn, session)
+            if qp_fixes is not None:
+                qp_done = True
+            if qp_fixes:
+                remediations.append({"iteration": iteration,
+                                     "remedy": "quota_potential_scaling",
+                                     "fixes": qp_fixes})
+                history_lines.append(
+                    f"iter {iteration}: AUTOPILOT quota-vs-potential "
+                    f"scaling ({len(qp_fixes)} units)")
+                Path(sim_path).write_text(json.dumps(cfg, indent=2),
+                                          encoding="utf-8")
+                continue
+
         if stall_count >= 3:
             raise LoopEscalation(
                 f"stalled: {stall_count} consecutive proposals produced no "
                 f"score improvement; still failing: {failing}; worst "
                 f"margins: {_worst_margins(results)}",
+                results, history_lines)
+        if since_improve >= 6:
+            raise LoopEscalation(
+                f"oscillating: no net score improvement for {since_improve} "
+                f"iterations (proposals keep trading criteria against each "
+                f"other); still failing: {failing}; worst margins: "
+                f"{_worst_margins(results)}",
                 results, history_lines)
         if llm_proposals >= max_llm_proposals:
             raise LoopEscalation(

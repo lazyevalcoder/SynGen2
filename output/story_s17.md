@@ -1,0 +1,1 @@
+The region beat its annual plan, but the beat was driven entirely by a small number of unusually large deals that closed in the back half. Underneath the headline, the leading indicators had been deteriorating all year: core deal volume shrank and ex-outlier revenue declined quarter after quarter. The headline success masked a business that was getting weaker underneath.

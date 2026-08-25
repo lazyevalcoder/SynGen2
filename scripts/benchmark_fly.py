@@ -31,10 +31,13 @@ def main():
                     help="output directory for the benchmark report")
     ap.add_argument("--llm-config", default=None)
     ap.add_argument("--limit", type=int, default=0,
-                    help="fly only the first N scenarios (0 = all)")
+                    help="fly only N scenarios (0 = all)")
+    ap.add_argument("--offset", type=int, default=0,
+                    help="skip the first N scenarios in sorted order")
     args = ap.parse_args()
 
     stories = sorted(Path(args.stories_dir).glob("scenario_*"))
+    stories = stories[args.offset:]
     if args.limit:
         stories = stories[:args.limit]
     if not stories:
@@ -57,12 +60,14 @@ def main():
         report["scenario"] = folder.name
         report["elapsed_s"] = round(time.time() - t0, 1)
         reports.append(report)
+        # persist BEFORE printing: a cut/crash after the print line must
+        # never lose the flight record (bench s06 lesson)
+        (out_dir / f"{folder.name}_report.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8")
         print(f"{folder.name}: {report['status']} "
               f"({report.get('iterations', '-')} iters, "
               f"{report['elapsed_s']}s)"
               + (f" reason={report['reason']}" if report.get("reason") else ""))
-        (out_dir / f"{folder.name}_report.json").write_text(
-            json.dumps(report, indent=2), encoding="utf-8")
 
     summary = summarize_reports(reports)
     (out_dir / "benchmark_report.json").write_text(

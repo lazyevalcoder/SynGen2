@@ -532,7 +532,14 @@ def _autocalibrate_planning(cfg, criteria_doc, fixes):
             att[unit] = round(want, 4)
             fixes.append(f"planning: set '{unit}' attainment to {want:.2f}")
     if not gap_params and all_target is not None:
+        # Bench s06 lesson (D1): NEVER overwrite a unit whose attainment
+        # was explicitly pinned by a criterion earlier in this pass - the
+        # company-wide branch used to stomp 0.95/1.04 back to 1.00,
+        # sabotaging the recalibration that just happened. Fill only the
+        # units no criterion named.
         for unit in units:
+            if unit in unit_targets:
+                continue
             if abs(float(att.get(unit, 1.0)) - all_target) > 0.01:
                 att[unit] = round(all_target, 4)
                 fixes.append(f"planning: set '{unit}' attainment to "
