@@ -16,3 +16,6 @@ Thumbs.db
 .DS_Store
 
 uat/
+
+JUNK_NOT_PROJECT_RELATED/
+output/

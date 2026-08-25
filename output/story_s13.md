@@ -1,1 +1,0 @@
-Sales activity increased this year, but it was aimed at the wrong accounts. Meeting and touch volume grew steadily, yet the majority of that activity flowed to accounts with below-median market potential, while high-potential accounts were comparatively neglected. The team was working harder, not smarter: effort rose while its alignment with account potential deteriorated.

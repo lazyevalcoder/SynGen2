@@ -1,1 +1,0 @@
-A large share of the quarter's sales commit sat on opportunities where essentially nothing was happening: no meetings, no touches, no engagement activity on those accounts all quarter. The commit looked healthy in aggregate, but a big slice of it was carried by dead deals that had gone quiet. Forecast risk was therefore much higher than the headline commit number suggested.
