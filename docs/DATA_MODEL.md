@@ -1,6 +1,8 @@
 # SynGen Data Model
 
 > **Status:** v1 draft. Two layers: (1) the concrete demo data model proven in experiments, (2) the generalized spec-driven model the harness will produce per-story. The generator engine must handle layer 2; layer 1 is its first instance.
+>
+> **Update (2026-08-25, M6):** §1's diagram below is the stale v0 closed-won-only model. The current canonical entity schemas live in `ENTITY_SCHEMA.md` (review draft); that document supersedes §1.
 
 ---
 

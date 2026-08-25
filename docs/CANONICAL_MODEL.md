@@ -42,3 +42,9 @@ When an M5 phase introduces machinery that matches a canonical entity,
 it MUST use the canonical name and shape (sheet/column naming above),
 not a local synonym. When it doesn't match any canonical entity, keep
 it minimal and note the divergence here.
+
+**Update (2026-08-25, M6):** the column-level physical schema for every
+entity now lives in `ENTITY_SCHEMA.md` (review draft, structured by the
+canonical taxonomy). After expert sign-off it is transcribed into
+`packs/revops/entities/*.json`; this file remains the conceptual
+coverage map.
