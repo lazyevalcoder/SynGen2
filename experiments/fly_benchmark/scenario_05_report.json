@@ -1,0 +1,43 @@
+{
+  "status": "escalated",
+  "reason": "criteria_coverage",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-05",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-05",
+      "Pre-check found 8 claims; 5 question(s) for user",
+      "  [+] Revenue was broadly on plan - Comparable to quota/plan target; variance check possible in accounts/opportunities data.",
+      "  [+] The forecast missed materially during the quarter - Forecast vs. actual revenue comparison; requires forecast data attached to opportunities.",
+      "  [+] Pipeline coverage was stable at ~3.2x - Pipeline value / revenue target ratio; computable from opportunity stage and amounts.",
+      "  [+] The definition of commit had effectively loosened as managers included earlier-stage opportunities to offset pipeline gaps - Commit bucket composition and opportunity stage distribution are derivable from stage/pipe",
+      "  [+] Managers included earlier-stage opportunities to offset pipeline gaps - Stage distribution of committed pipeline is observable; intent behind it is not.",
+      "  [+] Deals subsequently slipped into the following quarter - Closed-lost/updated dates shifting across quarters is verifiable from opportunity history.",
+      "  [-] This exposed a forecast intelligence issue rather than a pure pipeline generation problem - Root-cause attribution is narrative; cannot be proven from a sales table. Could be indirec",
+      "  [-] It was not a pure pipeline generation problem - Negative attribution; pipeline generation quality is partly inferable from new-opportunity",
+      "  ? What is the revenue plan/quota figure, and what threshold defines 'material' forecast miss?",
+      "  ? How is 'commit' bucket defined in your data model (stage values, probability, or a custom field)?",
+      "  ? What stage labels map to 'earlier-stage opportunities'?",
+      "  ? How is 'pipeline coverage' calculated (which target denominator and which pipeline scope)?",
+      "  ? What timestamp fields are available to detect deal slippage into the following quarter (e.g., expected close date vs. actual close date vs. last updated)?",
+      "Coverage guard: 3 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The forecast missed materially during the quarter': AC2 requires forecast_vs_actual target_pct=108 with band_pp=3, i.e. it passes when forecast is 105%-111% of actual. The claim states the forecast MISSED (was below actual), which means forecast_pct should be <100. A forecast of 105% is an OVER-forecast, the opposite direction of the claim. The criterion's parameter contradicts the claim's stated direction, so it does not measure the claim's substance. (consider check: forecast_vs_actual)",
+      "  - Uncovered claim 'The definition of commit had effectively loosened as managers included earlier-stage opportunities to offset pipeline gaps': No criterion measures the composition of the commit bucket or the share of earlier-stage (e.g. Stage 1-2) opportunities within committed pipeline. commit_no_engagement_share measures engagement absence, not stage composition. There is no check comparing early-stage share in commit between periods or against a threshold. (consider check: commit_no_engagement_share)",
+      "  - Uncovered claim 'Managers included earlier-stage opportunities to offset pipeline gaps': This is the mechanism underlying the loosened-commit claim, but no criterion measures early-stage opportunity inclusion in committed pipeline or a shift in early-stage share over time. The coverage_ratio checks (AC3/AC4) measure coverage multiples, not the stage composition driving the claim. (consider check: commit_no_engagement_share)",
+      "Drafted 5 criteria: AC1, AC2, AC3, AC4, AC5",
+      "Coverage guard: gaps persist after corrective re-draft.",
+      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_05",
+  "elapsed_s": 253.7
+}

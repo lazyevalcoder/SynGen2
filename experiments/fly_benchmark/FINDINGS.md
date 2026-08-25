@@ -9,12 +9,12 @@
 
 | Metric | Value |
 |---|---|
-| Flown | 5 / 25 |
-| Landed unassisted | 1 (scenario_06, post-fix) |
-| Escalated at coverage guard | 3 (17, 01, 02) |
-| Crashed | 1 (scenario_03: KeyError) |
-| Unassisted landing rate | 20.0% |
-| Non-landings killed pre-generation | 4 / 4 |
+| Flown | 7 / 25 |
+| Landed unassisted | 1 |
+| Escalated at coverage guard | 5 (17, 01, 02, 04, 05) |
+| Crashed | 1 (scenario_03) |
+| Unassisted landing rate | 14.3% |
+| Non-landings killed pre-generation | 6 / 6 |
 
 ---
 
@@ -198,3 +198,30 @@ flight failures.
 5. Vocabulary additions (roadmap, non-blocking):
    stage_distribution_share, cohort revenue_trend, dead-deal composite,
    forecast-vs-commit divergence.
+
+### Batch 6 - scenario_04 (whitespace under-coverage after capacity added)
+
+**Outcome:** ESCALATED criteria_coverage, 257s, zero iterations.
+- Two gaps out of six drafted criteria:
+  1. 'largest gaps concentrated in NEWLY ASSIGNED Enterprise territories'
+     - auditor wants the qualifier verified; narrative detail (hand-flown
+     #4 landed with gap_concentration + quota_vs_potential + placement).
+     Pedantry sub-type.
+  2. 'AEs over-indexed to mature accounts' - genuine vocabulary hole
+     (portfolio composition); auditor's suggested check
+     (unowned_account_share) was unrelated - hallucinated suggestion.
+- -> F9.1 BUG-GUARD-CALIBRATION (qualifier pedantry, family: criteria-quality)
+- -> F9.2 GAP-AUTOMATION (portfolio-composition check) + NOTE: auditor
+  hallucinates check names when vocabulary lacks one.
+
+### Batch 7 - scenario_05 (forecast miss via slippage)
+
+**Outcome:** ESCALATED criteria_coverage, 254s, zero iterations.
+- THREE gaps. First is a LEGITIMATE save: drafter wrote forecast_vs_actual
+  target_pct=108 for a claim that says forecast MISSED (= below actual);
+  direction inverted. The guard caught a real contradiction.
+- Second/third: commit stage-composition claims - vocabulary hole closely
+  related to deferred F29 primitive.
+- -> F10.1 GUARD-WORKING (evidence the guard adds value when the gap is
+  directional/parametric, not missing-dimension)
+- -> F10.2 GAP-AUTOMATION: commit stage-composition check (~F29 family).

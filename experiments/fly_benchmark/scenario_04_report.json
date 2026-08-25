@@ -1,0 +1,41 @@
+{
+  "status": "escalated",
+  "reason": "criteria_coverage",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-04",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-04",
+      "Pre-check found 7 claims; 5 question(s) for user",
+      "  [+] NA missed quota attainment by 5 points - Quota attainment is directly computable from quota vs. actuals in an accounts/opportunitie",
+      "  [+] The largest gaps were concentrated in newly assigned Enterprise territories - Territory assignment and attainment gaps are computable if territories are tagged and atta",
+      "  [-] Capacity had been added based on historical bookings rather than whitespace potential - The rationale/motivation behind capacity decisions is narrative. Could be indirectly refle",
+      "  [+] Several AEs are over-indexed to mature accounts - Compute share of each AE's pipeline/booking from mature vs. new accounts if account age or",
+      "  [-] High-potential whitespace territories remained under-covered - Whitespace potential is external market data, not in a sales table. Could be indirectly re",
+      "  [-] Territories holding most of the market potential generated far less than their fair share of new pipeline during the year - New pipeline per territory is computable. 'Fair share' and 'market potential' require an e",
+      "  [+] The analysis applies to the NA region over a one-year period - Region and time-window filters are directly available in the data model.",
+      "  ? Is '5 points' 5 percentage points of quota attainment, or 5 points on some other scale?",
+      "  ? How are 'territories' and 'newly assigned Enterprise territories' defined and tagged in the data?",
+      "  ? How is 'mature accounts' vs. 'new/whitespace' defined (e.g., account age, segment field)?",
+      "  ? What defines 'fair share' of pipeline (equal split, quota-weighted, market-size-weighted)?",
+      "  ? Is there any external market-size or whitespace data available to proxy the NON_COMPUTABLE claims, or should those be dropped?",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The largest gaps were concentrated in newly assigned Enterprise territories': AC2 (gap_concentration) measures that gaps concentrate in the bottom 40% of territories by dimension, but it has no parameter to verify the gap-holding territories are 'newly assigned Enterprise' territories. The claim's substance is that the concentration is specifically in newly-assigned Enterprise segments, which no criterion checks. AC3 (quota_vs_potential) measures under-coverage of high-potential whitespace territories, which is a related but distinct claim (AC3 covers that separately). (consider check: gap_concentration)",
+      "  - Uncovered claim 'Several AEs are over-indexed to mature accounts': AC5 (effective_capacity) measures whether capacity is set at 100% target with a 10pp band, which is a generic capacity-level check. It does not measure the composition of AE portfolios (mature vs. whitespace accounts). No criterion checks whether AEs are over-indexed to mature accounts. (consider check: unowned_account_share)",
+      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
+      "Coverage guard: gaps persist after corrective re-draft.",
+      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_04",
+  "elapsed_s": 257.4
+}
