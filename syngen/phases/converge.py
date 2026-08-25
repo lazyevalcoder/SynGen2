@@ -8,6 +8,17 @@ M5 additions (iteration 1):
 - Margin-aware hardening: after convergence with thin margins, bounded
   re-centering rounds try to widen them; any round that fails validation or
   does not improve reverts to the best known-good state (G4).
+
+M5 iteration 5 - the autopilot (flight-model doctrine): on a failing
+iteration the loop now exhausts DETERMINISTIC remedies before spending an
+LLM proposal, exactly as stall recovery precedes calling maintenance:
+1. one full deterministic re-calibration pass (block synthesis, capacity
+   solve, level/mix/planning solvers) - heals most structural failures
+   that used to escalate;
+2. one bounded seed bump when proposals stop improving scores (draw-noise
+   failures are not knob failures);
+3. early structured escalation when proposals demonstrably stall, with
+   the worst margins named in the reason.
 """
 import copy
 import json
@@ -15,6 +26,7 @@ from pathlib import Path
 from syngen.config import ConfigError, validate_simulator_doc
 from syngen.generator.engine import generate_to_workbook
 from syngen.phases.json_task import chat_json
+from syngen.phases.preflight import autocalibrate
 from syngen.prompts import load_prompt
 from syngen.utils import extract_json, get_at_path, set_at_path
 from syngen.validator.report import render_table, run_validation, to_report_dict
@@ -176,15 +188,25 @@ def _record_measured_deltas(results, prev_margins, history_lines):
         history_lines[-1] += "; measured: " + ", ".join(movements)
 
 
+def _worst_margins(results, n=3):
+    """Human-readable worst failing margins for escalation reports."""
+    failing = [(r["id"], r["margin"]) for r in results
+               if r["verdict"] == "FAIL" and r["margin"] is not None]
+    failing.sort(key=lambda t: t[1])
+    return ", ".join(f"{cid} {m:+.2f}" for cid, m in failing[:n])
+
+
 def run_convergence(session, client, sim_path, criteria_path,
                     max_iterations=10, max_llm_proposals=5, log_fn=print,
                     thin_margin_pp=0.5, max_hardening_rounds=2):
-    """Generate -> validate -> propose -> patch until story lands.
+    """Generate -> validate -> autopilot remedies -> propose -> patch.
 
-    Guardrails: hard iteration cap; LLM proposal cap; escalates via
-    LoopEscalation when stuck. Returns summary dict on success.
+    Guardrails: hard iteration cap; LLM proposal cap; deterministic
+    stall recovery before every proposal; escalates via LoopEscalation
+    (with worst margins named) when stuck. Returns summary dict on success.
     """
     cfg = json.loads(Path(sim_path).read_text(encoding="utf-8"))
+    criteria_doc = json.loads(Path(criteria_path).read_text(encoding="utf-8"))
     workbook_path = Path(cfg["output"]["workbook"])
     if not workbook_path.is_absolute():
         workbook_path = Path(sim_path).parent / workbook_path
@@ -194,6 +216,11 @@ def run_convergence(session, client, sim_path, criteria_path,
     cfg = {**cfg, "output": {**cfg["output"], "workbook": str(workbook_path)}}
 
     history_lines = []
+    remediations = []
+    recal_done = False
+    seed_bump_done = False
+    stall_count = 0
+    last_score = None
     llm_proposals = 0
     prev_margins = {}
     hardening_rounds = 0
@@ -255,6 +282,7 @@ def run_convergence(session, client, sim_path, criteria_path,
                 "llm_proposals": llm_proposals,
                 "thin_margins": _thin_ids(results, thin_margin_pp),
                 "workbook": str(wb),
+                "remediations": remediations,
             }
             if best is None or mm > best["min_margin"]:
                 best = {"cfg": copy.deepcopy(cfg), "min_margin": mm,
@@ -327,6 +355,38 @@ def run_convergence(session, client, sim_path, criteria_path,
                 f"iter {iteration}: REGRESSED to {score[0]} passing; "
                 f"reverted to {best_partial['score'][0]}-passing state")
 
+        # --- stall telemetry (autopilot): identical score across
+        # consecutive proposal cycles means knob turns are not moving
+        # anything - escalate on evidence instead of at an arbitrary cap.
+        if last_score is not None and score == last_score:
+            stall_count += 1
+        else:
+            stall_count = 0
+        last_score = score
+
+        # --- AUTOPILOT remedy A (deterministic re-calibration): one full
+        # solver pass before any LLM spend. Heals structural failures the
+        # drafter caused by omitting blocks, and parametric misses the
+        # closed-form solvers cover. Runs once; if it changes nothing we
+        # never retry it (the config is already solver-saturated).
+        if not recal_done:
+            recal_done = True
+            fixes = autocalibrate(cfg, criteria_doc)
+            if fixes:
+                remediations.append({"iteration": iteration,
+                                     "remedy": "recalibrate", "fixes": fixes})
+                session.log("## AUTOPILOT: deterministic re-calibration\n"
+                            + "\n".join(f"- {x}" for x in fixes))
+                log_fn("AUTOPILOT: applied "
+                       f"{len(fixes)} deterministic fix(es):\n"
+                       + "\n".join(f"  - {x}" for x in fixes))
+                history_lines.append(
+                    f"iter {iteration}: AUTOPILOT recalibrate "
+                    f"({len(fixes)} fixes)")
+                Path(sim_path).write_text(json.dumps(cfg, indent=2),
+                                          encoding="utf-8")
+                continue
+
         # Live M4 lesson: a criterion that references something the data
         # model cannot express (absent segment, missing sheet) is not
         # fixable by knob turns - looping just burns proposals (G14 family).
@@ -335,11 +395,45 @@ def run_convergence(session, client, sim_path, criteria_path,
         if structural:
             raise LoopEscalation(
                 f"structural failure(s) {structural} - criteria reference "
-                "something outside the data model; re-enter design phases",
+                "something outside the data model even after deterministic "
+                f"re-calibration; worst margins: {_worst_margins(results)}",
+                results, history_lines)
+
+        # --- AUTOPILOT remedy B (seed bump): when proposals stop moving
+        # scores and at least two LLM proposals are spent, the residual
+        # failures are likely DRAW NOISE, not knob errors. One bounded
+        # seed change re-rolls those dice. The autopilot may touch seed;
+        # the LLM proposer still may not (G14).
+        if stall_count >= 1 and llm_proposals >= 2 and not seed_bump_done:
+            seed_bump_done = True
+            old_seed = cfg.get("seed")
+            cfg["seed"] = int(old_seed or 42) + 1
+            stall_count = 0
+            remediations.append({"iteration": iteration, "remedy":
+                                 "seed_bump", "from": old_seed,
+                                 "to": cfg["seed"]})
+            session.log(f"## AUTOPILOT: seed bump {old_seed} -> "
+                        f"{cfg['seed']} (draw-noise recovery)")
+            log_fn(f"AUTOPILOT: proposals stopped improving - bumping seed "
+                   f"{old_seed} -> {cfg['seed']} once.")
+            history_lines.append(
+                f"iter {iteration}: AUTOPILOT seed bump {old_seed}->"
+                f"{cfg['seed']}")
+            Path(sim_path).write_text(json.dumps(cfg, indent=2),
+                                      encoding="utf-8")
+            continue
+
+        if stall_count >= 3:
+            raise LoopEscalation(
+                f"stalled: {stall_count} consecutive proposals produced no "
+                f"score improvement; still failing: {failing}; worst "
+                f"margins: {_worst_margins(results)}",
                 results, history_lines)
         if llm_proposals >= max_llm_proposals:
             raise LoopEscalation(
-                f"LLM proposal cap ({max_llm_proposals}) reached; still failing: {failing}",
+                f"LLM proposal cap ({max_llm_proposals}) reached; still "
+                f"failing: {failing}; worst margins: "
+                f"{_worst_margins(results)}",
                 results, history_lines)
 
         proposal = propose_knobs(client, cfg, results, history_lines)

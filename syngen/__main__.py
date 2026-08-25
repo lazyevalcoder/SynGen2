@@ -70,6 +70,22 @@ def cmd_resume(args):
     return _finish(result)
 
 
+def cmd_fly(args):
+    """Solo-flight harness: full pipeline, zero interaction, telemetry."""
+    from syngen.fly import run_fly
+    from syngen.llm.client import LLMClient, load_llm_config
+
+    story = _read_story_arg(args)
+    if not story:
+        print("fly needs --story or --story-file")
+        return 2
+    client = LLMClient(load_llm_config(args.llm_config))
+    report = run_fly(story, client, slug=args.slug)
+    print(json.dumps({k: v for k, v in report.items()
+                      if k != "telemetry"}, indent=2, default=str))
+    return 0 if report["status"] == "converged" else 1
+
+
 def cmd_sessions(args):
     from syngen.session import Session
 
@@ -147,6 +163,13 @@ def main(argv=None):
     s.add_argument("--dir", default="sessions",
                    help="sessions directory (default: ./sessions)")
 
+    f = sub.add_parser("fly", help="solo flight: non-interactive end-to-end "
+                                   "run with a fly_report.json telemetry file")
+    f.add_argument("--story", default="", help="story text inline")
+    f.add_argument("--story-file", default="", help="path to a .md/.txt story")
+    f.add_argument("--slug", default="", help="session folder name hint")
+    f.add_argument("--llm-config", default=None, help="path to llm.config.json")
+
     args = parser.parse_args(argv)
     if args.command == "generate":
         return cmd_generate(args)
@@ -158,6 +181,8 @@ def main(argv=None):
         return cmd_resume(args)
     if args.command == "sessions":
         return cmd_sessions(args)
+    if args.command == "fly":
+        return cmd_fly(args)
     return 2
 
 
