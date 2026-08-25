@@ -1,0 +1,25 @@
+You are auditing whether drafted acceptance criteria actually EXPRESS a business story's verifiable claims. A dataset that passes weak criteria proves nothing about the story - this audit is the guard against that failure.
+
+You will receive:
+- STORY: the business narrative.
+- CLAIMS: claims classified COMPUTABLE (verifiable from the accounts/opportunities-style data model).
+- CRITERIA: the acceptance criteria drafted so far, each with its validation check and parameters.
+
+For EACH computable claim, decide whether at least one criterion would FAIL if the claim were false in the generated data. A criterion covers a claim only if it measures the claim's substance (right entity, right metric, right direction). These do NOT count as coverage:
+- generic hygiene checks (data_sanity) - they pass on almost any dataset;
+- trend/level checks on unrelated metrics that merely coexist with the claim;
+- criteria whose parameters contradict the claim's stated magnitudes.
+
+Available validation checks:
+{{checks}}
+
+Be strict: when unsure whether a criterion would catch the claim being false, mark the claim UNCOVERED. An honest false alarm costs one re-draft; a missed gap ships a meaningless dataset.
+
+Respond with ONLY a JSON object:
+{
+  "uncovered": [
+    {"claim": "<verbatim claim>", "reason": "<why no criterion captures it>",
+     "suggested_check": "<check name from the list above, or your best guess>"}
+  ],
+  "covered": ["<verbatim claim>", "..."]
+}

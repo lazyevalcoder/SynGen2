@@ -18,7 +18,11 @@ from syngen.phases.amend import (
 )
 from syngen.phases.converge import LoopEscalation, run_convergence
 from syngen.phases.diff import RoutingError, classify_story_change, validate_route
-from syngen.phases.intake import draft_criteria, precheck_claims
+from syngen.phases.intake import (
+    draft_criteria,
+    enforce_coverage,
+    precheck_claims,
+)
 from syngen.phases.spec import draft_simulator, persona_critique
 from syngen.session import Session
 from syngen.utils import set_at_path
@@ -453,6 +457,23 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
         "or leave empty:"
     )
     doc = draft_criteria(client, story, decisions_text)
+
+    # --- Coverage guard (M5 iter 5, R6): vacuous criteria never converge ---
+    doc, cov_status = enforce_coverage(client, story, doc, claims,
+                                       decisions_text=decisions_text,
+                                       log_fn=log)
+    if cov_status == "uncovered":
+        session.log("ESCALATED: criteria_coverage - drafted criteria do not "
+                    "express the story's computable claims.")
+        log("\nNEEDS YOUR ATTENTION: the drafted criteria express none of "
+            "the story's computable claims (even after a corrective "
+            "re-draft). Review/extend criteria.json manually or re-run.")
+        return {"status": "escalated", "reason": "criteria_coverage",
+                "session": str(session.root)}
+    if cov_status == "redrafted":
+        session.log("COVERAGE GUARD: criteria re-drafted to cover the "
+                    "story's claims.")
+
     deps_note = consistency_report(doc).strip()
     if deps_note != "(no dependencies declared)":
         log("Declared dependencies:\n" + deps_note)

@@ -113,12 +113,18 @@ class SilentIO:
         return ""
 
 
+# Coverage guard (M5 iter 5): the pipeline audits criteria coverage right
+# after the draft; flow tests script a clean verdict here.
+AUDIT_COVERED = {"uncovered": [], "covered": ["all claims"]}
+
+
 def make_fake_client():
-    # personas OFF by default (M4 A/B): script is precheck, criteria, sim,
-    # fix proposal
+    # personas OFF by default (M4 A/B): script is precheck, criteria,
+    # coverage audit, sim, fix proposal
     return FakeLLM([
         llm_json(PRECHECK),
         llm_json(CRITERIA),
+        llm_json(AUDIT_COVERED),
         llm_json(BROKEN_SIM),
         llm_json(FIX_PROPOSAL),
     ])
@@ -194,6 +200,7 @@ def test_personas_opt_in_path_still_works(run_in_tmp):
     client = FakeLLM([
         llm_json(PRECHECK),
         llm_json(CRITERIA),
+        llm_json(AUDIT_COVERED),
         llm_json(PERSONAS),          # consumed only in this arm
         llm_json(BROKEN_SIM),
         llm_json(FIX_PROPOSAL),
@@ -210,6 +217,7 @@ def test_bad_llm_criteria_shape_is_rejected(run_in_tmp):
         llm_json(PRECHECK),
         llm_json({"oops": "no criteria here"}),
         llm_json(CRITERIA),
+        llm_json(AUDIT_COVERED),
         llm_json(BROKEN_SIM),
     ])
     io = SilentIO()

@@ -26,6 +26,10 @@ PROFILES = {
     # routing decision: small structured output; deterministic guardrails
     # double-check the route, so thinking is unnecessary
     "story_diff": {"max_tokens": 4096, "enable_thinking": False},
+    # coverage audit: strictness over depth - short verdict per claim;
+    # a parse failure here fails OPEN (guard degrades to deterministic
+    # rules) rather than blocking the session
+    "coverage_audit": {"max_tokens": 4096, "enable_thinking": False},
 }
 
 
