@@ -1,5 +1,6 @@
 """Domain pack loader and manifest validation (M6 P0/P1)."""
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -61,6 +62,7 @@ def _write_pack(tmp_path, **overrides):
     (d / "claims" / "matrix.json").write_text(
         (REPO_PACK / "claims" / "matrix.json").read_text(encoding="utf-8"),
         encoding="utf-8")
+    shutil.copytree(REPO_PACK / "prompts", d / "prompts")
     return d
 
 

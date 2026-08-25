@@ -9,8 +9,6 @@ import re
 from pathlib import Path
 
 from ..config import ConfigError, load_json
-from ..prompts import PROMPT_DIR
-from ..validator import checks as _checks_module
 from .api import (
     KNOWN_MANIFEST_KEYS,
     LIST_MANIFEST_KEYS,
@@ -28,6 +26,13 @@ _COMPAT_RE = re.compile(r"^\s*(>=|<=|==|~=)?\s*(\d+)\.(\d+)(?:\.(\d+))?\s*$")
 
 def resolve_pack_path(path=None):
     return Path(path) if path else DEFAULT_PACK_DIR
+
+
+def _pack_prompt_dir(pack):
+    """Prompt fragments live beside the manifest (packs/<name>/prompts/)."""
+    if not pack.path:
+        return None
+    return Path(pack.path).parent / "prompts"
 
 
 def load_pack(path=None):
@@ -152,6 +157,7 @@ def validate_against_kernel(pack):
     not registered in the pack (unregistered = invisible to derivation).
     """
     from ..linter import KNOWN_BLOCKS
+    from ..validator import checks as _checks_module
 
     errors = []
     warnings = []
@@ -180,7 +186,9 @@ def validate_against_kernel(pack):
         )
 
     for prompt in pack.prompts:
-        if not (PROMPT_DIR / f"{prompt}.txt").exists():
+        prompt_dir = _pack_prompt_dir(pack)
+        if prompt_dir and prompt_dir.is_dir() and \
+                not (prompt_dir / f"{prompt}.txt").exists():
             errors.append(f"prompt fragment '{prompt}' does not exist")
 
     matrix_errors, matrix_warnings = validate_claims_matrix(pack)

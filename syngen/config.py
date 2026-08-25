@@ -122,8 +122,8 @@ def validate_simulator_doc(cfg, source="simulator"):
 
     # M5 iter 1 extensions -----------------------------------------------
 
-    medians = cfg["opportunities"]["deal_size_lognormal"].get(
-        "medians_by_quarter")
+    dl = cfg["opportunities"]["deal_size_lognormal"]
+    medians = dl.get("medians_by_quarter")
     if medians is not None:
         if not isinstance(medians, list) or len(medians) != len(labels):
             raise ConfigError(
@@ -131,6 +131,18 @@ def validate_simulator_doc(cfg, source="simulator"):
                 f"quarter ({len(labels)} expected)")
         if any(float(m) <= 0 for m in medians):
             raise ConfigError("deal_size_lognormal medians must be positive")
+
+    # M6 P3 (F8.1): a sigma-less deal_size_lognormal used to survive the
+    # lint gate and crash pre-flight/engine with a raw KeyError deep in
+    # flight. The shape is now contract-checked here.
+    if "sigma" not in dl:
+        raise ConfigError(
+            "deal_size_lognormal.sigma is required "
+            "(deterministic default: preflight autocalibrate fills 0.6)")
+    sigma = float(dl["sigma"])
+    if not 0.0 < sigma <= 4.0:
+        raise ConfigError(
+            f"deal_size_lognormal.sigma must be in (0, 4.0]; got {sigma}")
 
     icp_share = cfg["accounts"].get("icp_share")
     if icp_share is not None and not (0 <= float(icp_share) <= 1):

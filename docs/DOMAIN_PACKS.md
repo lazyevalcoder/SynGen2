@@ -67,18 +67,27 @@ it would work identically for headcount planning, it is kernel.**
 
 ## Pack anatomy
 
+Two locations, by artifact kind (decided in P3):
+
+- **Declarative artifacts** — repo-root `packs/revops/`: `pack.json`,
+  `claims/matrix.json`, `prompts/*.txt` (domain prompt fragments).
+- **Python plugin code** — `syngen/packs/revops/`: importable
+  implementations (the check library lives here since P3; it is the single
+  source of truth, with `syngen/validator/checks.py` as a compat shim).
+
+Target layout (later phases complete the move):
+
 ```
 packs/revops/
   pack.json              # identity, version, kernel-compat pin
-  entities/*.json        # canonical schemas (from CANONICAL_MODEL.md)
-  claims/matrix.json     # THE coverage matrix
-  cohorts.py             # composable named cohort filters
-  checks/*.py            # proof procedures, registered against cells
-  solvers/*.py           # calibration algebras, registered against cells
-  recipes/*.py           # autopilot block-synthesis templates
+  entities/*.json        # canonical schemas (pending expert sign-off)
+  claims/matrix.json     # THE coverage matrix (+ per-check vocab docs)
   prompts/*.txt          # semantic fragments injected per kernel phase
-  examples/              # landed configs -> few-shot / retrieval
-  uat/                   # the 25-scenario certification suite
+syngen/packs/revops/
+  checks.py              # proof procedures (moved P3)
+  solvers.py             # calibration algebras (deferred - see below)
+  recipes.py             # autopilot templates (deferred - see below)
+  examples/              # landed configs -> few-shot / retrieval (future)
 ```
 
 Checks and solvers are Python plugins behind stable interfaces now; a DSL
@@ -150,11 +159,21 @@ Golden-anchor byte-identical reproduction tests gate every phase.
 
 | Phase | Content |
 |---|---|
-| P0 | Spec + kernel plugin interfaces (`SchemaProvider`, `ClaimTaxonomy`, `ProofPlugin`, `SolverPlugin`, `SemanticPrompts`, `RecipeLibrary`, `CaseMemory`); pack skeleton; loader with import-time validation. Zero behavior change. |
-| P1 | Claim matrix extracted from the CHECKS registry; cohort algebra; graduated guard wired to set algebra; auditor naming/VOCAB-GAP contract. |
-| P2 | Generated catalogs (prompt check-lists, linter vocabularies) replace hand-maintained duplicates. |
-| P3 | Checks/solvers/prompts/recipes move into `packs/revops/`; infra fixes folded in (sigma-less preflight hardening F8.1, error-path telemetry F8.2/F5.3). |
-| P4 | Certification: all 25 UAT scenarios flown through `syngen fly`; results reported vs baseline-as-built. |
+| P0 ✅ | Spec + kernel plugin interfaces; pack skeleton + manifest; loader with import-time validation and drift tripwires. Zero behavior change. |
+| P1 ✅ | Claim matrix (33 cells, one per check, KPI-bound, with vocab docs); cohort algebra (`syngen/packs/cohorts.py`); `PackTaxonomy` adapter; **graduated guard** (PROCEED → PROCEED-WITH-NOTE → REDRAFT bounded → ESCALATE near-zero/impossible-math only); auditor PARAMETRIC/VOCAB_GAP/QUALIFIER contract with existing-check naming. |
+| P2 ✅ | Generated catalogs: decompose/coverage_audit prompts render `{{check_catalog}}`/`{{check_names}}` from the matrix - hand-maintained prompt check lists deleted. |
+| P3 ✅ | Check library moved into `syngen/packs/revops/checks.py` (kernel shim keeps legacy imports); prompt fragments moved to `packs/revops/prompts/`; F8.1 sigma-less hardening (schema contract + deterministic 0.6 default in preflight); F8.2 crash-path session inference in fly reports; F5.3 rejected criteria persisted on guard escalation. |
+| P4 ⏳ | Certification: all 25 UAT scenarios via `syngen fly`; results vs baseline-as-built (7 flown, 14.3%). |
+
+### Deferred within P3 (documented decision)
+
+- **Solver extraction from preflight**: `_autocalibrate_*` families are
+  RevOps algebra entangled with kernel findings machinery (~1500 lines,
+  heavily byte-identical-tested). Splitting without risking golden-anchor
+  violations is its own project; scheduled post-certification.
+- **Recipe extraction** (converge.py remedies): same entanglement rationale.
+- **entities/\*.json transcription**: awaits the expert-reviewed
+  ENTITY_SCHEMA.md column schemas (user hand-writes them).
 
 ## Success criteria for M6 / v0
 

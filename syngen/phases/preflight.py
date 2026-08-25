@@ -126,10 +126,30 @@ def _predicted_discount_curve(cfg):
     return curve
 
 
+def _ensure_deal_sigma(cfg):
+    """F8.1 (M6 P3): a sigma-less deal_size_lognormal used to crash
+    pre-flight solvers and the engine with a raw KeyError. Deterministic
+    default: fill sigma=0.6 (mid of the observed UAT range 0.5-0.8) and
+    report it. Returns a human-readable note, or None when present."""
+    dl = cfg.get("opportunities", {}).get("deal_size_lognormal")
+    if dl is None or "sigma" in dl:
+        return None
+    dl["sigma"] = 0.6
+    return ("deal_size_lognormal.sigma missing - defaulted to 0.6 "
+            "(deterministic; adjust explicitly if the story needs a "
+            "fatter/thinner tail)")
+
+
 def calibrate(cfg, criteria_doc):
     """Cross-check drafted config against criteria. Returns findings:
     list of dicts {rule, severity: 'HARD'|'SOFT', criterion, msg}."""
     findings = []
+    # F8.1: normalize BEFORE contract validation so a sigma-less block
+    # surfaces as a SOFT default note rather than a HARD invalid-config
+    sigma_note = _ensure_deal_sigma(cfg)
+    if sigma_note:
+        findings.append({"rule": "PF1", "severity": "SOFT", "criterion": "*",
+                         "msg": f"config normalized: {sigma_note}"})
     try:
         validate_simulator_doc(json.loads(json.dumps(cfg)))
     except ConfigError as e:
@@ -424,6 +444,9 @@ def autocalibrate(cfg, criteria_doc):
     """Deterministically patch pinned levels and tier-mix shares.
     Returns a list of human-readable fixes applied (empty = nothing done)."""
     fixes = []
+    sigma_note = _ensure_deal_sigma(cfg)
+    if sigma_note:
+        fixes.append(f"blocks: {sigma_note}")
     labels = cfg["time_model"]["quarter_labels"]
     dspec = cfg["opportunities"]["discount"]
     eoq = cfg["opportunities"]["close_clustering"][

@@ -463,8 +463,12 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                                        decisions_text=decisions_text,
                                        log_fn=log)
     if cov_status == "uncovered":
+        # F5.3 (M6 P3): persist the rejected draft so the escalation is
+        # diagnosable - the session previously held no criteria at all.
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
         session.log("ESCALATED: criteria_coverage - drafted criteria do not "
-                    "express the story's computable claims.")
+                    "express the story's computable claims. Draft persisted "
+                    "to criteria.json for inspection.")
         log("\nNEEDS YOUR ATTENTION: the drafted criteria express none of "
             "the story's computable claims (even after a corrective "
             "re-draft). Review/extend criteria.json manually or re-run.")

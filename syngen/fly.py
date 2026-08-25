@@ -36,6 +36,16 @@ class _FlyIO:
         return ""
 
 
+def _newest_session(sessions_dir):
+    """Newest session folder under sessions_dir (mtime order), if any."""
+    base = Path(sessions_dir)
+    if not base.is_dir():
+        return None
+    dirs = [d for d in base.iterdir() if d.is_dir() and
+            (d / "session_log.md").exists()]
+    return max(dirs, key=lambda d: d.stat().st_mtime) if dirs else None
+
+
 def run_fly(story, client, sessions_dir="sessions", slug=None,
             max_iterations=10, max_llm_proposals=8):
     """Fly one story end-to-end without human input. Returns the report.
@@ -52,8 +62,19 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
                                max_llm_proposals=max_llm_proposals)
     except Exception as e:  # noqa: BLE001 - the harness must ALWAYS emit a
         # report; a crash mid-flight is itself a finding for maintenance
+        # F8.2: the Session is created before any LLM traffic, so even a
+        # first-turn crash leaves a folder - infer it instead of losing
+        # the session reference (benchmark: scenario_03 report had none).
+        inferred = _newest_session(sessions_dir)
         result = {"status": "error", "reason": f"{type(e).__name__}: {e}",
-                  "session": None}
+                  "session": str(inferred) if inferred else None}
+        if inferred:
+            try:
+                from syngen.session import Session
+                Session.open(inferred).log(
+                    f"FLIGHT CRASH: {type(e).__name__}: {e}")
+            except Exception:  # noqa: BLE001 - logging must not mask the crash
+                pass
 
     report = {
         "status": result.get("status"),
