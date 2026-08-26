@@ -20,6 +20,46 @@
 | 16 | escalated | 0 | - | generation failed on initial config ('segments') |
 | 17 | escalated | 7 | - | oscillating (no net score improvement) |
 | 18 | escalated | 0 | - | criteria_consistency |
+| 19 | escalated | 2 | - | structural failure (AC3 outside data model) |
+
+---
+
+## Batch 19 (2026-08-26) — scenario_19 · ESCALATED ❌ (structural failure, 2 iters)
+
+Headcount/capacity story (revenue missed by 4%; effective capacity ~87%
+due to ramping AEs; ramping share exceeded the plan's assumption).
+
+### Outcome
+Escalated by the structural-failure guard after 2 iterations: `['AC3']`
+"reference something outside the data model even after deterministic
+re-calibration". Final config shows `capacity: {}` and `planning: {}`;
+AC3 printed "no headcount additions, headcount unchanged FY26-Q1→Q4".
+
+### Failure — F19.10 (capacity synthesis is growth-blind: level ≠ flow)
+`headcount_growth_placement` measures the share of headcount **additions**
+that were ramping reps. The only synthesis path for the capacity block
+(preflight.py:1244-56) produces a flat `headcount_plan: [6]*n_q` — a
+*level* with no inter-quarter growth, hence zero additions, hence the
+criterion is structurally unlandable no matter the knob turns. And in
+this flight the final config's `capacity` came out `{}` entirely,
+meaning the synthesized block did not survive the corrective re-draft
+that replaces simulator.json after critic B (synthesis ran pre-convergence,
+then a re-draft reserialized a fresh config without it — the "even after
+deterministic re-calibration" retry also failed to restore it). Two
+distinct defects: (a) no hiring-flow surface exists in the config schema
+for the check to land on; (b) capacity synthesis is not re-applied after
+config re-drafts.
+- Effective capacity (AC2, a *level* target) PASSED at 86.7% — confirming
+  the block synthesis works for level checks; the gap is specifically the
+  growth/additions surface.
+
+### Positives
+- Structural-failure guard gave a precise, cheap death (2 iterations)
+  naming AC3 and the margin; no phantom solve was ever claimed.
+- Auditor's notes correctly steered the drafter toward
+  `headcount_growth_placement` — the right check, let down by the engine
+  surface, not by intent.
+
 
 ---
 

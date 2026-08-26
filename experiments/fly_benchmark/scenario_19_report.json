@@ -1,0 +1,76 @@
+{
+  "status": "escalated",
+  "reason": "structural failure(s) ['AC3'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC3 -60.00",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-19",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-19",
+      "Pre-check found 8 claims; 5 question(s) for user",
+      "  [+] Revenue missed plan by 4% this year - Revenue vs. plan delta computable from revenue and plan target figures.",
+      "  [-] Sales capacity was technically sufficient on paper - Narrative framing; the computable proxy is AE headcount vs. plan headcount.",
+      "  [+] AE headcount ended the year at 98% of plan - Headcount ratio computable from actual vs. planned AE headcount.",
+      "  [+] Ramping AEs made up a much larger share of the sales org than the annual plan had assumed - Share of ramping vs. tenured AEs computable from ramp-status fields; plan assumption is a ",
+      "  [+] A ramping rep produces only about half of what a tenured rep does - Productivity ratio computable from per-rep revenue segmented by ramp status, if such data ",
+      "  [+] Effective productive capacity was closer to 87%, not the fully-staffed picture the plan painted - Weighted capacity (headcount adjusted by ramp productivity) is computable from headcount a",
+      "  [-] The miss was driven by a capacity planning assumption that treated all headcount as equally productive - Attribution/causation claim; the plan's underlying assumption is not stored in a sales tab",
+      "  [-] The plan painted a fully-staffed picture - Narrative characterization of the plan; not directly stored. Reflected by headcount-at-98%",
+      "  ? Does the data model include a ramp-status field (ramping vs. tenured) for each AE?",
+      "  ? Is there per-rep or per-segment revenue data to compute the ramping-vs-tenured productivity ratio (the ~50% claim)?",
+      "  ? Is the annual plan's assumed ramp/tenured mix available, or only the actual mix?",
+      "  ? Is the plan's revenue target and actual revenue both available to verify the 4% miss?",
+      "  ? Is there any stored record of the capacity planning assumption itself, or only its observable outcome (the 87% effective capacity)?",
+      "Coverage guard: 3 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'AE headcount ended the year at 98% of plan' [PARAMETRIC]: The claim asserts AE headcount ended at 98% of plan, which is directly expressible via headcount_growth_placement (headcount vs. plan target). No drafted criterion invokes this check, so a dataset where headcount was, say, 105% of plan would pass all criteria yet contradict the claim. (consider check: headcount_growth_placement)",
+      "  - Uncovered claim 'Ramping AEs made up a much larger share of the sales org than the annual plan had assumed' [PARAMETRIC]: The claim concerns the share of ramping AEs relative to what the plan assumed. headcount_growth_placement is the only check that can express headcount composition/placement against plan. No drafted criterion captures the ramping-share-vs-plan assumption, so the claim's substance is unverified. (The 87% effective capacity criterion is a downstream consequence but does not isolate the ramping-share assumption itself.) (consider check: headcount_growth_placement)",
+      "  - Uncovered claim 'A ramping rep produces only about half of what a tenured rep does' [PARAMETRIC]: The claim is a relative productivity ratio (ramping \u2248 50% of tenured). effective_capacity measures aggregate productive capacity as a percentage of plan, which is a function of this ratio but does not pin the 1:2 ratio itself. A dataset where ramping reps produced 70% of tenured could still yield 87% effective capacity under different composition, so the specific ratio is not verified. No existing check expresses a direct ramping-vs-tenured productivity differential. (consider check: effective_capacity)",
+      "Drafted 5 criteria: AC1, AC2, AC3, AC4, AC5",
+      "Coverage guard: 1 note(s) - proceeding:",
+      "  [note] Uncovered claim 'Ramping AEs made up a much larger share of the sales org than the annual plan had assumed' [PARAMETRIC]: The drafted AC3 uses min_growth_share_pct=60, which only verifies that ramping AEs constitute a large share of the org in absolute terms. The claim's substance is a comparative: the ramping share was much larger than what the annual plan assumed. No existing criterion measures the deviation between actual ramping share and the plan's assumed ramping share, so a dataset where the ramping share was large but matched the plan would pass AC3 while falsifying the claim. (consider check: headcount_growth_placement)",
+      "Critic flagged 3 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Ramping AEs made up a much larger share of the sales org than the annual plan had assumed' [PARAMETRIC]: AC3 uses the effective_capacity check with ramping-share parameters, but the check name and parameter set (planned_ramping_share_pct, actual_ramping_share_pct, min_delta_pp) are designed to validate the effective productive capacity figure, not to assert that the ramping share itself increased. The claim's substance is a directional comparison of two share values (planned vs actual) with a minimum delta. No existing criterion measures the ramping-share delta as its primary assertion; the effective_capacity check's target_pct/band_pp parameters validate capacity level, not the share-shift delta. The min_delta_pp parameter exists but is not the check's headline validation target, so it does not reliably fail if the share did not shift as claimed. (consider check: effective_capacity)",
+      "Drafted 4 criteria: AC1, AC2, AC3, AC4",
+      "Coverage guard: 1 note(s) - proceeding:",
+      "  [note] Uncovered claim 'Ramping AEs made up a much larger share of the sales org than the annual plan had assumed' [PARAMETRIC]: The claim's substance is that the actual composition of the sales org (share of ramping AEs) materially exceeded what the annual plan assumed. The headcount_growth_placement check is designed to measure exactly this kind of headcount-composition-vs-plan deviation. No drafted criterion measures the ramping-rep share relative to plan; AC2/AC3/AC4 measure effective_capacity (a derived productivity figure), not the org-composition assumption itself. The substance is uncovered. (consider check: headcount_growth_placement)",
+      "Criterion consistency violations (see session log) - one corrective re-draft.",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Ramping AEs made up a much larger share of the sales org than the annual plan had assumed' [PARAMETRIC]: The claim asserts a measurable gap between the actual share of ramping AEs in the org and the share assumed in the annual plan. The headcount_growth_placement check is designed to verify headcount composition/placement against plan assumptions, which is exactly the substance of this claim. No drafted criterion measures the ramping-share-vs-plan-assumption gap; AC4 only verifies the aggregate headcount ending at 98% of plan, not the internal composition shift that the claim hinges on. (consider check: headcount_growth_placement)",
+      "Drafted 3 criteria: AC1, AC2, AC3",
+      "Coverage guard: 2 note(s) - proceeding:",
+      "  [note] Uncovered claim 'AE headcount ended the year at 98% of plan' [PARAMETRIC]: This claim asserts a specific headcount-to-plan ratio (98%). The headcount_growth_placement check measures the share of new/ramping reps in the org, not the ending headcount as a percentage of planned headcount. There is no existing check that expresses ending headcount as a fraction of plan, so the drafted criteria cannot prove this claim being false. (consider check: headcount_growth_placement)",
+      "  [note] Uncovered claim 'A ramping rep produces only about half of what a tenured rep does' [PARAMETRIC]: This claim asserts a specific productivity ratio between ramping and tenured reps (ramping = ~50% of tenured). No drafted criterion measures per-rep productivity by tenure status or the ratio between them. headcount_growth_placement only measures the share of ramping reps, not their relative output. There is no existing check that expresses ramping-vs-tenured productivity ratio, so this claim's substance is not measurable by any available check. (consider check: headcount_growth_placement)",
+      "Declared dependencies:\nAC2 <- depends on AC3\n  AC3 <- depends on AC2",
+      "  AC1  revenue_missed_plan_by_4pct\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 96, \"band_pct\": 2}\n  AC2  effective_capacity_at_87pct (depends_on: AC3)\n       check=effective_capacity params={\"target_pct\": 87, \"band_pp\": 2}\n  AC3  ramping_share_exceeds_plan_assumption (depends_on: AC2)\n       check=headcount_growth_placement params={\"min_growth_share_pct\": 60}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Critic flagged 2 block issue(s) in the drafted config - one corrective re-draft.",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 2 item(s) deterministically:\n  - blocks: synthesized capacity block (6 reps/quarter plan across 3 units)\n  - AC2: solved ramping counts for effective capacity ~87% (band +/-2pp, all units)",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     96.0% (FY26-Q4)          96% +/-2pp                     +2.00     revenue_missed_plan_by_4pct\nAC2   PASS     86.7% (FY26-Q1 North America) 87% +/-2pp                     +1.67     effective_capacity_at_87pct\nAC3   FAIL     no headcount additions   >= 60% of additions            -60.00    ramping_share_exceeds_plan_assumption\n      -> headcount unchanged FY26-Q1 -> FY26-Q4\n------------------------------------------------------------------------------------------\n2/3 criteria passed - STORY NOT LANDED",
+      "AUTOPILOT: applied 1 deterministic fix(es):\n  - AC2: solved ramping counts for effective capacity ~87% (band +/-2pp, all units)",
+      "--- Iteration 2 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     96.0% (FY26-Q4)          96% +/-2pp                     +2.00     revenue_missed_plan_by_4pct\nAC2   PASS     86.7% (FY26-Q1 North America) 87% +/-2pp                     +1.67     effective_capacity_at_87pct\nAC3   FAIL     no headcount additions   >= 60% of additions            -60.00    ramping_share_exceeds_plan_assumption\n      -> headcount unchanged FY26-Q1 -> FY26-Q4\n------------------------------------------------------------------------------------------\n2/3 criteria passed - STORY NOT LANDED",
+      "\nNEEDS YOUR ATTENTION: structural failure(s) ['AC3'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC3 -60.00"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_19",
+  "elapsed_s": 829.1
+}
