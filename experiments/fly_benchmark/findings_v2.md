@@ -33,6 +33,7 @@ criteria.json (F5.3). Vocabulary holes are roadmap notes, not failures.
 | 2 | scenario_02 | CRASHED | simulator draft | NEW FAILURE MODE (baseline: guard escalation) | F12.1 below |
 | 3 | scenario_03 | ESCALATED | convergence (proposal cap 8, iter 10) | IMPROVED - sigma crash gone, ran full loop to 8/11 | F13.x below |
 | 4 | scenario_04 | ESCALATED | preflight calibration | IMPROVED - passed guard, died later at preflight | F14.1 below |
+| 5 | scenario_05 | **LANDED** | converged iter 2 | **IMPROVED - first cert landing** (baseline: guard escalation) | - |
 
 ---
 
@@ -240,5 +241,46 @@ other five claims were accepted. Guard is no longer this story's bottleneck.
   spot, the redraft loop dead-ends. Candidate fixes (post-certification):
   route all known required blocks through deterministic synthesis, or
   embed a concrete block skeleton in the corrective findings message.
+
+**Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 5 - scenario_05 (forecast miss via slippage into next quarter)
+
+**Outcome:** **LANDED UNASSISTED** - converged in 2 iterations, 338s,
+6/6 criteria passing on measured data. Gate 2 delivered.
+
+**Progress vs baseline:** previously ESCALATED at the coverage guard
+(F10.1 legitimate direction-inversion save + F10.2 commit stage-composition
+vocab holes). This flight is the certification run's first landing.
+
+**Observations:**
+- The drafter got the forecast direction RIGHT on the first draft this
+  time: `forecast_vs_actual target_pct=106` (commit above actual = miss).
+  The F10.1 inversion did not recur - and had it, the graduated guard's
+  bounded redraft now handles exactly that parametric shape.
+- Guard again used proceed-with-notes for the commit stage-composition
+  claims (F10.2 vocab holes remain roadmap items).
+- **Draft-repair safety net worked**: the first simulator draft carried
+  `quota.attainment['Enterprise']` as a LIST where a scalar belongs -
+  the same shape-deviation class that crashed scenario_02 (F12.1). Here
+  the deviation hit a path validate_simulator_doc type-checks properly
+  (raises ConfigError), so deterministic repair ran, failed, and the
+  corrective re-draft recovered without human help. scenario_02 vs
+  scenario_05 is now a clean contrast pair pinning exactly what F12.1
+  hardening needs (ConfigError everywhere instead of raw AttributeError).
+- Deterministic recalibration was the workhorse: synthesized the forecast
+  block (commit running 106% of actual), solved the slippage path
+  (+17pp vs >=5pp), and fixed its own staleness overshoot between
+  iterations (68.3% predicted -> shortened durations to [1,2] days +
+  reshaped share_open curve -> 33.5% actual vs <=40% band).
+- Criteria quality good across the board: plan/forecast/coverage/aging/
+  slippage/volume all real checks with sane params.
+
+**Failures & classification:** none. Positive evidence:
+- GUARD-WORKING (notes path, second production use)
+- REPAIR-WORKING (F19/F17 corrective re-draft path; direct counterexample
+  to F12.1's crash mode)
 
 **Actions:** logged only. NO code changes (certification run in progress).

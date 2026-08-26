@@ -1,43 +1,67 @@
 {
-  "status": "escalated",
-  "reason": "criteria_coverage",
+  "status": "converged",
+  "reason": null,
   "detail": null,
-  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-05",
-  "iterations": null,
-  "llm_proposals": null,
-  "thin_margins": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-05",
+  "iterations": 2,
+  "llm_proposals": 0,
+  "thin_margins": [],
   "telemetry": {
     "messages": [
-      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-05",
-      "Pre-check found 8 claims; 5 question(s) for user",
-      "  [+] Revenue was broadly on plan - Comparable to quota/plan target; variance check possible in accounts/opportunities data.",
-      "  [+] The forecast missed materially during the quarter - Forecast vs. actual revenue comparison; requires forecast data attached to opportunities.",
-      "  [+] Pipeline coverage was stable at ~3.2x - Pipeline value / revenue target ratio; computable from opportunity stage and amounts.",
-      "  [+] The definition of commit had effectively loosened as managers included earlier-stage opportunities to offset pipeline gaps - Commit bucket composition and opportunity stage distribution are derivable from stage/pipe",
-      "  [+] Managers included earlier-stage opportunities to offset pipeline gaps - Stage distribution of committed pipeline is observable; intent behind it is not.",
-      "  [+] Deals subsequently slipped into the following quarter - Closed-lost/updated dates shifting across quarters is verifiable from opportunity history.",
-      "  [-] This exposed a forecast intelligence issue rather than a pure pipeline generation problem - Root-cause attribution is narrative; cannot be proven from a sales table. Could be indirec",
-      "  [-] It was not a pure pipeline generation problem - Negative attribution; pipeline generation quality is partly inferable from new-opportunity",
-      "  ? What is the revenue plan/quota figure, and what threshold defines 'material' forecast miss?",
-      "  ? How is 'commit' bucket defined in your data model (stage values, probability, or a custom field)?",
-      "  ? What stage labels map to 'earlier-stage opportunities'?",
-      "  ? How is 'pipeline coverage' calculated (which target denominator and which pipeline scope)?",
-      "  ? What timestamp fields are available to detect deal slippage into the following quarter (e.g., expected close date vs. actual close date vs. last updated)?",
-      "Coverage guard: 3 gap(s); corrective re-draft...",
-      "  - Uncovered claim 'The forecast missed materially during the quarter': AC2 requires forecast_vs_actual target_pct=108 with band_pp=3, i.e. it passes when forecast is 105%-111% of actual. The claim states the forecast MISSED (was below actual), which means forecast_pct should be <100. A forecast of 105% is an OVER-forecast, the opposite direction of the claim. The criterion's parameter contradicts the claim's stated direction, so it does not measure the claim's substance. (consider check: forecast_vs_actual)",
-      "  - Uncovered claim 'The definition of commit had effectively loosened as managers included earlier-stage opportunities to offset pipeline gaps': No criterion measures the composition of the commit bucket or the share of earlier-stage (e.g. Stage 1-2) opportunities within committed pipeline. commit_no_engagement_share measures engagement absence, not stage composition. There is no check comparing early-stage share in commit between periods or against a threshold. (consider check: commit_no_engagement_share)",
-      "  - Uncovered claim 'Managers included earlier-stage opportunities to offset pipeline gaps': This is the mechanism underlying the loosened-commit claim, but no criterion measures early-stage opportunity inclusion in committed pipeline or a shift in early-stage share over time. The coverage_ratio checks (AC3/AC4) measure coverage multiples, not the stage composition driving the claim. (consider check: commit_no_engagement_share)",
-      "Drafted 5 criteria: AC1, AC2, AC3, AC4, AC5",
-      "Coverage guard: gaps persist after corrective re-draft.",
-      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-05",
+      "Pre-check found 7 claims; 4 question(s) for user",
+      "  [+] Revenue was broadly on plan - Comparable to quota/plan vs. actual revenue for the quarter; requires a plan figure which ",
+      "  [+] The forecast missed materially during the quarter - Forecast vs. actual revenue comparison; computable if forecast values are captured in the ",
+      "  [+] Pipeline coverage was stable at ~3.2x - Coverage = sum of pipeline value / revenue target; directly computable from opportunities ",
+      "  [-] The definition of commit had effectively loosened - Qualitative characterization of process change; cannot be directly measured. Could be indi",
+      "  [+] Managers included earlier-stage opportunities to offset pipeline gaps - Verifiable by examining stage distribution and stage-duration of committed pipeline; compu",
+      "  [+] Deals subsequently slipped into the following quarter - Verifiable via close-date changes or stage regressions on opportunities between quarters.",
+      "  [-] This exposed a forecast intelligence issue rather than a pure pipeline generation problem - Causal attribution and framing. Could be indirectly reflected by comparing forecast accura",
+      "  ? Does the data model include a revenue plan/quota figure, or only actuals and forecast?",
+      "  ? Are forecast values (committed/best-case/forecast) captured per period, or only opportunity amounts and close dates?",
+      "  ? Do opportunities carry a stage field and stage/date history to detect slips and stage loosening?",
+      "  ? How is 'pipeline coverage' defined in the source system (which stages count, what the denominator is)?",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The forecast missed materially during the quarter' [PARAMETRIC]: The claim states the forecast MISSED (actual came in below the forecast). AC2 uses target_pct=107, which asserts actual was 107% of forecast \u2014 i.e., the forecast was BEAT, the opposite direction. A criterion whose parameters contradict the claim's stated direction cannot prove the claim false when false; the miss is unverified. The existing forecast_vs_actual check can express this claim but the drafted parameters are wrong/contradictory. (consider check: forecast_vs_actual)",
+      "  - Uncovered claim 'Deals subsequently slipped into the following quarter' [PARAMETRIC]: The claim asserts deals slipped (slippage increased) into the following quarter. AC5 uses min_increase_pp=12, which requires a 12pp increase \u2014 a magnitude not stated or supported by the story. A claim that deals slipped by any meaningful amount cannot be disproven by a criterion demanding a specific 12pp jump. The existing slippage_trend check can express this claim but the drafted parameter is an unsupported magnitude. (consider check: slippage_trend)",
+      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
+      "Coverage guard: 3 note(s) - proceeding:",
+      "  [note] Uncovered claim 'exposing a forecast intelligence issue rather than a pure pipeline generation problem' [QUALIFIER]: This is a comparative narrative conclusion attributing the miss to forecast intelligence rather than pipeline generation. AC6 (creation_volume_trend) measures pipeline creation volume, which relates to the pipeline-generation side, but the claim's substance is the relative attribution between two root causes \u2014 a diagnostic judgment that no single metric primitive can express. The uncovered element is the narrative qualifier, not a measurable metric.",
+      "  [note] Uncovered claim 'The forecast missed materially during the quarter' [PARAMETRIC]: The claim states the forecast MISSED (actual fell below forecast). AC2 uses target_pct=106, which asserts actual came in 6% ABOVE forecast \u2014 this directly contradicts the claim's stated direction. The forecast_vs_actual check CAN express this claim, but the drafted parameters are inverted, so the criterion would not fail when the claim is false. A correct criterion would target a value below 100% (e.g. target_pct around 94-97) to verify the miss. (consider check: forecast_vs_actual)",
+      "  [note] Uncovered claim 'Managers included earlier-stage opportunities to offset pipeline gaps' [PARAMETRIC]: The claim's substance is that commit pipeline increasingly contains opportunities lacking genuine engagement (earlier-stage deals pulled in to fill gaps). commit_no_engagement_share is the existing check designed to measure exactly this. AC4 uses stage_aging (stale-opportunity aging), which measures how long deals sit in stages, not whether commit is inflated with non-engaged earlier-stage opportunities \u2014 wrong entity and wrong metric. No criterion measures the commit composition substance. (consider check: commit_no_engagement_share)",
+      "  AC1  revenue_broadly_on_plan\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 101, \"band_pct\": 3}\n  AC2  forecast_missed_materially\n       check=forecast_vs_actual params={\"target_pct\": 106, \"band_pp\": 3}\n  AC3  pipeline_coverage_stable_at_3_2x\n       check=coverage_ratio params={\"quarter\": \"FY26-Q4\", \"min_multiple\": 3.2}\n  AC4  commit_loosened_earlier_stage\n       check=stage_aging params={\"stale_threshold_days\": 60, \"max_stale_share_pct\": 40}\n  AC5  deals_slipped_into_following_quarter\n       check=slippage_trend params={\"min_increase_pp\": 5}\n  AC6  forecast_intelligence_issue_not_pipeline_generation\n       check=creation_volume_trend params={\"target_decline_pct\": 0, \"tolerance_pp\": 8}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 8 item(s) deterministically:\n  - blocks: synthesized forecast block (commit running 106% of actual)\n  - AC5: solved slippage path [0.05, 0.1063, 0.1626, 0.2189] (+17pp vs >= 5pp, incl. 7pp sampling-noise margin)\n  - AC4: shortened deal durations to [6, 14] - the staleness cap was unreachable at the drafted cycle length\n  - AC4: reshaped share_open_by_quarter to [0.1578, 0.1578, 0.1578, 0.5265] -> predicted 68.3% stale (engine-exact model, <= 40% cap)\n  - coverage: scaled plan Q1 down x0.14 (to $1,916,225) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q2 down x0.29 (to $3,848,060) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q3 down x0.43 (to $5,775,898) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q4 down x0.31 (to $4,166,604) so open pipeline covers it at the required multiple",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     101.0% (FY26-Q3)         101% +/-3pp                    +3.00     revenue_broadly_on_plan\nAC2   PASS     106.0% (FY26-Q1)         106% +/-3pp                    +3.00     forecast_missed_materially\nAC3   PASS     4.35x coverage           >= 3.2x                        +1.15     pipeline_coverage_stable_at_3_2x\nAC4   FAIL     68.1% stale              <= 40% stale                   -28.09    commit_loosened_earlier_stage\n      -> 288/423 open deals older than 60d at FY26-Q4\nAC5   PASS     +12.0pp slip-rate change >= +5pp                        +7.04     deals_slipped_into_following_quarter\nAC6   PASS     +0.0% (FY26-Q1 -> FY26-Q4) decline ~0% +/-8pp             +8.00     forecast_intelligence_issue_not_pipeline_generation\n------------------------------------------------------------------------------------------\n5/6 criteria passed - STORY NOT LANDED",
+      "AUTOPILOT: applied 7 deterministic fix(es):\n  - AC5: solved slippage path [0.05, 0.1069, 0.1638, 0.2207] (+17pp vs >= 5pp, incl. 7pp sampling-noise margin)\n  - AC4: shortened deal durations to [1, 2] - the staleness cap was unreachable at the drafted cycle length\n  - AC4: reshaped share_open_by_quarter to [0.0129, 0.0129, 0.0129, 0.9613] -> predicted 34.0% stale (engine-exact model, <= 40% cap)\n  - coverage: scaled plan Q1 down x0.08 (to $156,650) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q2 down x0.08 (to $314,575) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q3 down x0.08 (to $472,174) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q4 down x0.98 (to $4,094,108) so open pipeline covers it at the required multiple",
+      "--- Iteration 2 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     101.0% (FY26-Q3)         101% +/-3pp                    +3.00     revenue_broadly_on_plan\nAC2   PASS     106.0% (FY26-Q1)         106% +/-3pp                    +3.00     forecast_missed_materially\nAC3   PASS     3.75x coverage           >= 3.2x                        +0.55     pipeline_coverage_stable_at_3_2x\nAC4   PASS     33.5% stale              <= 40% stale                   +6.51     commit_loosened_earlier_stage\nAC5   PASS     +19.1pp slip-rate change >= +5pp                        +14.06    deals_slipped_into_following_quarter\nAC6   PASS     +0.0% (FY26-Q1 -> FY26-Q4) decline ~0% +/-8pp             +8.00     forecast_intelligence_issue_not_pipeline_generation\n------------------------------------------------------------------------------------------\n6/6 criteria passed - STORY LANDED",
+      "\nDeliverables in experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-05",
+      "  dataset:   experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-05\\output\\dataset.xlsx",
+      "  proof:     validation_report.md",
+      "  config:    simulator.json (tweak knobs anytime, regenerate)"
     ],
     "gate_decisions": [
       {
         "prompt": "Proceed with the computable claims above?",
         "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Inspect and accept delivery?",
+        "answer": true
       }
     ]
   },
   "scenario": "scenario_05",
-  "elapsed_s": 253.7
+  "elapsed_s": 338.3
 }
