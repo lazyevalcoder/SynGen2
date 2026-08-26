@@ -1,23 +1,25 @@
 {
   "summary": {
     "stories": 1,
-    "landed": 1,
-    "unassisted_landing_rate_pct": 100.0,
-    "escalated": 0,
-    "escalation_reasons": [],
+    "landed": 0,
+    "unassisted_landing_rate_pct": 0.0,
+    "escalated": 1,
+    "escalation_reasons": [
+      "Iteration cap (10) reached"
+    ],
     "other": []
   },
   "reports": [
     {
-      "status": "converged",
-      "reason": null,
+      "status": "escalated",
+      "reason": "Iteration cap (10) reached",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-05",
-      "iterations": 2,
-      "llm_proposals": 0,
-      "thin_margins": [],
-      "scenario": "scenario_05",
-      "elapsed_s": 338.3
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-06",
+      "iterations": null,
+      "llm_proposals": null,
+      "thin_margins": null,
+      "scenario": "scenario_06",
+      "elapsed_s": 376.3
     }
   ]
 }

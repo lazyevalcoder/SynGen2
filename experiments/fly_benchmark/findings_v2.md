@@ -34,6 +34,7 @@ criteria.json (F5.3). Vocabulary holes are roadmap notes, not failures.
 | 3 | scenario_03 | ESCALATED | convergence (proposal cap 8, iter 10) | IMPROVED - sigma crash gone, ran full loop to 8/11 | F13.x below |
 | 4 | scenario_04 | ESCALATED | preflight calibration | IMPROVED - passed guard, died later at preflight | F14.1 below |
 | 5 | scenario_05 | **LANDED** | converged iter 2 | **IMPROVED - first cert landing** (baseline: guard escalation) | - |
+| 6 | scenario_06 | ESCALATED | convergence (iter cap 10) | REGRESSION vs baseline post-fix landing | F15.x below |
 
 ---
 
@@ -282,5 +283,61 @@ vocab holes). This flight is the certification run's first landing.
 - GUARD-WORKING (notes path, second production use)
 - REPAIR-WORKING (F19/F17 corrective re-draft path; direct counterexample
   to F12.1's crash mode)
+
+**Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 6 - scenario_06 (Ent missed / MM beat via quota-vs-potential mismatch)
+
+**Outcome:** ESCALATED at iteration cap (10), 376s, best partial 4/5.
+The one persistent failure: AC4 Enterprise quota-vs-potential stuck at
+~39-41% against a 120% target.
+
+**Progress vs baseline:** baseline LANDED here after the D1/D2 fixes and
+a verification re-fly. This is the first certification REGRESSION - see
+root cause; the difference is drafter behavior, not lost fixes.
+
+**Observations:**
+- The drafter wrote AC4/AC5 WITHOUT `unit` params: two quota_vs_potential
+  criteria on dimension=segment with DIFFERENT targets (Ent 120%, MM 40%),
+  neither scoped to its segment. The baseline flight's criteria carried
+  explicit `unit` params - that is the entire delta between landing and
+  escalating.
+- The closed-form remedy then mis-solved: autopilot log shows it scaled
+  ALL segment plans to 120% (AC4's target), then ALL segment plans x0.33
+  to 40% (AC5's target) - last criterion wins, both segments end at 40%,
+  AC4 is permanently broken. Remedy keys on dimension, ignores unit
+  scoping when absent, emits no warning.
+- From iteration 2 on, the state was unsolvable by knob turns: raking
+  pins revenue attainment to plan (AC1/AC3 pass), while plan/potential
+  ratios are plan-of-record. The proposer nevertheless proposed
+  `quota.attainment_by_segment.*` turns three times with confidently
+  wrong predicted effects ("raises Enterprise quota-vs-potential toward
+  120%" - attainment does not enter that ratio), plus two EMPTY proposals
+  (iterations 3-4 burned no-ops). Regression reverts correctly preserved
+  best-partial throughout; seed bump draw-noise recovery also fired once.
+- Display bug: from iteration 2 the verdict table shows AC4's Actual as
+  "40% (Mid-Market)" while AC4's criterion name/unit is Enterprise -
+  mislabeled unit in the check's actual-value reporting.
+
+**Failures & classification (logged only - no fixes during certification):**
+- F15.1 BUG-AUTOPILOT (family: multi-target solve interference): the
+  quota_vs_potential remedy applies one target ratio to EVERY unit of the
+  named dimension when criteria lack `unit` scoping; multiple same-
+  dimension targets clobber each other last-writer-wins, silently
+  converting a solvable config into an unsolvable one. Candidate fixes:
+  require/warn-on-missing unit at Gate 1; solve per-unit jointly; never
+  overwrite a unit a previous criterion already pinned.
+- F15.2 BUG-GUARD-CALIBRATION (family: cross-criterion consistency):
+  two conflicting targets on the same check+dimension without disjoint
+  unit scopes passed Gate 1 silently. Same family as F11.2 - criteria-vs-
+  schema linting would catch it.
+- F15.3 GAP-KNOWLEDGE (family: proposer transfer model): proposer lacks
+  the blocked-path fact that attainment knobs cannot move plan/potential
+  ratios (G14 family); wrong predictions + empty proposals burned ~half
+  the budget.
+- F15.4 INFRA-DISPLAY (minor): quota_vs_potential verdict line reports
+  the wrong unit's actual value when multiple units exist.
 
 **Actions:** logged only. NO code changes (certification run in progress).
