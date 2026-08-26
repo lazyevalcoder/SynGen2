@@ -127,6 +127,27 @@ Each milestone answers exactly one trust question before the next begins — the
 
 Web UI, multi-user/server mode, BI-tool integrations, additional domains beyond M4's scope, orchestration frameworks. Revisit only after M5.
 
+## Future Enhancement — P6 "Flight Journal" (hero-journey observability)
+
+**Status:** PLANNED, vanity/visibility work - explicitly deprioritized
+behind unassisted landing rate. Design of record: `JOURNEY_PLAN.md`.
+
+**Ask (from management):** show how a prompt/scenario traverses the
+touchpoints and phases to produce the output - as a *hero journey*: the
+user's prompt is the protagonist; phases are chapters; agents are allies
+and guardians; rejections/redrafts/reverts are trials; delivery or
+escalation-with-cause is the return or the death scene.
+
+**Shape:** pure instrumentation + rendering, zero flight-logic change,
+zero added LLM calls. Two artifacts per session, both grown LIVE during
+the flight: `journey_events.jsonl` (structured trace with full lineage:
+claim -> criterion -> knob path -> iteration -> verdict) and `journey.md`
+(narrative rendering in storytelling voice, spine summary up top).
+Fail-open like the critic.
+
+**Trigger:** after certification completes (re-fly of 01-10 post-P5 +
+first-pass 11-25). ~1 day of effort when scheduled.
+
 ## Post-v1 — Domain Packs beyond RevOps
 
 **Trigger:** any requirement to generate synthetic data for a second vertical (e.g., finance/accounting/treasury scenarios). v0 architecture is delivered in M6 (see `DOMAIN_PACKS.md` and M6 above); this section records the original second-vertical motivation. Per decision 2026-08-25, only RevOps exists until after M6 certification.
