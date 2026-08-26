@@ -1,0 +1,66 @@
+{
+  "status": "structure_check_failed",
+  "reason": null,
+  "detail": null,
+  "session": null,
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-21",
+      "Pre-check found 7 claims; 4 question(s) for user",
+      "  [+] Pipeline coverage remained healthy at 3.5x - Coverage ratio = sum(opportunity pipeline value) / revenue target or trailing revenue; dir",
+      "  [+] Next-quarter revenue risk increased - Derivable from forecast vs. target delta or weighted pipeline movement quarter-over-quarte",
+      "  [+] Coverage was concentrated in a small number of large Enterprise opportunities - Computable via count and value share of Enterprise-segment opportunities above a size thre",
+      "  [+] This created significant dependency on fewer deals - Measurable via top-N deal share of total pipeline (e.g., top 3 deals = X% of coverage).",
+      "  [-] Deal concentration increased forecast volatility - 'Volatility' requires a time series of forecast revisions; concentration itself is computa",
+      "  [-] Aggregate coverage looked sufficient - Normative judgment ('sufficient') not derivable from data; the underlying coverage ratio i",
+      "  [-] The underlying issue was pipeline concentration and forecast intelligence, not simple under-coverage - Causal attribution and diagnosis; computable evidence (concentration) exists but the 'unde",
+      "  ? What is the revenue target or denominator used for the 3.5x coverage ratio (quarterly target, annual target, or trailing revenue)?",
+      "  ? What threshold defines a 'large' Enterprise opportunity (dollar value or stage)?",
+      "  ? How many deals constitute the 'small number' driving concentration?",
+      "  ? What time series or forecast data would quantify 'volatility' if you want that claim made computable?",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Next-quarter revenue risk increased' [PARAMETRIC]: The claim asserts that next-quarter revenue risk INCREASED, which is a directional/comparative assertion about forecast performance deteriorating. The drafted AC3 uses forecast_vs_actual with target_pct=109 (a forecast ABOVE plan) and band_pp=5. A target above 100% contradicts the claim's substance that risk increased \u2014 a rising-risk scenario implies the forecast fell short or volatility widened, not that it exceeded plan by 9%. The existing check CAN express this claim's substance (forecast vs actual deviation), but the parameters contradict the claim's stated direction. This is a parametric gap: wrong direction/magnitudes, not a missing primitive. (consider check: forecast_vs_actual)",
+      "Drafted 5 criteria: AC1, AC2, AC3, AC4, AC5",
+      "Coverage guard: 2 note(s) - proceeding:",
+      "  [note] Uncovered claim 'Next-quarter revenue risk increased' [PARAMETRIC]: AC2 measures forecast_vs_actual against a 95% target with a 5pp band, which verifies whether the forecast was met or missed in a single period. The claim asserts that revenue risk INCREASED relative to a prior period \u2014 a directional change in risk/volatility, not a point-in-time miss. No criterion measures the change in forecast risk or volatility over time. The existing forecast_vs_actual check cannot prove that risk increased; it can only prove a forecast was off-target. This is a parametric gap: an existing check could partially express the substance (forecast accuracy/risk) but the drafted parameters and check cannot capture the 'increased' direction. (consider check: forecast_vs_actual)",
+      "  [note] Uncovered claim 'This created significant dependency on fewer deals' [PARAMETRIC]: AC4 uses revenue_concentration (top 5 accounts, min 55% share) which measures revenue concentration, not pipeline concentration. The claim concerns dependency on fewer deals at the pipeline level (the story explicitly frames this as 'pipeline concentration'). AC3 measures pipeline_concentration but its stated coverage is the 'concentrated in large Enterprise opportunities' claim. The dependency-on-fewer-deals substance (pipeline concentrated in few deals) is not cleanly covered by a criterion whose parameters and framing target revenue share rather than pipeline dependency. Per strict PARAMETRIC guidance, when unsure whether a criterion would catch the claim being false, mark it uncovered. (consider check: pipeline_concentration)",
+      "Critic flagged 3 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Next-quarter revenue risk increased' [PARAMETRIC]: AC2 uses forecast_vs_actual with direction=miss, which measures whether the forecast missed a target in a single period. The claim is about an INCREASE in revenue risk over time (a trend in risk/volatility), not a single-period miss. No existing criterion measures the directional change in revenue risk across quarters. The forecast_vs_actual check can express this if reparameterized as a trend, but as drafted it does not. (consider check: forecast_vs_actual)",
+      "Drafted 4 criteria: AC1, AC2, AC3, AC4",
+      "Coverage guard: 2 note(s) - proceeding:",
+      "  [note] Uncovered claim 'Next-quarter revenue risk increased' [PARAMETRIC]: The claim asserts that revenue risk INCREASED (forecast missed or fell short). AC4 uses forecast_vs_actual with target_pct=105, which requires the forecast to EXCEED actuals by 5pp \u2014 the opposite direction of a risk increase. The existing forecast_vs_actual check CAN express this claim, but the drafted parameters contradict the claim's stated direction (a miss/risk, not an over-performance). A correct criterion would target a shortfall band (e.g. target_pct below 100 with a negative band). (consider check: forecast_vs_actual)",
+      "  [note] Uncovered claim 'This created significant dependency on fewer deals' [PARAMETRIC]: Dependency on fewer deals is the substance of top-N deal revenue concentration. AC2 (revenue_concentration, top_n=5, min_top_share_pct=50) can prove this claim being false. However, this claim is about revenue concentration from deals, and AC2 measures exactly that. The concern is whether AC2's parameters align \u2014 min_top_share_pct=50 with top_n=5 is a valid threshold for 'dependency on fewer deals'. This appears covered by AC2's substance. Marking as covered would be appropriate, but given the strictness directive and that the claim's 'significant dependency' magnitude is not clearly bounded by the 50% threshold, it remains ambiguous. The check exists and can prove the claim false. (consider check: revenue_concentration)",
+      "Declared dependencies:\nAC1 <- depends on AC4\n  AC4 <- depends on AC1",
+      "  AC1  aggregate_pipeline_coverage_3_5x (depends_on: AC4)\n       check=coverage_ratio params={\"quarter\": \"FY26-Q1\", \"min_multiple\": 3.5, \"target_quarter_offset\": -1}\n  AC2  won_revenue_concentration_few_deals\n       check=revenue_concentration params={\"top_n\": 5, \"min_top_share_pct\": 50}\n  AC3  open_pipeline_concentration_few_accounts\n       check=pipeline_concentration params={\"top_n_accounts\": 5, \"min_top_share_pct\": 50}\n  AC4  forecast_hot_and_rising_risk (depends_on: AC1)\n       check=forecast_vs_actual params={\"target_pct\": 105, \"band_pp\": 5}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Critic flagged 2 block issue(s) in the drafted config - one corrective re-draft.",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Repaired criteria deterministically:\n  - AC1: dropped target_quarter_offset (-1 from FY26-Q1 is outside the calendar) - measuring against the quarter's own plan",
+      "Auto-calibrated 4 item(s) deterministically:\n  - blocks: synthesized forecast block (commit running 105% of actual)\n  - planning: synthesized a naturally-sized quota block across 3 segment(s) - criteria require a plan to exist\n  - coverage: scaled plan Q1 down x0.50 (to $5,884,353) so open pipeline covers it at the required multiple\n  - AC3: raised deal_size sigma 0.70->3.72 -> predicted top-5 open-pipeline share 54% (>= 50%)",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     630.90x coverage         >= 3.5x                        +627.40   aggregate_pipeline_coverage_3_5x\nAC2   PASS     74.1% top-5              >= 50%                         +24.11    won_revenue_concentration_few_deals\nAC3   PASS     71.0% top-5              >= 50.0%                       +20.99    open_pipeline_concentration_few_accounts\nAC4   PASS     105.0% (FY26-Q1)         105% +/-5pp                    +5.00     forecast_hot_and_rising_risk\n------------------------------------------------------------------------------------------\n4/4 criteria passed - STORY LANDED",
+      "  STRUCTURE [S1/FAIL] sheet 'opportunities' column mismatch; missing=[] unexpected=[]"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_21",
+  "elapsed_s": 597.3
+}

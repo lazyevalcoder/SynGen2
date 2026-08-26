@@ -1,0 +1,58 @@
+{
+  "status": "converged",
+  "reason": null,
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-23",
+  "iterations": 2,
+  "llm_proposals": 1,
+  "thin_margins": [],
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-23",
+      "Pre-check found 5 claims; 4 question(s) for user",
+      "  [-] A new compensation plan kicked in (prior to Q1) - Compensation plan adoption is an HR/policy event; the table may show a plan-change flag bu",
+      "  [+] Average deal size fell from about $60,000 in Q1 to roughly $30,000 by Q4 - Derivable from average of deal/opportunity amounts grouped by quarter.",
+      "  [-] Reps chased smaller, faster wins - Motivation/intent is narrative framing. Could indirectly reflect via average days-to-close",
+      "  [+] Win rates stayed essentially flat all year - Derivable from won / (won + lost) opportunities per quarter, if both won and lost records ",
+      "  [-] The mix just got smaller (deal mix drove the average decline) - Causal attribution of the average drop to mix shift is narrative. Could indirectly reflect",
+      "  ? Does the dataset contain a date field enabling quarter grouping, and does it include won and lost opportunity records (for win rate)?",
+      "  ? Is there a field distinguishing deal size vs. deal count so the mix effect can be decomposed?",
+      "  ? Is there any cycle-time field (e.g., days to close) to test the 'faster wins' claim?",
+      "  ? Is there a compensation-plan or plan-change flag field, or is that entirely external to the data?",
+      "Critic flagged 2 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "  AC1  deal_size_decline_direction\n       check=deal_size_trend params={\"target_change_pct\": -50, \"tolerance_pp\": 8, \"direction\": \"decrease\"}\n  AC2  win_rate_flat_anchored\n       check=win_rate_flat params={\"band_pp\": 3, \"baseline_anchor\": true}\n  AC3  data_referential_sanity\n       check=data_sanity params={\"max_discount_pct\": 80}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Critic flagged 2 block issue(s) in the drafted config - one corrective re-draft.",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     -43.5% deal size         -50% +/-8pp                    +1.47     deal_size_decline_direction\nAC2   PASS     2.80pp dev (FY26-Q2)     <= 3pp of mean                 +0.20     win_rate_flat_anchored\nAC3   PASS     clean                    no violations                  +1.00     data_referential_sanity\n------------------------------------------------------------------------------------------\n3/3 criteria passed - STORY LANDED",
+      "Attempting margin hardening round 1 (thin: AC2).",
+      "--- Iteration 2 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     -56.7% deal size         -50% +/-8pp                    +1.26     deal_size_decline_direction\nAC2   PASS     2.40pp dev (FY26-Q1)     <= 3pp of mean                 +0.60     win_rate_flat_anchored\nAC3   PASS     clean                    no violations                  +1.00     data_referential_sanity\n------------------------------------------------------------------------------------------\n3/3 criteria passed - STORY LANDED",
+      "\nDeliverables in experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-23",
+      "  dataset:   experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-23\\output\\dataset.xlsx",
+      "  proof:     validation_report.md",
+      "  config:    simulator.json (tweak knobs anytime, regenerate)"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Inspect and accept delivery?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_23",
+  "elapsed_s": 345.5
+}
