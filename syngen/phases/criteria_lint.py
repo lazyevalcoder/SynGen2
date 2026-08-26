@@ -87,7 +87,16 @@ def lint_criteria_internal(criteria_doc):
     """
     groups = {}
     notes = []
+    hard = []
+    known = set(_pack().checks)
     for c in criteria_doc.get("criteria", []):
+        if c["check"] not in known:
+            hard.append(
+                f"{c['id']}: check '{c['check']}' is not in the pack's "
+                "check registry - no validator or solver can evaluate it. "
+                "Re-express the claim with a real check or classify it as "
+                "a vocabulary gap.")
+            continue
         sigs = _pack().check_signatures.get("signatures", {})
         sig = sigs.get(c["check"])
         if sig:
@@ -106,7 +115,6 @@ def lint_criteria_internal(criteria_doc):
         key = (c["check"], _coordinates(c),
                bool(c.get("params", {}).get("exclude_outlier_deals")))
         groups.setdefault(key, []).append((c, band))
-    hard = []
     for (check, coords, _), members in sorted(
             groups.items(), key=lambda kv: str(kv[0])):
         if len(members) < 2:
@@ -279,6 +287,49 @@ def _feasibility_findings(cfg, criteria_doc):
                 f"the drafted plan implies ~${est:,.0f} average for this "
                 "tier (plan totals are plan-of-record). Lower the plan "
                 "curves, raise the cap, or raise this tier's volume share.")
+    findings.extend(_tier_share_feasibility(cfg, criteria_doc, mult, shares))
+    return findings
+
+
+def _tier_share_feasibility(cfg, criteria_doc, mult, count_shares):
+    """P6 P1.4 (cert s12 F19.3): tier revenue-share reachability.
+
+    Revenue share of a tier ~= count_share * price_mult / sum(count_share_i
+    * price_mult_i). A target share therefore caps the COUNT share the tier
+    can absorb; when the target exceeds the ceiling even with ALL remaining
+    count share allocated to the tier, the criterion is arithmetically
+    unlandable no matter how the proposer turns knobs. Conservative: the
+    model assumes list prices (engine realized prices run at or below list),
+    so a flag here is a true ceiling, never a false kill.
+    """
+    if not mult or not count_shares:
+        return []
+    tiers = list(count_shares)
+    if len(tiers) < 2:
+        return []
+    floor = 0.05  # other tiers must retain a residual presence
+    findings = []
+    for c in criteria_doc.get("criteria", []):
+        if c["check"] != "tier_share_shift":
+            continue
+        p = c.get("params", {})
+        tier = p.get("tier")
+        target = p.get("to_share_pct")
+        if tier not in count_shares or target is None:
+            continue
+        others = [t for t in tiers if t != tier]
+        count_c = max(0.0, 1.0 - floor * len(others))
+        denom = count_c * float(mult.get(tier, 1.0)) + \
+            sum(floor * float(mult.get(t, 1.0)) for t in others)
+        ceiling = count_c * float(mult.get(tier, 1.0)) / denom * 100.0
+        if float(target) > ceiling + 1e-9:
+            findings.append(
+                f"{c['id']}: tier_share_shift target {float(target):g}% "
+                f"revenue share for tier '{tier}' is arithmetically "
+                f"unreachable - even with all remaining count share it tops "
+                f"out near {ceiling:.0f}% at the drafted price multiplier "
+                f"({mult.get(tier)}). Raise this tier's price_multiplier or "
+                "lower the target.")
     return findings
 
 

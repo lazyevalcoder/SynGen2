@@ -636,18 +636,42 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                 "session": str(session.root)}
 
     # --- Criteria x config geometry lint (P5 WP3): coordinates must land
-    # inside the drafted/synthesized data model before the loop starts ---
+    # inside the drafted/synthesized data model before the loop starts.
+    # P6 P1.3: one bounded corrective criteria re-draft before escalating -
+    # the drafter may not have known the config's legal units (cert
+    # s15/s18: cohort pseudo-units from story nouns are re-expressible as
+    # spread/scoped forms). Escalate only if still unrealizable.
     geo_findings = cross_lint(sim_cfg, doc)
     if geo_findings:
-        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
         session.log("CRITERIA GEOMETRY LINT:\n" + render_lint(geo_findings))
-        session.log("ESCALATED: criteria_geometry - criteria reference "
-                    "coordinates outside the data model.")
-        log("\nNEEDS YOUR ATTENTION: criteria reference coordinates that "
-            "do not exist in the drafted config (see session log). "
-            "criteria.json persisted for inspection.")
-        return {"status": "escalated", "reason": "criteria_geometry",
-                "session": str(session.root)}
+        log("Criteria coordinates fall outside the drafted data model - "
+            "one corrective re-draft.")
+        geo_brief = ("CRITERIA GEOMETRY FINDINGS - fix ALL of these. "
+                     "Reference only coordinates/units that exist in the "
+                     "drafted data model, or re-express subset claims as a "
+                     "spread/min-spread criterion or per-unit scoping "
+                     "(a cohort pseudo-unit like 'top territories' cannot "
+                     "be built):\n" + render_lint(geo_findings))
+        doc = draft_criteria(client, story, decisions_text + "\n\n"
+                             + geo_brief)
+        doc, cov_status2 = enforce_coverage(
+            client, story, doc, claims, decisions_text=decisions_text,
+            log_fn=log)
+        lint_hard, _ = lint_criteria_internal(doc)
+        geo_findings = cross_lint(sim_cfg, doc)
+        if cov_status2 == "uncovered" or lint_hard or geo_findings:
+            session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+            session.log("ESCALATED: criteria_geometry - criteria reference "
+                        "coordinates outside the data model even after a "
+                        "corrective re-draft.")
+            log("\nNEEDS YOUR ATTENTION: criteria reference coordinates "
+                "that do not exist in the drafted config, even after a "
+                "corrective re-draft (see session log). criteria.json "
+                "persisted for inspection.")
+            return {"status": "escalated", "reason": "criteria_geometry",
+                    "session": str(session.root)}
+        session.log("CRITERIA GEOMETRY: corrective re-draft accepted.")
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
 
     return _converge_and_deliver(session, client, io, doc,
                                  session.root / "simulator.json", log,
