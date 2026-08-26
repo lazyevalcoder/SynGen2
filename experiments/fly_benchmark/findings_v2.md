@@ -341,3 +341,53 @@ root cause; the difference is drafter behavior, not lost fixes.
   the wrong unit's actual value when multiple units exist.
 
 **Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 7 - scenario_07 (bookings -3%, pipeline creation +12%, low-ICP mix)
+
+**Outcome:** ESCALATED by OSCILLATION guard after 6 stale iterations
+(D3 fix working as designed), 513s, best partial 2/4. Still failing:
+AC1 creation trend, AC3 deal-size trend.
+
+**Progress vs baseline:** scenario_07 was never flown in Pass 1 (one of
+the 18 cancelled). New measurement.
+
+**Observations:**
+- SIGN-CONVENTION TRAP: the drafter expressed the story's "+12% pipeline
+  creation growth" as `creation_volume_trend target_decline_pct: -12`.
+  Iteration 1 PASSED this criterion (+11.9% actual growth) - so the
+  drafter's encoding was semantically right. But the KNOB PROPOSER then
+  misread the parameter, flipped `volume_multipliers` downward to
+  "produce the decline", and DESTROYED a passing criterion (-9% actual
+  vs wanted +12% growth). It spent the rest of the flight fighting its
+  own turn. The matrix vocab documents checks for the coverage guard,
+  but sign conventions never reach the knob_proposer context.
+- COUPLED-KNOB TRADEOFF: `volume_multipliers` simultaneously moves
+  creation volume (AC1), avg won deal size via raking (AC3), and ICP
+  share denominators (AC2). Proposals optimized one criterion at a time
+  and traded the others away - the escalation reason literally reads
+  "proposals keep trading criteria against each other". No joint
+  transfer model exists for shared knob axes.
+- WHALE NOISE: avg won deal size whipped between +45% and +108% on small
+  won-count quarters (outlier draws dominate means); huge margin variance
+  fed the oscillation.
+- Positives: oscillation/stall detection escalated EARLY (cap 10 not
+  reached); regression reverts fired 5 times and preserved best partial;
+  icp_creation_shift was solved and held.
+
+**Failures & classification (logged only - no fixes during certification):**
+- F16.1 GAP-KNOWLEDGE (family: param semantics): check-parameter sign
+  conventions (e.g. target_decline_pct) are documented nowhere the knob
+  proposer can see; a passing criterion was misread and broken by its own
+  autopilot. Candidate fix: inject per-check vocab/signature docs from
+  the claim matrix into knob_proposal prompts.
+- F16.2 ARCHITECTURE-GAP (family: coupled-knob planning): proposals lack
+  a joint transfer model across criteria sharing a knob axis; single-
+  criterion optimization guarantees trade-off oscillation on coupled
+  systems.
+- F16.3 OBSERVATION (family: estimator noise): outlier-whale dominance of
+  small-sample means makes deal-size margins high-variance; candidate:
+  median-based or trimmed variants.
+
+**Actions:** logged only. NO code changes (certification run in progress).
