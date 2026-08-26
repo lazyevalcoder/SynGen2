@@ -1,0 +1,77 @@
+{
+  "status": "converged",
+  "reason": null,
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-14",
+  "iterations": 1,
+  "llm_proposals": 0,
+  "thin_margins": [],
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-14",
+      "Pre-check found 7 claims; 5 question(s) for user",
+      "  [+] The Q4 forecast came in about 9 percent above what actually landed. - Verifiable: (forecast_value - actual_value) / actual_value \u2248 9%. Requires a forecast table",
+      "  [+] The commit was dominated by expansion opportunities. - Verifiable if opportunities carry an opportunity type (new/expansion/downsell/cross-sell) ",
+      "  [+] Expansion opportunities were slower to close than projected. - Verifiable: compare actual close duration vs. projected/expected close date or historical ",
+      "  [+] The underlying quarter finished roughly on plan. - Verifiable: compare actual revenue to the plan/quota for the quarter. 'Roughly on plan' is",
+      "  [+] Committed pipeline overshot reality. - Verifiable: compare committed pipeline value to actual closed revenue.",
+      "  [+] The gap between what was called and what closed widened through the back half of the year. - Verifiable: compute call-vs-close gap by month/quarter for H2; check the trend direction. ",
+      "  [-] Forecast credibility took a hit. - Narrative framing of trust/reputation. Could indirectly reflect the computable claims: for",
+      "  ? Is there a forecast table with a discrete 'commit' line separate from the overall forecast?",
+      "  ? Do opportunities carry an opportunity type field (new/expansion/downsell) so 'dominated by expansion' can be verified?",
+      "  ? Is there a projected/expected close date or historical average close duration to test 'slower to close than projected'?",
+      "  ? Is there a quarterly plan/quota figure to test 'roughly on plan'?",
+      "  ? Are actuals available at monthly granularity to assess the back-half trend in the call-vs-close gap?",
+      "Coverage guard: 3 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The commit was dominated by expansion opportunities.' [PARAMETRIC]: The claim asserts that expansion opportunities dominated the commit (a composition/relative-share assertion about the commit pipeline). No drafted criterion measures the share of expansion within the commit. commit_no_engagement_share is an existing check that can express commit composition of the commit, and it can prove this claim being false (a commit dominated by expansion would fail a check expecting non-expansion dominance). AC3's cycle_length_trend only measures closing speed, not the dominance of expansion in the commit mix. (consider check: commit_no_engagement_share)",
+      "  - Uncovered claim 'Expansion opportunities were slower to close than projected.' [PARAMETRIC]: The claim is specifically about expansion opportunities' cycle length exceeding projected/expected values. cycle_length_trend measures the trend of average cycle length across all deals, not the differential for expansion opportunities specifically. No drafted criterion isolates expansion cycle length against its projection. The right existing check would be an elasticity_differential-style comparison (expansion vs. baseline cycle vs. projected), which is not drafted. (consider check: cycle_length_trend)",
+      "  - Uncovered claim 'Committed pipeline overshot reality.' [PARAMETRIC]: This claim is the commit-side oversell (committed pipeline above what closed), which is the same substance as the Q4 forecast-overshoot claim already covered by AC1. AC1's forecast_vs_actual with target_pct 109 measures the forecast being ~9% above actual. The commit overshoot is a distinct metric (commit vs. actual) not separately drafted, and AC1's parameter is calibrated to the 9% forecast gap, not to a commit-specific overshoot. Marking it covered would rely on the assumption that forecast and commit overshoot are identical, which the story does not establish. (consider check: forecast_vs_actual)",
+      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
+      "Coverage guard: 3 note(s) - proceeding:",
+      "  [note] Uncovered claim 'The commit was dominated by expansion opportunities.' [PARAMETRIC]: AC2 uses commit_no_engagement_share with min_share_pct=15, which only verifies expansion opportunities constitute at least 15% of commit. The claim's substance is that commit was DOMINATED by expansion (i.e., expansion was the plurality/majority segment, share > 50% or clearly the largest contributor). A share of 15-49% passes AC2 yet contradicts 'dominated.' The check can express the claim but the parameter is far too permissive to fail when the claim is false. (consider check: commit_no_engagement_share)",
+      "  [note] Uncovered claim 'Expansion opportunities were slower to close than projected.' [PARAMETRIC]: AC3 uses elasticity_differential with min_gap_pp=5, which measures a pricing/closing elasticity gap between segments, not the closing-speed (cycle-length) differential the claim asserts. 'Slower to close than projected' is a temporal/velocity claim best expressed by cycle_length_trend or a realized-vs-projected cycle comparison; elasticity_differential measures a different substance and would not fail when the closing-speed claim is false. (consider check: elasticity_differential)",
+      "  [note] Uncovered claim 'The gap between what was called and what closed widened through the back half of the year.' [PARAMETRIC]: AC6 uses forecast_vs_actual with target_pct=106, which verifies a single aggregate forecast-overrun magnitude, not a widening trend across the back half of the year. The claim's substance is a directional change over time (gap growing in H2), which no single-point forecast_vs_actual can prove. The check that can express this (a trend check on the forecast-vs-actual gap, e.g. slippage_trend) is absent from the drafted criteria. (consider check: forecast_vs_actual)",
+      "Critic flagged 3 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "Coverage guard: 3 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The commit was dominated by expansion opportunities.' [PARAMETRIC]: AC2 measures commit_no_engagement_share with min_share_pct 50, but the claim is about expansion opportunities dominating the commit. 'No engagement' is a distinct concept from 'expansion' \u2014 the check measures the wrong entity/metric. No existing criterion measures expansion share within the commit, and there is no check in the list that expresses expansion opportunity share in commit specifically. (consider check: commit_no_engagement_share)",
+      "  - Uncovered claim 'Expansion opportunities were slower to close than projected.' [PARAMETRIC]: AC3 applies cycle_length_trend to the overall cycle, but the claim is specifically about EXPANSION opportunities being slower to close than projected. The trend check does not isolate expansion deals nor compare realized cycle length against a projected/expected baseline. No existing criterion measures expansion-specific cycle slowness relative to projection. (consider check: cycle_length_trend)",
+      "  - Uncovered claim 'Committed pipeline overshot reality.' [PARAMETRIC]: This claim is the commit-level analog of the forecast miss \u2014 committed pipeline exceeding actuals. AC1 and AC5 both use forecast_vs_actual, but neither is parameterized to the commit segment (they target the overall 109% and the back-half 106% respectively). No criterion measures commit-vs-actual specifically, so a false commit overshoot would not be caught. (consider check: forecast_vs_actual)",
+      "Drafted 5 criteria: AC1, AC2, AC3, AC4, AC5",
+      "Coverage guard: 1 note(s) - proceeding:",
+      "  [note] Uncovered claim 'The commit was dominated by expansion opportunities.' [PARAMETRIC]: The claim asserts that expansion opportunities constitute the majority/dominant share of the commit. No existing criterion measures the composition or share of the commit by opportunity type. commit_no_engagement_share is the existing check that can express a share-based dominance assertion about commit composition, but it is not drafted to cover this claim. (consider check: commit_no_engagement_share)",
+      "Declared dependencies:\nAC2 <- depends on AC1",
+      "  AC1  Q4 forecast ran ~9% hot vs actuals\n       check=forecast_vs_actual params={\"target_pct\": 109, \"band_pp\": 3}\n  AC2  Committed pipeline overshot actuals by ~9% (depends_on: AC1)\n       check=forecast_vs_actual params={\"target_pct\": 109, \"band_pp\": 3}\n  AC3  Underlying quarter finished ~on plan\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 100, \"band_pct\": 2}\n  AC4  Commit cycle time grew vs projected\n       check=cycle_length_trend params={\"min_increase_pct\": 8}\n  AC5  Forecast-vs-actual gap widened through back half\n       check=slippage_trend params={\"min_increase_pp\": 8}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Critic flagged 2 block issue(s) in the drafted config - one corrective re-draft.",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 3 item(s) deterministically:\n  - blocks: synthesized forecast block (commit running 109% of actual)\n  - planning: synthesized a naturally-sized quota block across 3 segment(s) - criteria require a plan to exist\n  - AC5: solved slippage path [0.05, 0.1269, 0.2037, 0.2806] (+23pp vs >= 8pp, incl. 8pp sampling-noise margin)",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     109.0% (FY26-Q1)         109% +/-3pp                    +3.00     Q4 forecast ran ~9% hot vs actuals\nAC2   PASS     109.0% (FY26-Q1)         109% +/-3pp                    +3.00     Committed pipeline overshot actuals by ~9%\nAC3   PASS     100.0% (FY26-Q2)         100% +/-2pp                    +2.00     Underlying quarter finished ~on plan\nAC4   PASS     +70.8% cycle growth      >= +8%                         +62.80    Commit cycle time grew vs projected\nAC5   PASS     +13.9pp slip-rate change >= +8pp                        +5.87     Forecast-vs-actual gap widened through back half\n------------------------------------------------------------------------------------------\n5/5 criteria passed - STORY LANDED",
+      "\nDeliverables in experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-14",
+      "  dataset:   experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-14\\output\\dataset.xlsx",
+      "  proof:     validation_report.md",
+      "  config:    simulator.json (tweak knobs anytime, regenerate)"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Inspect and accept delivery?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_14",
+  "elapsed_s": 575.8
+}

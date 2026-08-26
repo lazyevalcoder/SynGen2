@@ -12,12 +12,12 @@
       "status": "converged",
       "reason": null,
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-13",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-14",
       "iterations": 1,
       "llm_proposals": 0,
       "thin_margins": [],
-      "scenario": "scenario_13",
-      "elapsed_s": 584.9
+      "scenario": "scenario_14",
+      "elapsed_s": 575.8
     }
   ]
 }

@@ -15,6 +15,29 @@
 | 11 | **LANDED** | 1 | 670s | - |
 | 12 | escalated | 8 | - | stale passing set |
 | 13 | **LANDED** | 1 | 585s | - |
+| 14 | **LANDED** | 1 | 576s | - |
+
+---
+
+## Batch 14 (2026-08-26) — scenario_14 · LANDED ✅ (iteration 1, 5/5, 0 LLM proposals)
+
+Forecast-integrity story (forecast ~9% hot, commits overshooting, cycle
+time growth, widening slip). Forecast + quota blocks synthesized
+deterministically; slippage path solved (+23pp vs ≥8pp).
+
+### Observations
+- Multi-round guard/critic interplay (3 gap-redrafts, critic A twice,
+  critic B once) converged on signable criteria without escalation —
+  bounded redraft budgets held.
+- Minor fidelity compression: guard initially distinguished "commit
+  overshoot" from "forecast overshoot" as distinct metrics, but the
+  final AC1/AC2 both measure `forecast_vs_actual` at 109% — the
+  commit-vs-actual distinction was absorbed rather than separately
+  modeled. Landed within its signed contract; noted for the vocabulary
+  queue alongside F19.1/F19.5 (metric-distinction expressiveness).
+- AC4's margin (+62.8 vs ≥+8%) shows weak pinning — passes generously.
+  Same one-sided-band family as F19.5, harmless here.
+
 
 ---
 
