@@ -30,6 +30,10 @@ PROFILES = {
     # a parse failure here fails OPEN (guard degrades to deterministic
     # rules) rather than blocking the session
     "coverage_audit": {"max_tokens": 4096, "enable_thinking": False},
+    # P5 critic (WP9): adversarial intent review of drafted artifacts;
+    # structured verdict, no thinking needed - same shape as coverage_audit.
+    # A critic failure fails OPEN (flight proceeds without critique).
+    "critic": {"max_tokens": 4096, "enable_thinking": False},
 }
 
 

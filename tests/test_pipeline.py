@@ -117,15 +117,20 @@ class SilentIO:
 # after the draft; flow tests script a clean verdict here.
 AUDIT_COVERED = {"uncovered": [], "covered": ["all claims"]}
 
+# P5 WP9: the critic runs twice per flight (post-criteria, post-config).
+CRITIC_CLEAN = {"verdict": "clean", "issues": []}
+
 
 def make_fake_client():
-    # personas OFF by default (M4 A/B): script is precheck, criteria,
-    # coverage audit, sim, fix proposal
+    # personas OFF by default (M4 A/B); critic ON by default (P5 WP9):
+    # precheck, criteria, coverage audit, CRITIC A, sim, CRITIC B, fix proposal
     return FakeLLM([
         llm_json(PRECHECK),
         llm_json(CRITERIA),
         llm_json(AUDIT_COVERED),
+        llm_json(CRITIC_CLEAN),
         llm_json(BROKEN_SIM),
+        llm_json(CRITIC_CLEAN),
         llm_json(FIX_PROPOSAL),
     ])
 
@@ -201,8 +206,10 @@ def test_personas_opt_in_path_still_works(run_in_tmp):
         llm_json(PRECHECK),
         llm_json(CRITERIA),
         llm_json(AUDIT_COVERED),
+        llm_json(CRITIC_CLEAN),
         llm_json(PERSONAS),          # consumed only in this arm
         llm_json(BROKEN_SIM),
+        llm_json(CRITIC_CLEAN),
         llm_json(FIX_PROPOSAL),
     ])
     io = SilentIO()

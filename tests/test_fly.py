@@ -10,7 +10,8 @@ import pytest
 
 from syngen.fly import run_fly, summarize_reports
 from test_coverage_guard import GENERIC_ONLY
-from test_pipeline import AUDIT_COVERED, BROKEN_SIM, CRITERIA, PRECHECK
+from test_pipeline import (AUDIT_COVERED, BROKEN_SIM, CRITERIA, CRITIC_CLEAN,
+                           PRECHECK)
 
 
 def llm_json(obj):
@@ -26,7 +27,9 @@ def test_fly_lands_and_writes_telemetry_report(tmp_path, monkeypatch):
         llm_json(PRECHECK),
         llm_json(CRITERIA),
         llm_json(AUDIT_COVERED),
+        llm_json(CRITIC_CLEAN),
         llm_json(BROKEN_SIM),
+        llm_json(CRITIC_CLEAN),
     ])
     report = run_fly("Q4 discounts deepened, worst in EMEA.", client,
                      sessions_dir="sessions", slug="flyok")

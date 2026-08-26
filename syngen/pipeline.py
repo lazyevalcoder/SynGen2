@@ -17,6 +17,9 @@ from syngen.phases.amend import (
     dependency_closure,
 )
 from syngen.phases.converge import LoopEscalation, run_convergence
+from syngen.phases.critic import (block_issues, critique_artifact,
+                                  corrective_brief as critic_corrective_brief,
+                                  render_issues)
 from syngen.phases.criteria_lint import (corrective_brief, cross_lint,
                                          lint_criteria_internal,
                                          render_lint)
@@ -290,10 +293,13 @@ def post_generate_structure_gate(workbook_path, log, cfg=None):
 
 
 def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
-                  max_iterations=10, max_llm_proposals=8, use_personas=False):
+                  max_iterations=10, max_llm_proposals=8, use_personas=False,
+                  use_critic=True):
     """use_personas defaults OFF: the M4 A/B (experiments/M4_persona_ab)
     found no measurable quality benefit and a consistent ~35s latency cost.
-    Opt in when drafting unfamiliar domains where extra critique may help."""
+    The P5 critic (use_critic) defaults ON: two bounded verification calls
+    that catch intent errors (dropped claims, direction inversions) the
+    deterministic gates cannot see."""
     session = Session.create(sessions_dir, slug=slug or story[:40])
     log = io.inform
     session.save_story(story)
@@ -302,7 +308,8 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                          fresh_criteria=True,
                          max_iterations=max_iterations,
                          max_llm_proposals=max_llm_proposals,
-                         use_personas=use_personas)
+                         use_personas=use_personas,
+                         use_critic=use_critic)
 
 
 def run_resume(session_root, client, io, new_story=None,
@@ -447,7 +454,8 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
 
 
 def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
-                  max_iterations=10, max_llm_proposals=8, use_personas=True):
+                  max_iterations=10, max_llm_proposals=8, use_personas=True,
+                  use_critic=True):
     """Fresh-story flow: pre-check, Gate 1, personas+draft, converge, deliver."""
 
     # --- Pre-check ---
@@ -490,6 +498,32 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
     if cov_status == "proceeded_with_notes":
         session.log("COVERAGE GUARD: proceeding with noted vocabulary/"
                     "qualifier gaps (see session log).")
+
+    # --- Critic pass A (P5 WP9): criteria vs story intent. Block-severity
+    # findings trigger exactly one corrective re-draft through the guard.
+    if use_critic:
+        verdict = critique_artifact(client, story, "acceptance criteria", doc)
+        issues = block_issues(verdict)
+        if issues:
+            session.log("CRITIC (criteria) block findings:\n"
+                        + render_issues(issues))
+            log(f"Critic flagged {len(issues)} block issue(s) in the "
+                "drafted criteria - one corrective re-draft.")
+            doc = draft_criteria(client, story,
+                                 decisions_text + "\n\n"
+                                 + critic_corrective_brief(issues))
+            doc, cov_status = enforce_coverage(
+                client, story, doc, claims, decisions_text=decisions_text,
+                log_fn=log)
+            if cov_status == "uncovered":
+                session.write_artifact("criteria.json",
+                                       json.dumps(doc, indent=2))
+                session.log("ESCALATED: criteria_coverage after critic "
+                            "re-draft.")
+                return {"status": "escalated",
+                        "reason": "criteria_coverage",
+                        "session": str(session.root)}
+            session.log("CRITIC: corrective criteria re-draft accepted.")
 
     # --- Criterion consistency lint (P5 WP2): provably unsatisfiable
     # criterion sets die here instead of after burning a flight ---
@@ -561,6 +595,25 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
     session.write_artifact("spec.md", f"# Data Spec\n\n{spec_notes or 'none'}\n")
 
     sim_cfg = draft_simulator(client, story, crit_summary, spec_notes)
+
+    # --- Critic pass B (P5 WP9): config vs criteria semantics. Block
+    # findings trigger exactly one corrective simulator re-draft.
+    if use_critic:
+        verdict = critique_artifact(client, story,
+                                    "simulator.json (data generator config)",
+                                    {"criteria": doc.get("criteria"),
+                                     "simulator": sim_cfg})
+        issues = block_issues(verdict)
+        if issues:
+            session.log("CRITIC (config) block findings:\n"
+                        + render_issues(issues))
+            log(f"Critic flagged {len(issues)} block issue(s) in the "
+                "drafted config - one corrective re-draft.")
+            sim_cfg = draft_simulator(
+                client, story, crit_summary,
+                (spec_notes or "") + "\n\n"
+                + critic_corrective_brief(issues),
+                corrective_findings=critic_corrective_brief(issues))
 
     # Calendar flows from the generator's config into criteria so validation
     # stays consistent with what the engine actually generated (live-smoke bug).

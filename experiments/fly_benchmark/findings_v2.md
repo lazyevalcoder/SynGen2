@@ -578,3 +578,20 @@ or normalized margins (F13.4/F17.2).
    blocked paths, transfer functions via pack SemanticPrompts.
 6. Search dynamics: margin normalization, constraint freezing once a
    criterion enters band, stale-passing-set escalation.
+
+---
+
+## DECISION (2026-08-26): certification paused at 10/25 - P5 fix wave shipped
+
+Per user direction after the mid-run synthesis: the failure taxonomy had
+saturated a second time (one dominant family: coordinate scoping/
+feasibility at Gate 1), so further flights would refine percentages, not
+find new families. The remaining 15 scenarios are deferred until after P5.
+
+P5 "flight-control envelope" shipped same-day, class-level fixes only:
+see docs/DOMAIN_PACKS.md P5 row and tests/test_p5_envelope.py (every
+failure family F11.x-F18.x replayed as a regression test). The multi-agent
+drafter/critic split promised for v0 shipped as WP9.
+
+Re-certification plan: re-fly scenarios 01-10 against this code line,
+then complete 11-25.

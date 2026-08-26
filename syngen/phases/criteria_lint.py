@@ -196,6 +196,89 @@ def cross_lint(cfg, criteria_doc):
                         f"{c['id']}: {c['check']} '{coord['param']}'="
                         f"'{v}' is outside the data model (legal "
                         f"{space_name}: {sorted(space)[:8]})")
+    findings.extend(_feasibility_findings(cfg, criteria_doc))
+    return findings
+
+
+def _feasibility_findings(cfg, criteria_doc):
+    """P5 WP6 (F13.2): economic infeasibility of price caps under raking.
+
+    With a quota block, closed-won revenue is RAKED to plan x attainment,
+    so a tier's average realized price ~= plan_total / won_count scaled by
+    the tier's relative price position - NOT by list-price knobs. A cap far
+    below that floor is unreachable no matter how the proposer turns price
+    knobs (cert scenario_03 burned its whole budget proving this).
+    Conservative: flagged only at 2x the estimated floor.
+    """
+    quota = cfg.get("quota")
+    products = cfg.get("products") or {}
+    catalog = products.get("catalog")
+    opps = cfg["opportunities"]
+    if not quota or not isinstance(catalog, list) or not catalog:
+        return []
+    labels = cfg["time_model"]["quarter_labels"]
+    qi = len(labels) - 1
+
+    by_seg = quota.get("by_segment")
+    dim_name = "segment"
+    if not isinstance(by_seg, dict):
+        for sub, dn in (("by_territory", "territory"),
+                        ("by_motion", "motion")):
+            if isinstance(quota.get(sub), dict):
+                by_seg, dim_name = quota[sub], dn
+                break
+    if not isinstance(by_seg, dict):
+        return []
+
+    try:
+        plan_total = sum(float(curve[qi]) for curve in by_seg.values()
+                         if isinstance(curve, list) and qi < len(curve))
+        att = quota.get("attainment_by_segment") or quota.get("attainment") or {}
+        attained = sum(float(curve[qi]) * float(att.get(u, 1.0))
+                       for u, curve in by_seg.items()
+                       if isinstance(curve, list) and qi < len(curve))
+        won_n = float(opps["per_quarter"]) * \
+            float(opps.get("volume_multipliers", [1.0] * len(labels))[qi]) * \
+            float(opps.get("win_rate", 0.3))
+    except (KeyError, IndexError, TypeError, ValueError):
+        return []
+    if won_n <= 0:
+        return []
+    avg_deal = attained / won_n if attained else plan_total / won_n
+
+    mult = products.get("price_multiplier_by_tier") or {}
+    shares = {}
+    for e in catalog:
+        t = e.get("tier")
+        s = e.get("share")
+        if isinstance(t, str) and isinstance(s, (int, float)):
+            shares[t] = shares.get(t, 0.0) + float(s)
+    if not shares or not mult:
+        return []
+    total_count_share = sum(shares.values()) or 1.0
+    count_shares = {t: s / total_count_share for t, s in shares.items()}
+    denom = sum(count_shares.get(t, 0.0) * float(mult.get(t, 1.0))
+                for t in count_shares)
+    if denom <= 0:
+        return []
+
+    findings = []
+    for c in criteria_doc.get("criteria", []):
+        if c["check"] != "avg_price_by_tier":
+            continue
+        p = c.get("params", {})
+        cap = p.get("max_avg_realized_usd")
+        tier = p.get("tier")
+        if cap is None or tier not in count_shares:
+            continue
+        est = avg_deal * float(mult.get(tier, 1.0)) / denom
+        if est > 2.0 * float(cap):
+            findings.append(
+                f"{c['id']}: avg realized price cap ${float(cap):,.0f} for "
+                f"tier '{tier}' is economically unreachable under raking - "
+                f"the drafted plan implies ~${est:,.0f} average for this "
+                "tier (plan totals are plan-of-record). Lower the plan "
+                "curves, raise the cap, or raise this tier's volume share.")
     return findings
 
 

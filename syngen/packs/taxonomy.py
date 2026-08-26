@@ -16,6 +16,8 @@ class PackTaxonomy(ClaimTaxonomy):
         for cell in cells:
             for check in cell.get("checks", []):
                 self._by_check.setdefault(check, []).append(cell)
+        self._signatures = (pack.check_signatures or {}).get(
+            "signatures", {})
 
     def cells(self):
         return dict(self._cells)
@@ -48,3 +50,22 @@ class PackTaxonomy(ClaimTaxonomy):
                 if check not in seen:
                     seen.append(check)
         return sep.join(seen)
+
+    def check_knowledge(self):
+        """Generated parameter-semantics notes for the knob proposer
+        (P5 WP7): sign conventions and pinned-quantity facts per check,
+        straight from the signature registry."""
+        lines = []
+        for check, sig in self._signatures.items():
+            for key in ("directional_params", "pinned_quantity"):
+                note = sig.get(key)
+                if isinstance(note, dict):
+                    for pname, desc in note.items():
+                        lines.append(f"- {check}.{pname}: {desc}")
+                elif isinstance(note, str):
+                    lines.append(f"- {check}: {note}")
+            for coord in sig.get("coordinates", []):
+                note = coord.get("notes")
+                if note and coord.get("space"):
+                    lines.append(f"- {check}.{coord.get('param')}: {note}")
+        return "\n".join(lines)

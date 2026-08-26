@@ -149,11 +149,13 @@ def _apply_changes(cfg, changes):
 
 def propose_knobs(client, simulator_cfg, results, history_lines,
                   hardening=False):
+    from syngen.phases.intake import _pack_taxonomy
     system = load_prompt(
         "knob_proposal",
         validation_results=render_table(results, all_pass=not hardening),
         iteration_history="\n".join(history_lines) or "none yet",
         simulator_json=json.dumps(simulator_cfg, indent=2),
+        check_knowledge=_pack_taxonomy().check_knowledge(),
     )
     user_msg = "Propose the next knob changes as JSON."
     if hardening:
@@ -309,6 +311,7 @@ def run_convergence(session, client, sim_path, criteria_path,
     seed_bump_done = False
     stall_count = 0
     since_improve = 0
+    stale_set = 0
     last_score = None
     llm_proposals = 0
     prev_margins = {}
@@ -317,8 +320,14 @@ def run_convergence(session, client, sim_path, criteria_path,
     best_partial = None  # hill-climbing snapshot: most criteria passed so far
 
     def _score(results):
+        # P5 WP8 (F13.4): margins arrive in mixed units (pp vs dollars); an
+        # uncapped dollar margin once dominated the tuple and masked
+        # criterion-set stall. Clamp each criterion's contribution to
+        # +/-1 so the passing COUNT stays primary and no single criterion
+        # owns the axis.
         passed = sum(1 for r in results if r["verdict"] == "PASS")
-        total = sum(r["margin"] or 0.0 for r in results)
+        total = sum(max(-1.0, min(1.0, (r["margin"] or 0.0) / 100.0))
+                    for r in results)
         return passed, total
 
     def finish_with_best():
@@ -430,11 +439,30 @@ def run_convergence(session, client, sim_path, criteria_path,
         # iteration regressed, restart the next proposal from that
         # snapshot so progress is monotone.
         score = _score(results)
+        passing_set = frozenset(r["id"] for r in results
+                                if r["verdict"] == "PASS")
         if best_partial is None or score > best_partial["score"]:
-            best_partial = {"cfg": copy.deepcopy(cfg), "score": score}
+            best_partial = {"cfg": copy.deepcopy(cfg), "score": score,
+                            "ids": passing_set}
             since_improve = 0
+            stale_set = 0
         else:
             since_improve += 1
+            # P5 WP8 (F13.4/F17.2): margin wobble on the SAME passing set
+            # is not progress - escalate before the proposal budget burns.
+            if best_partial.get("ids") == passing_set and \
+                    score[0] < len(results):
+                stale_set += 1
+            else:
+                stale_set = 0
+            if stale_set >= 6:
+                raise LoopEscalation(
+                    f"stale passing set: identical {score[0]} criteria "
+                    f"passing for {stale_set} consecutive iterations while "
+                    f"{sorted(set(r['id'] for r in results) - passing_set)} "
+                    "never crossed - remaining failures are not reachable "
+                    f"by knob turns; worst margins: {_worst_margins(results)}",
+                    results, history_lines)
             if score < best_partial["score"]:
                 log_fn(f"Proposal regressed ({score[0]} vs "
                        f"{best_partial['score'][0]} passing) - reverting to "

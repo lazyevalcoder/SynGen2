@@ -57,6 +57,9 @@ Known criterion-to-knob playbook (start here, verify against the data):
 - If a needed key is null or missing entirely, propose the WHOLE parent object in one change rather than leaf paths (leaf edits into null parents fail).
 - Only touch knobs that exist in the current config (products.* knobs only exist when a products block is present).
 
+Check parameter semantics (SIGN CONVENTIONS and pinned quantities - read before diagnosing; misreading a sign flips a passing criterion into a failure):
+{{check_knowledge}}
+
 Rules:
 - Propose SMALL changes to base_by_quarter values, boost, or noise; prefer <= 3pp moves.
 - If a criterion is statistical and failing, propose raising per_quarter instead of distribution knobs.
