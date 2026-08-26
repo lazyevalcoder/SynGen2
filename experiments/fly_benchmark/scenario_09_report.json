@@ -1,0 +1,77 @@
+{
+  "status": "converged",
+  "reason": null,
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-09",
+  "iterations": 7,
+  "llm_proposals": 4,
+  "thin_margins": [],
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-09",
+      "Pre-check found 6 claims; 3 question(s) for user",
+      "  [+] Expansion revenue from existing customers declined noticeably this year - Expandable revenue can be computed from an opportunities/contracts table filtered to exist",
+      "  [+] The decline occurred in accounts where the AE relationship had changed hands recently - Owner-change events can be derived from an ownership/assignment history field on accounts ",
+      "  [+] Accounts whose owner stayed stable continued to expand at healthy rates - Expansion rate for accounts with no owner change is computable from the same revenue model",
+      "  [+] Accounts reassigned during the year showed materially weaker growth - Growth comparison between reassigned and stable-owner accounts is computable.",
+      "  [-] The new relationship took time to mature - Relationship maturation is a narrative inference; could indirectly reflect a lag in expans",
+      "  [-] The expansion slowdown tracked the ownership churn, not the health of the underlying accounts - Account 'health' is not a sales-table field; could indirectly reflect that churn-matched a",
+      "  ? What is the definition of 'expansion revenue' (upsell only, or upsell + cross-sell), and over what period is 'this year' measured?",
+      "  ? Is there an ownership/assignment history field available to detect when and how recently an AE relationship changed hands?",
+      "  ? What proxy data exists for 'account health' (e.g., health score, usage, NPS, support activity) to support or refute the health-vs-churn distinction?",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Expansion revenue from existing customers declined noticeably this year' [PARAMETRIC]: The claim asserts a measurable decline in expansion revenue (a headline/margin segment) year-over-year. No drafted criterion measures this. core_vs_headline_growth can express a decline in the expansion segment relative to core revenue, but it is not present among the criteria. AC1 (post_change_revenue_decline) measures the ownership-churn differential, not the aggregate year-over-year expansion decline. The aggregate decline is a distinct substance that no existing criterion covers. (consider check: core_vs_headline_growth)",
+      "Drafted 2 criteria: AC1, AC2",
+      "Coverage guard: 1 note(s) - proceeding:",
+      "  [note] Uncovered claim 'The decline occurred in accounts where the AE relationship had changed hands recently' [PARAMETRIC]: The existing check post_change_revenue_decline is precisely designed to measure a revenue decline that tracks a relationship/ownership change event. The drafted AC2 uses this check but only constrains the gap between stable and reassigned accounts (min_gap_pp: 10); it does not independently assert that the decline occurred specifically in the changed-accounts segment. The claim's substance \u2014 that the decline is concentrated in recently-changed accounts \u2014 is not independently proven, and the direction/parameterization of AC2 does not pin the decline to the changed-accounts cohort as its own assertion. (consider check: post_change_revenue_decline)",
+      "  AC1  aggregate_expansion_revenue_decline\n       check=core_vs_headline_growth params={\"min_headline_growth_pct\": -5, \"max_core_growth_pct\": -12}\n  AC2  post_change_revenue_decline\n       check=post_change_revenue_decline params={\"min_gap_pp\": 10}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 2 item(s) deterministically:\n  - blocks: synthesized ownership block (unowned curve -> 33%, churn 8%/qtr, post-change win-rate x0.45)\n  - blocks: sized outlier_deals share_by_quarter=[0.02, 0.0433, 0.0667, 0.09] x6.625 + medians_by_quarter=[42000.0, 38989.35, 36194.5, 33600.0] + deal-count floor 1200/qtr for the core-declines/headline-grows split",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     +23.8% / -33.1%          >= -5% headline, <= -12% core  +21.06    aggregate_expansion_revenue_decline\nAC2   FAIL     +30.8% vs -0.8%          gap >= 10pp                    -41.59    post_change_revenue_decline\n      -> 208 changed-owner accounts +30.8% vs 110 stable -0.8% aggregate growth (FY26-Q3 -> FY26-Q4)\n------------------------------------------------------------------------------------------\n1/2 criteria passed - STORY NOT LANDED",
+      "AUTOPILOT: applied 1 deterministic fix(es):\n  - blocks: sized outlier_deals share_by_quarter=[0.02, 0.0433, 0.0667, 0.09] x6.625 + medians_by_quarter=[42000.0, 38989.35, 36194.5, 33600.0] + deal-count floor 1200/qtr for the core-declines/headline-grows split",
+      "--- Iteration 2 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     +23.8% / -33.1%          >= -5% headline, <= -12% core  +21.06    aggregate_expansion_revenue_decline\nAC2   FAIL     +30.8% vs -0.8%          gap >= 10pp                    -41.59    post_change_revenue_decline\n      -> 208 changed-owner accounts +30.8% vs 110 stable -0.8% aggregate growth (FY26-Q3 -> FY26-Q4)\n------------------------------------------------------------------------------------------\n1/2 criteria passed - STORY NOT LANDED",
+      "WARN bad proposal path skipped: ownership.churn_share_by_quarter (blocked: not a tunable knob (time_model/seed/output/quota.by_segment are plan-of-record))",
+      "Adjusting (2 changes):\n  opportunities.volume_multipliers: [1.0, 1.02, 1.0, 0.95] -> [1.0, 1.0, 1.0, 0.6] (Lowering the Q4 volume multiplier from 0.95 to 0.6 sharply reduces the number of deals that close in Q4 under changed ownership, which is the cohort producing the +30.8% growth. This pulls changed-owner aggregate growth (FY26-Q3 -> FY26-Q4) down toward or below the stable cohort, closing the gap toward the >= 10pp requirement. The effect is concentrated on the changed-owner cohort (which is disproportionately Q4-closing), so it targets AC2 specifically.)",
+      "--- Iteration 3 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   FAIL     -22.4% / -68.6%          >= -5% headline, <= -12% core  -17.37    aggregate_expansion_revenue_decline\n      -> headline -22.4% vs core (ex-whale) -68.6% (FY26-Q1 -> FY26-Q4)\nAC2   FAIL     -35.5% vs -27.3%         gap >= 10pp                    -1.71     post_change_revenue_decline\n      -> 177 changed-owner accounts -35.5% vs 101 stable -27.3% aggregate growth (FY26-Q3 -> FY26-Q4)\n------------------------------------------------------------------------------------------\n0/2 criteria passed - STORY NOT LANDED",
+      "Proposal regressed (0 vs 1 passing) - reverting to best partial state before next proposal.",
+      "WARN bad proposal path skipped: ownership.win_rate_multiplier_after_change (blocked: not a tunable knob (time_model/seed/output/quota.by_segment are plan-of-record))",
+      "WARN bad proposal path skipped: ownership.churn_share_by_quarter (blocked: not a tunable knob (time_model/seed/output/quota.by_segment are plan-of-record))",
+      "Adjusting (4 changes):\n  opportunities.outlier_deals.share_by_quarter: [0.02, 0.0433, 0.0667, 0.09] -> [0.04, 0.05, 0.06, 0.07] (Flattens the whale share trend so large outlier deals are not increasingly over-weighted in Q4. This pulls the headline expansion decline closer to the (still-too-negative) core decline, reducing the headline's artificial recovery and letting the headline decline rise toward the -5% floor.)\n  opportunities.volume_multipliers: [1.0, 1.02, 1.0, 0.95] -> [1.0, 1.03, 1.06, 1.1] (Raises won-opportunity volume in later quarters, adding more expansion deals over time so the expansion series declines less (or grows), directly lifting both the headline and core expansion decline toward their -5%/-12% band.)",
+      "--- Iteration 4 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     +16.1% / -14.2%          >= -5% headline, <= -12% core  +2.15     aggregate_expansion_revenue_decline\nAC2   FAIL     +14.3% vs +18.4%         gap >= 10pp                    -5.89     post_change_revenue_decline\n      -> 240 changed-owner accounts +14.3% vs 140 stable +18.4% aggregate growth (FY26-Q3 -> FY26-Q4)\n------------------------------------------------------------------------------------------\n1/2 criteria passed - STORY NOT LANDED",
+      "WARN bad proposal path skipped: ownership.win_rate_multiplier_after_change (blocked: not a tunable knob (time_model/seed/output/quota.by_segment are plan-of-record))",
+      "Adjusting (1 changes):\n",
+      "--- Iteration 5 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     +16.1% / -14.2%          >= -5% headline, <= -12% core  +2.15     aggregate_expansion_revenue_decline\nAC2   FAIL     +14.3% vs +18.4%         gap >= 10pp                    -5.89     post_change_revenue_decline\n      -> 240 changed-owner accounts +14.3% vs 140 stable +18.4% aggregate growth (FY26-Q3 -> FY26-Q4)\n------------------------------------------------------------------------------------------\n1/2 criteria passed - STORY NOT LANDED",
+      "AUTOPILOT: proposals stopped improving - bumping seed 42 -> 43 once.",
+      "--- Iteration 6 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   FAIL     -19.9% / -14.2%          >= -5% headline, <= -12% core  -14.88    aggregate_expansion_revenue_decline\n      -> headline -19.9% vs core (ex-whale) -14.2% (FY26-Q1 -> FY26-Q4)\nAC2   PASS     +16.1% vs +38.4%         gap >= 10pp                    +12.28    post_change_revenue_decline\n------------------------------------------------------------------------------------------\n1/2 criteria passed - STORY NOT LANDED",
+      "Adjusting (2 changes):\n  opportunities.outlier_deals.share_by_quarter: [0.04, 0.05, 0.06, 0.07] -> [0.1, 0.13, 0.16, 0.19] (Raises whale (outlier) share of revenue each quarter, concentrating the deep revenue decline into the whale cohort. This widens the headline-vs-core gap: headline (all-accounts) decline becomes shallower relative to core, moving headline from -19.9% toward the >= -5% band while core stays at ~-14.2% (<= -12%). Also raises revenue_concentration.)\n  opportunities.discount.base_by_quarter: {'AMER': [11, 12, 12, 13], 'EMEA': [11, 12, 12, 13], 'APAC': [11, 12, 12, 13]} -> {'AMER': [10, 11, 11, 12], 'EMEA': [10, 11, 11, 12], 'APAC': [10, 11, 11, 12]} (Lowers every quarterly discount by ~1pp. Since realized revenue ~= list * (1 - discount), lower discounts raise realized revenue and REDUCE the magnitude of the revenue-decline trend, pulling headline from -19.9% up toward the >= -5% band. This compensates for the outlier_deals change which alone would push headline deeper; the discount move keeps headline pinned inside band while the whale-share move does the gap-widening.)",
+      "--- Iteration 7 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     +12.9% / -25.2%          >= -5% headline, <= -12% core  +13.22    aggregate_expansion_revenue_decline\nAC2   PASS     +46.2% vs +104.0%        gap >= 10pp                    +47.79    post_change_revenue_decline\n------------------------------------------------------------------------------------------\n2/2 criteria passed - STORY LANDED",
+      "\nDeliverables in experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-09",
+      "  dataset:   experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-09\\output\\dataset.xlsx",
+      "  proof:     validation_report.md",
+      "  config:    simulator.json (tweak knobs anytime, regenerate)"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Inspect and accept delivery?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_09",
+  "elapsed_s": 391.4
+}

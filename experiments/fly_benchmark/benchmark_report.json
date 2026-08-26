@@ -1,25 +1,23 @@
 {
   "summary": {
     "stories": 1,
-    "landed": 0,
-    "unassisted_landing_rate_pct": 0.0,
-    "escalated": 1,
-    "escalation_reasons": [
-      "LLM proposal cap (8) reached; still failing: ['AC3', 'AC6']; worst margins: AC3 -4.31, AC6 -3.06"
-    ],
+    "landed": 1,
+    "unassisted_landing_rate_pct": 100.0,
+    "escalated": 0,
+    "escalation_reasons": [],
     "other": []
   },
   "reports": [
     {
-      "status": "escalated",
-      "reason": "LLM proposal cap (8) reached; still failing: ['AC3', 'AC6']; worst margins: AC3 -4.31, AC6 -3.06",
+      "status": "converged",
+      "reason": null,
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-08",
-      "iterations": null,
-      "llm_proposals": null,
-      "thin_margins": null,
-      "scenario": "scenario_08",
-      "elapsed_s": 586.4
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-09",
+      "iterations": 7,
+      "llm_proposals": 4,
+      "thin_margins": [],
+      "scenario": "scenario_09",
+      "elapsed_s": 391.4
     }
   ]
 }

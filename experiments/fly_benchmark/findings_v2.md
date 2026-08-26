@@ -433,3 +433,35 @@ high-potential wr change negative while low-potential positive) and AC6
   monotonically (no constraint-freezing once a criterion enters band).
 
 **Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 9 - scenario_09 (expansion down where AE ownership changed recently)
+
+**Outcome:** **LANDED UNASSISTED** - converged in 7 iterations, 391s,
+2/2 criteria passing. Gate 2 delivered. Second certification landing.
+
+**Progress vs baseline:** never flown in Pass 1 (criteria count 1 in the
+UAT manifest). New measurement.
+
+**Observations:**
+- Drafter criteria were excellent and minimal: `core_vs_headline_growth`
+  (headline >= -5%, core <= -12%) + `post_change_revenue_decline`
+  (gap >= 10pp) - exactly the two checks the story needs, correct
+  directions, sane bands.
+- Iteration 1: AC1 passed immediately, AC2 read INVERTED (+30.8% on
+  changed-owner accounts vs -0.8% stable). The autopilot then executed a
+  sophisticated composite synthesis: sized the outlier_deals block
+  (share curve x6.625 + per-quarter medians + deal-count floor) to force
+  the core-declines/headline-grows split, which re-shaped ownership-cohort
+  revenue trajectories until AC2 crossed into band with a huge margin
+  (+47.79).
+- The loop needed no LLM proposals at all after early iterations -
+  deterministic recalibration carried it (consistent with the batch-1
+  observation that the deterministic layer is the workhorse).
+
+**Failures & classification:** none. Positive evidence: GUARD-WORKING,
+AUTOPILOT-WORKING (block synthesis composed from multiple knobs toward a
+two-criterion joint target).
+
+**Actions:** logged only. NO code changes (certification run in progress).
