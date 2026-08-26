@@ -5,21 +5,21 @@
     "unassisted_landing_rate_pct": 0.0,
     "escalated": 1,
     "escalation_reasons": [
-      "oscillating: no net score improvement for 6 iterations (proposals keep trading criteria against each other); still failing: ['AC2', 'AC3', 'AC4']; worst margins: AC3 -20.48, AC4 -20.43, AC2 -10.00"
+      "criteria_consistency"
     ],
     "other": []
   },
   "reports": [
     {
       "status": "escalated",
-      "reason": "oscillating: no net score improvement for 6 iterations (proposals keep trading criteria against each other); still failing: ['AC2', 'AC3', 'AC4']; worst margins: AC3 -20.48, AC4 -20.43, AC2 -10.00",
+      "reason": "criteria_consistency",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-17",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-18",
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_17",
-      "elapsed_s": 828.2
+      "scenario": "scenario_18",
+      "elapsed_s": 811.0
     }
   ]
 }

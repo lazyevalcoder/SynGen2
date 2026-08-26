@@ -19,6 +19,47 @@
 | 15 | escalated | 0 | - | criteria_geometry |
 | 16 | escalated | 0 | - | generation failed on initial config ('segments') |
 | 17 | escalated | 7 | - | oscillating (no net score improvement) |
+| 18 | escalated | 0 | - | criteria_consistency |
+
+---
+
+## Batch 18 (2026-08-26) — scenario_18 · ESCALATED ❌ (criteria_consistency, Gate 1)
+
+Quota-attainment story (top-quartile over-attainment, territory quota vs
+potential spread).
+
+### Outcome
+**First live fire of the WP2 consistency lint AND its escalate path.**
+`AC3 quota_vs_potential 120±10` vs `AC6 quota_vs_potential 70±15` on the
+same coordinate `{'dimension': 'territory', unit: None}` — non-overlapping
+bands → provably jointly unsatisfiable → one corrective re-draft (still
+conflicting) → escalated. Died at Gate 1 in two rounds: the cheapest
+possible death for an impossible contract, precisely the F15.2/F18.2
+class P5 targeted.
+
+### Diagnosis
+
+- **The lint is correct**: both criteria claim the ENTIRE territory
+  dimension is simultaneously 120% and 70% of potential. Genuinely
+  unsatisfiable.
+- **F19.6 recurrence at root**: the story means "top territories ~120%,
+  small ones ~70%" — subset claims. With no cohort vocabulary the
+  drafter could only emit whole-dimension claims, which necessarily
+  contradict. The re-draft couldn't resolve it because the vocabulary
+  is the blocker, not the drafting.
+- Improvement: the consistency lint should drive a corrective brief
+  suggesting the *expressive* resolution (scope to distinct units, or
+  collapse into a single `min_spread_pp` criterion — the F19.6 cohort
+  fix would supply real subset semantics). Escalation remains the right
+  terminal behavior for "still unsatisfiable after one re-draft".
+
+### Positives
+- Guard policy held exactly to design: bounded single re-draft, then
+  honest escalation naming the conflicting coordinate pair. No burned
+  convergence budget.
+- Auditor's "consistently" qualifier note was substantive — flagged that
+  over-attainment needs temporal consistency, not a point-in-time pin.
+
 
 ---
 

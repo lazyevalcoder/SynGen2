@@ -1,0 +1,54 @@
+{
+  "status": "escalated",
+  "reason": "criteria_consistency",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-18",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-18",
+      "Pre-check found 7 claims; 4 question(s) for user",
+      "  [+] Quota attainment was 95% - Derivable from actuals vs. quotas across the sales org.",
+      "  [+] The gap was concentrated in the bottom quartile of territories - Territories can be ranked by attainment and split into quartiles.",
+      "  [-] These territories had quotas set using prior-year revenue - Quota-setting methodology is not stored in an accounts/opportunities table. Could be indir",
+      "  [-] There were significant changes in account ownership and addressable market - Account ownership changes may appear in field/ownership audit fields; addressable market (",
+      "  [+] The top quartile was consistently over-attaining - Top-quartile attainment verifiable; 'consistently' requires time-series (e.g., monthly/qua",
+      "  [+] Top quartile had lower quota-to-potential ratios - Requires quota and market-potential fields per territory; computable if potential is model",
+      "  [-] The pattern suggests a quota calibration and territory design problem rather than broad sales execution weakness - Causal framing/conclusion. Indirectly supported by computable claims: quota-to-potential r",
+      "  ? Does the data model include a per-territory market potential / TAM field to compute quota-to-potential ratios?",
+      "  ? Are quotas and actuals available in a time-series (monthly/quarterly) to support 'consistently over-attaining'?",
+      "  ? Is there an ownership-change or territory-reassignment audit field to proxy 'changes in account ownership'?",
+      "  ? Is there any record of the quota-setting methodology (e.g., a flag that quota was based on prior-year revenue)?",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The top quartile was consistently over-attaining' [PARAMETRIC]: The claim asserts that top-quartile territories actually over-attained their quotas (realized > target), which is a quota_vs_potential relationship. AC3 and AC4 both use quota_vs_potential but target the ratio-to-potential (quota as % of addressable market), not attainment (realized as % of quota). No drafted criterion measures whether the top quartile's realized revenue exceeded its assigned quota. The word 'consistently' (persistence across periods) is not captured by any single-period quota_vs_potential parameter either. (consider check: quota_vs_potential)",
+      "  - Uncovered claim 'Top quartile had lower quota-to-potential ratios' [PARAMETRIC]: This is a relative comparison: top-quartile quota-to-potential ratios are lower than other quartiles. AC4 uses quota_vs_potential with target_ratio_pct=40, band_pp=15, which asserts an absolute low ratio (~40%) but does not assert the top quartile is LOWER than the rest of the distribution. The claim's substance is the relative ordering (top quartile below other quartiles), which no drafted criterion measures. An honest reading of the parameters: a dataset where all territories sit at ~40% would pass AC4 yet fail the claim's relative comparison. (consider check: quota_vs_potential)",
+      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
+      "Critic flagged 2 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'The top quartile was consistently over-attaining' [PARAMETRIC]: The claim asserts that the top quartile was consistently over-attaining (actual attainment above 100%). quota_vs_potential measures the quota-to-potential ratio, not attainment itself. A territory can have a low quota-to-potential ratio yet under-attain, or an over-attaining territory can have a high ratio. No existing check measures actual quota attainment (actual/plan) directly, so the over-attainment substance cannot be proven. This is a missing metric primitive for attainment level. (consider check: quota_vs_potential)",
+      "  - Uncovered claim 'These territories had quotas set using prior-year revenue (over-quotas relative to addressable market).' [PARAMETRIC]: AC3 uses quota_vs_potential with target_ratio_pct=120, meaning quota is 120% of potential (over-quotas). However, the claim's substance is that quotas were set using STALE prior-year revenue despite changes in account ownership and addressable market. quota_vs_potential only measures the quota-to-potential ratio at a point in time; it cannot verify that the quota was derived from prior-year revenue or that it is stale relative to current addressable market. The over-quota ratio is a proxy but does not prove the stale-basis mechanism the claim asserts. No existing check measures quota-staleness or prior-year-basis. (consider check: quota_vs_potential)",
+      "Drafted 10 criteria: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC10",
+      "Coverage guard: 3 note(s) - proceeding:",
+      "  [note] Uncovered claim 'The gap was concentrated in the bottom quartile of territories' [PARAMETRIC]: AC2 uses gap_concentration but with min_bottom_gap_share_pct=75, which is an arbitrary threshold not tied to the quartile framing of the claim. The claim specifies the bottom QUARTILE (top 25% of territories by underperformance), but the parameter does not constrain the check to a quartile dimension. A criterion that does not actually isolate the bottom quartile cannot fail if the gap were concentrated elsewhere (e.g. bottom half or bottom decile). The check CAN express this claim but the parameterization is too loose to verify the quartile-specific substance. (consider check: gap_concentration)",
+      "  [note] Uncovered claim 'The top quartile was consistently over-attaining' [PARAMETRIC]: AC4 targets target_pct=102 with band_pct=3, but the word 'consistently' implies the over-attainment holds across multiple quarters/periods. revenue_vs_plan as drafted measures a single aggregate attainment level, not temporal consistency. No drafted criterion verifies that the top quartile over-attained across all or most quarters. The check family CAN express consistency via a multi-period variant, but the current parameterization only captures a point-in-time average, so it would not fail if over-attainment were concentrated in one quarter. (consider check: revenue_vs_plan)",
+      "  [note] Uncovered claim 'Top quartile had lower quota-to-potential ratios' [PARAMETRIC]: AC6 uses quota_vs_potential with target_ratio_pct=70, but the claim is a RELATIVE comparison: top quartile ratios are LOWER than bottom quartile ratios. The check as parameterized tests an absolute ratio threshold (70%), not a between-quartile ordering. It would not fail if the top quartile had a ratio of 70% while the bottom quartile had an even lower 50% (contradicting the claim). The check CAN express relative comparison but the drafted parameters test an absolute level, so they do not measure the claim's comparative substance. (consider check: quota_vs_potential)",
+      "Criterion consistency violations (see session log) - one corrective re-draft.",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - AC1: company-wide attainment 0.95 is outside the achievable range [1.00, 1.05] implied by the named-unit criteria (weighted means cannot escape the unit range)",
+      "  - Uncovered claim 'The top quartile was consistently over-attaining' [PARAMETRIC]: The 'consistently' qualifier requires over-attainment to hold across multiple periods, but AC4's revenue_vs_plan check uses a single-segment target_pct with no temporal dimension. A dataset where the top quartile over-attained in only one period (and was flat/under elsewhere) would pass AC4 yet falsify the 'consistently' claim. No existing check combines revenue_vs_plan with a consistency/period-over-period requirement for a segment. (consider check: revenue_vs_plan)",
+      "Drafted 7 criteria: AC1, AC2, AC3, AC4, AC5, AC6, AC7",
+      "Coverage guard: blocking gaps persist after corrective re-draft.",
+      "\nNEEDS YOUR ATTENTION: criteria are jointly unsatisfiable even after a corrective re-draft. See criteria.json."
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_18",
+  "elapsed_s": 811.0
+}
