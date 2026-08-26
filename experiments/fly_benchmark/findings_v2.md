@@ -31,6 +31,7 @@ criteria.json (F5.3). Vocabulary holes are roadmap notes, not failures.
 |---|---|---|---|---|---|
 | 1 | scenario_01 | ESCALATED | convergence (iter 2) | IMPROVED - reached generation for the first time | F11.x below |
 | 2 | scenario_02 | CRASHED | simulator draft | NEW FAILURE MODE (baseline: guard escalation) | F12.1 below |
+| 3 | scenario_03 | ESCALATED | convergence (proposal cap 8, iter 10) | IMPROVED - sigma crash gone, ran full loop to 8/11 | F13.x below |
 
 ---
 
@@ -137,5 +138,64 @@ guard is no longer blocking this story.
   re-drafting. Candidate fix (post-certification): shape-guard dimension
   blocks at validation entry (raise ConfigError naming the block), or
   broaden the repair path.
+
+**Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 3 - scenario_03 (SMB beat via cheap entry-tier volume)
+
+**Outcome:** ESCALATED at LLM proposal cap (8 proposals, 10 iterations),
+616s. Best partial 8/11 criteria passing; still failing AC2 (-1.21),
+AC9 (-67384), AC10 (-0.09).
+
+**Progress vs baseline:** baseline CRASHED pre-generation
+(F8.1 KeyError sigma). This time: sigma contract + deterministic default
+worked - the flight survived preflight, drafted 11 criteria (ALL bound to
+real pack checks - zero hallucinated names), generated a workbook, and
+ran the full convergence loop. Deterministic recalibration + proposal 2
+fixed six criteria in three iterations.
+
+**Observations:**
+- GUARD WORKING (positive): the coverage guard used its PROCEED-WITH-NOTES
+  path in production for the first time ("proceeding with noted
+  vocabulary/qualifier gaps"); flight continued with notes logged.
+- The loop is effective when the system is feasible: discount ladder
+  (AC4-7), monotonicity (AC3), tier share shift (AC2), deal size decline
+  (AC8) all reached their bands at some point.
+- The killer is **AC9 `avg_price_by_tier max_avg_realized_usd=15000`** -
+  a jointly near-infeasible target: SMB plan attainment is raked to 105%
+  (AC1), entry revenue share must stay 25->40% (AC2), so avg entry
+  realized price is pinned by plan economics (entry_revenue / entry_count),
+  NOT by price knobs. Proof: proposal 8 cut median_usd to $1,500 and
+  realized price still read $28k next iteration - quota raking scales
+  prices back up to meet plan totals. The proposer spent 6 of 8 proposals
+  and huge score swings ($177k worst margin) chasing unreachable math.
+- Scoring pathology: AC9's dollar-denominated margin dominates the
+  lexicographic score; criterion-count stalled at 8/11 from iter 5 while
+  the numeric axis kept wobbling, so neither stall detection nor
+  since_improve fired before the cap.
+- AC10 blended_margin_trend orbited its band edge (-1.4 to -2.4pp vs
+  [-4,-2]): the proposer's learned margin transfer model repeatedly
+  mispredicted by ~0.5-1pp.
+- Two REGRESSION REVERT events fired correctly and preserved best partial.
+
+**Failures & classification (logged only - no fixes during certification):**
+- F13.1 GUARD-WORKING (positive evidence): proceed-with-notes graduation
+  exercised on a real vocab/qualifier gap; naming contract held (11/11
+  real check ids).
+- F13.2 BUG-FEASIBILITY-DETECTION (family: impossible-math): jointly
+  infeasible criterion systems (price cap under plan-raking with pinned
+  share/attainment) are not detected - neither at Gate 1 nor mid-loop -
+  so the budget burns on unreachable math instead of escalating early as
+  structural. Scenario_01's structural detector caught absent UNITS;
+  this shape (cap vs raking economics) escapes it.
+- F13.3 GAP-AUTOMATION (family: transfer-model): blended-margin predicted
+  effect inaccurate; repeated band-edge misses.
+- F13.4 OBSERVATION (family: scoring): mixed-unit margins (dollars vs pp)
+  let one criterion dominate the score and mask criterion-set stall;
+  candidate post-certification fixes: per-criterion margin normalization
+  or escalate when the PASSING SET is stale N iterations even if scores
+  wobble.
 
 **Actions:** logged only. NO code changes (certification run in progress).
