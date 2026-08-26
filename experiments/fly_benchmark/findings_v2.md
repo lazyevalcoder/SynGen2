@@ -391,3 +391,45 @@ the 18 cancelled). New measurement.
   median-based or trimmed variants.
 
 **Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 8 - scenario_08 (COGS up, discounts concentrated in high-margin products)
+
+**Outcome:** ESCALATED at LLM proposal cap (8), 586s, final 4/6, best
+partial 5/6 (reached but lost to criterion trading). Persistent: AC3
+`elasticity_differential` (-1.3pp actual vs >= +3pp - INVERTED direction:
+high-potential wr change negative while low-potential positive) and AC6
+`tier_share_shift` entry start-point (28.1% vs ~20%).
+
+**Progress vs baseline:** never flown in Pass 1. New measurement.
+
+**Observations:**
+- The deterministic layer again solved the hard-sounding parts and HELD
+  them across all 10 iterations: blended margin erosion (-2.3pp vs
+  -3+/-1), discount monotonicity, discount-margin link (+9.5pp gap),
+  plan attainment pinned at 100%.
+- The two failures live on INTERACTING pricing-mix axes: elasticity
+  differential is driven by `pricing_response.elasticity/potential_mitigation`
+  while tier mix is driven by catalog shares x price multipliers - and
+  both move realized prices, so single-axis proposals traded one against
+  the other across iterations (best oscillated 5/6 <-> 4/6; five
+  regression reverts).
+- AC3 ended INVERTED (-1.3pp vs wanted +3pp): proposals nudged elasticity
+  knobs without ever flipping the response tilt between potential
+  cohorts; the check's wr-delta semantics (per potential cohort) are not
+  in the proposer's knowledge.
+- Same meta-pattern as batch 7: near-miss oscillation around the landing
+  boundary with coupled knobs.
+
+**Failures & classification (logged only - no fixes during certification):**
+- F17.1 GAP-KNOWLEDGE (family: coupled-knob planning, extends F16.2):
+  elasticity/potential-response semantics of `pricing_response` absent
+  from proposer context; differential-direction criteria cannot be steered
+  by a proposer that does not know which knob flips the tilt.
+- F17.2 OBSERVATION (family: search dynamics): lexicographic scoring +
+  regression revert preserves best COUNT but the identity of passing
+  criteria keeps rotating; no mechanism accumulates satisfied constraints
+  monotonically (no constraint-freezing once a criterion enters band).
+
+**Actions:** logged only. NO code changes (certification run in progress).
