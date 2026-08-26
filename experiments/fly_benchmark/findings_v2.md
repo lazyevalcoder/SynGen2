@@ -30,6 +30,7 @@ criteria.json (F5.3). Vocabulary holes are roadmap notes, not failures.
 | # | Scenario | Outcome | Phase | vs baseline | Root cause / notes |
 |---|---|---|---|---|---|
 | 1 | scenario_01 | ESCALATED | convergence (iter 2) | IMPROVED - reached generation for the first time | F11.x below |
+| 2 | scenario_02 | CRASHED | simulator draft | NEW FAILURE MODE (baseline: guard escalation) | F12.1 below |
 
 ---
 
@@ -95,3 +96,46 @@ redraft of the initial 8).
 
 **Actions:** logged only. NO code changes (certification run in progress).
 
+
+---
+
+### Batch 2 - scenario_02 (commit concentrated in no-engagement deals)
+
+**Outcome:** CRASHED at simulator draft, 214s, zero iterations.
+`AttributeError: 'list' object has no attribute 'items'`.
+
+**Progress vs baseline:** previously ESCALATED at the coverage guard
+(F7.1 conjunction pedantry + F7.2 vocab). This time the graduated guard
+accepted the story after one corrective redraft - single criterion
+`commit_no_engagement_share min_share_pct=40` - and Gate 1 passed. The
+guard is no longer blocking this story.
+
+**Observations:**
+- Crash site: `draft_simulator` -> `validate_simulator_doc`. Reproduced
+  deterministically: when the drafter writes an accounts dimension as a
+  LIST (e.g. `"regions": ["AMER", "EMEA"]` instead of a weight map),
+  config.py:166 (`cfg["accounts"].get(dim, {}).items()`) raises
+  AttributeError - not a ConfigError - which escapes the ConfigError-only
+  handler in spec.py and kills the flight. Confirmed by synthetic repro:
+  list-valued regions/segments both produce the exact error string;
+  industries-as-map validates fine.
+- Same failure family as F8.1: an LLM-shaped input kills the harness
+  instead of becoming a HARD finding + corrective re-draft. F8.1 fixed
+  the sigma instance; the general class (type-shape mismatches inside
+  validate_simulator_doc raising AttributeError/TypeError instead of
+  ConfigError) remains open.
+- Infra positives verified under crash: fly report CARRIES the session
+  reference (F8.2 fix working), FLIGHT CRASH line written to
+  session_log.md, criteria.json persisted.
+
+**Failures & classification (logged only - no fixes during certification):**
+- F12.1 BUG-PREFLIGHT-ROBUSTNESS (family: input-hardening, F8.1
+  generalized): validate_simulator_doc raises raw AttributeError/TypeError
+  on type-shape deviations (list where mapping expected) in at least
+  accounts.regions / accounts.segments paths; draft_simulator only
+  catches ConfigError so the session dies instead of corrective
+  re-drafting. Candidate fix (post-certification): shape-guard dimension
+  blocks at validation entry (raise ConfigError naming the block), or
+  broaden the repair path.
+
+**Actions:** logged only. NO code changes (certification run in progress).

@@ -3,23 +3,23 @@
     "stories": 1,
     "landed": 0,
     "unassisted_landing_rate_pct": 0.0,
-    "escalated": 1,
-    "escalation_reasons": [
-      "structural failure(s) ['AC8', 'AC9'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC7 -85.43, AC4 -16.42, AC8 -8.00"
-    ],
-    "other": []
+    "escalated": 0,
+    "escalation_reasons": [],
+    "other": [
+      "error"
+    ]
   },
   "reports": [
     {
-      "status": "escalated",
-      "reason": "structural failure(s) ['AC8', 'AC9'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC7 -85.43, AC4 -16.42, AC8 -8.00",
+      "status": "error",
+      "reason": "AttributeError: 'list' object has no attribute 'items'",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-01",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-02",
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_01",
-      "elapsed_s": 340.8
+      "scenario": "scenario_02",
+      "elapsed_s": 213.5
     }
   ]
 }

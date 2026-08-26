@@ -1,38 +1,45 @@
 {
-  "status": "escalated",
-  "reason": "criteria_coverage",
+  "status": "error",
+  "reason": "AttributeError: 'list' object has no attribute 'items'",
   "detail": null,
-  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-02",
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-02",
   "iterations": null,
   "llm_proposals": null,
   "thin_margins": null,
   "telemetry": {
     "messages": [
-      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-02",
-      "Pre-check found 4 claims; 5 question(s) for user",
-      "  [+] A large share of the quarter's sales commit sat on opportunities where essentially nothing was happening: no meetings, no touches, no engagement activity on those accounts all quarter. - Verifiable by joining opportunities to the commit forecast and counting touch/meeting/enga",
-      "  [-] The commit looked healthy in aggregate. - Narrative framing of aggregate commit; the raw commit total is computable, but 'healthy' i",
-      "  [+] A big slice of it was carried by dead deals that had gone quiet. - Verifiable by identifying opportunities with zero engagement activity over the quarter and",
-      "  [+] Forecast risk was therefore much higher than the headline commit number suggested. - Forecast risk is computable via probability-weighted or risk-adjusted forecast vs. raw com",
-      "  ? What threshold defines 'large share' / 'big slice' (e.g., percentage of commit value or number of opportunities)?",
-      "  ? How is 'nothing happening' defined \u2014 zero records in touch/meeting/engagement tables, or below some activity threshold?",
-      "  ? What is the definition of 'commit' (best case vs. pipeline commit) and where does it live in the data model?",
-      "  ? How should 'dead deals' be defined \u2014 zero activity, stale last-touch date, or a specific stage/status?",
-      "  ? What is the definition of 'forecast risk' / risk-adjusted forecast (e.g., probability-weighted, confidence scoring)?",
-      "Coverage guard: 2 gap(s); corrective re-draft...",
-      "  - Uncovered claim 'A big slice of it was carried by dead deals that had gone quiet.': No criterion measures the share of commit attributable to opportunities that are both inactive (no engagement) AND effectively dead/stalled. AC1 measures engagement absence but does not capture the 'dead' quality (stalled, aging, no progression) that is the substance of this claim. A criterion that only checks no_engagement_share could pass on opportunities that are merely quiet-but-healthy, missing the 'dead' dimension entirely. (consider check: stage_aging)",
-      "  - Uncovered claim 'Forecast risk was therefore much higher than the headline commit number suggested.': AC2 (forecast_vs_actual, target_pct 108) measures the forecast relative to actuals, not the gap between the forecast and the commit. The claim is specifically that forecast risk exceeded what the commit implied \u2014 i.e., forecast < commit by a meaningful margin. No criterion measures forecast-vs-commit divergence, so a dataset where forecast tracks commit closely would pass despite the claim being false. (consider check: forecast_vs_actual)",
-      "Drafted 4 criteria: AC1, AC2, AC3, AC4",
-      "Coverage guard: gaps persist after corrective re-draft.",
-      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-02",
+      "Pre-check found 5 claims; 5 question(s) for user",
+      "  [+] A large share of the quarter's sales commit sat on opportunities where essentially nothing was happening - Computable if 'commit' maps to a forecast category and activity tables exist (meetings, to",
+      "  [+] No meetings, no touches, no engagement activity on those accounts all quarter - Computable via activity/interaction tables filtered to the quarter window; count of zero-t",
+      "  [-] The commit looked healthy in aggregate - Normative framing; 'healthy' is subjective. Indirectly reflected by computable claims: tot",
+      "  [+] A big slice of commit was carried by dead deals that had gone quiet - Computable as the dollar value of commit-classified opportunities with zero quarter activi",
+      "  [-] Forecast risk was therefore much higher than the headline commit number suggested - Causal, qualitative conclusion. Indirectly reflected by computable claims: probability-wei",
+      "  ? What is the definition of 'commit' in the forecast model (e.g., a specific forecast category or stage)?",
+      "  ? Which tables hold activity data (meetings, touches, engagement), and do they link to opportunities, accounts, or both?",
+      "  ? How is the quarter window defined for filtering activity timestamps?",
+      "  ? What qualifies a deal as 'dead' or 'gone quiet'\u2014a last-activity threshold, closed-lost status, or low close probability?",
+      "  ? Is there a quota or target figure to assess whether aggregate commit was 'healthy'?",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'A big slice of commit was carried by dead deals that had gone quiet' [PARAMETRIC]: An existing check can express this claim's substance: commit_no_engagement_share measures exactly the share of sales commit carried by opportunities with no engagement activity ('dead deals that had gone quiet'). The drafted criteria do not separately cover this claim, and no parameter contradiction exists. This is a missing-criterion gap for a claim whose substance is provable by an existing check. (consider check: commit_no_engagement_share)",
+      "Drafted 1 criteria: AC1",
+      "Coverage guard: 1 note(s) - proceeding:",
+      "  [note] Uncovered claim 'No meetings, no touches, no engagement activity on those accounts all quarter' [QUALIFIER]: The measurable substance (a large share of commit carried by zero-engagement deals) is covered by AC1 via commit_no_engagement_share. The specific detail that engagement was entirely absent across all three activity types (meetings, touches, and engagement) over the full quarter is a narrative qualifier describing the nature of 'dead deals' that no single check can express; AC1's engagement-share metric captures the substance without requiring verification of each distinct activity primitive.",
+      "  AC1  commit carried by zero-engagement deals\n       check=commit_no_engagement_share params={\"min_share_pct\": 40, \"tolerance_pp\": 5}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)"
     ],
     "gate_decisions": [
       {
         "prompt": "Proceed with the computable claims above?",
         "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
       }
     ]
   },
   "scenario": "scenario_02",
-  "elapsed_s": 197.3
+  "elapsed_s": 213.5
 }
