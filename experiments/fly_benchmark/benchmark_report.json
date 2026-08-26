@@ -5,21 +5,21 @@
     "unassisted_landing_rate_pct": 0.0,
     "escalated": 1,
     "escalation_reasons": [
-      "criteria_coverage"
+      "structural failure(s) ['AC8', 'AC9'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC7 -85.43, AC4 -16.42, AC8 -8.00"
     ],
     "other": []
   },
   "reports": [
     {
       "status": "escalated",
-      "reason": "criteria_coverage",
+      "reason": "structural failure(s) ['AC8', 'AC9'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC7 -85.43, AC4 -16.42, AC8 -8.00",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-05",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-01",
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_05",
-      "elapsed_s": 253.7
+      "scenario": "scenario_01",
+      "elapsed_s": 340.8
     }
   ]
 }

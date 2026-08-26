@@ -1,43 +1,62 @@
 {
   "status": "escalated",
-  "reason": "criteria_coverage",
+  "reason": "structural failure(s) ['AC8', 'AC9'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC7 -85.43, AC4 -16.42, AC8 -8.00",
   "detail": null,
-  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-01",
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-01",
   "iterations": null,
   "llm_proposals": null,
   "thin_margins": null,
   "telemetry": {
     "messages": [
-      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-01",
-      "Pre-check found 10 claims; 5 question(s) for user",
-      "  [+] NA revenue missed plan by 4% this year - Revenue vs. plan is directly computable from an accounts/opportunities data model with a p",
-      "  [+] The miss was driven primarily by Enterprise - Attributable to segment requires revenue by segment/line-of-business; computable if the mo",
-      "  [+] Pipeline coverage looked healthy at around 3.4x - Pipeline coverage = pipeline value / revenue target; computable from opportunity pipeline ",
-      "  [-] Pipeline was concentrated in lower-potential territories - 'Lower-potential' is a qualitative judgment; cannot be derived from a sales table. Could b",
-      "  [+] Pipeline was skewed toward early-stage deals - Stage distribution is directly computable from an opportunities data model with a stage fi",
-      "  [+] Expected close dates kept slipping into later quarters as the year went on - Close-date slippage is computable by tracking expected_close_date over time (e.g., compari",
-      "  [+] Enterprise AEs were carrying well over plan-relative workload - Plan-relative workload/quota attainment is computable from quota assignments vs. assigned ",
-      "  [-] Ramping hires left effective productive capacity well below the headline headcount - 'Effective productive capacity' and ramp effects are HR/operational constructs not present",
-      "  [+] Reps actually covering Enterprise were effectively carrying about 118% of a fully-ramped capacity-adjusted quota - Capacity-adjusted quota load is computable if quota, ramp factors, and rep assignments are",
-      "  [-] The gap points to a combined territory design, capacity planning, and pipeline quality problem rather than insufficient headline coverage - Causal attribution is narrative framing. Could be indirectly reflected by combining comput",
-      "  ? Does the data model include a segment/line-of-business field to attribute revenue and pipeline to Enterprise?",
-      "  ? Is there a plan/target value available for NA revenue to compute the 4% miss?",
-      "  ? Does the pipeline data include stage and expected_close_date fields to support stage distribution and close-date slippage analysis?",
-      "  ? Are quota assignments and ramp factors available to compute capacity-adjusted quota load (the 118% figure)?",
-      "  ? How is 'lower-potential territory' defined, and is there any proxy (e.g., historical attainment or quota) available?",
-      "Coverage guard: 1 gap(s); corrective re-draft...",
-      "  - Uncovered claim 'Pipeline was skewed toward early-stage deals': AC5 uses stage_aging with stale_threshold_days=120 and max_stale_share_pct=60, which measures deal staleness by days-in-stage, not the distribution of pipeline across pipeline stages. The claim is about the proportion of pipeline sitting in early-stage (e.g., prospecting/qualification) deals. stage_aging cannot fail if the pipeline is dominated by early-stage deals that are all recently created and not stale. No criterion measures the share of pipeline by stage. (consider check: stage_distribution_share)",
-      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
-      "Coverage guard: gaps persist after corrective re-draft.",
-      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-01",
+      "Pre-check found 10 claims; 6 question(s) for user",
+      "  [+] NA revenue missed plan by 4% this year - Revenue vs. plan is directly computable from an opportunities/accounts data model (actual ",
+      "  [+] Revenue miss was driven primarily by Enterprise - Attributable to segment if revenue and quota are broken out by segment/line of business.",
+      "  [+] Pipeline coverage looked healthy at around 3.4x - Pipeline coverage ratio = pipeline value / quota; computable from pipeline/opportunities d",
+      "  [-] Pipeline was concentrated in lower-potential territories - 'Lower-potential' is a qualitative judgment; cannot be verified from a sales table. Could ",
+      "  [+] Pipeline was skewed toward early-stage deals - Stage distribution of pipeline is directly computable from opportunities data.",
+      "  [+] Expected close dates kept slipping into later quarters as the year went on - Close-date slippage is computable by comparing expected vs. actual close dates (or histori",
+      "  [+] Enterprise AEs were carrying well over plan-relative workload - Plan-relative workload/quota attainment is computable from quota and attainment data.",
+      "  [-] Ramping hires left effective productive capacity well below the headline headcount - 'Effective productive capacity' and ramp effects are not directly in a sales table. Could ",
+      "  [+] Reps actually covering Enterprise were effectively carrying about 118% of a fully-ramped capacity-adjusted quota - Capacity-adjusted quota load is computable if quota, headcount, and ramp assumptions are d",
+      "  [-] The gap points to a combined territory design, capacity planning, and pipeline quality problem rather than insufficient headline coverage - Causal diagnosis is narrative framing. Could indirectly reflect computable claims about te",
+      "  ? What defines 'lower-potential territories' \u2014 is there a territory-tier or scoring field in the data model that could proxy this?",
+      "  ? How is 'fully-ramped capacity-adjusted quota' defined \u2014 is there a ramp multiplier or ramped-quota field available?",
+      "  ? Is there a ramp/tenure field to distinguish ramping vs. fully-ramped reps?",
+      "  ? Are revenue and quota broken out by segment (e.g., Enterprise) to support the 'driven primarily by Enterprise' claim?",
+      "  ? Is there a stage field on pipeline/opportunities to compute the early-stage skew?",
+      "  ? Is there both expected and actual close date data to measure close-date slippage over time?",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Pipeline was skewed toward early-stage deals' [PARAMETRIC]: The claim asserts a measurable shift in pipeline composition toward early-stage deals. stage_aging is an existing check that measures stage distribution/aging of pipeline and can prove this claim being false. No drafted criterion measures early-stage skew; AC4 measures territory-level potential concentration, not deal-stage skew. (consider check: stage_aging)",
+      "  - Uncovered claim 'Enterprise AEs were carrying well over plan-relative workload' [PARAMETRIC]: The claim is a measurable assertion that Enterprise reps carried well over plan-relative workload. quota_vs_potential is an existing check that measures quota relative to potential and can prove this claim being false. AC6 and AC7 measure effective_capacity (ramp/capacity-adjusted), which is a related but distinct dimension; the plan-relative workload claim itself is not directly measured by any drafted criterion. (consider check: quota_vs_potential)",
+      "Drafted 10 criteria: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC10",
+      "Declared dependencies:\nAC2 <- depends on AC1\n  AC9 <- depends on AC7, AC8",
+      "  AC1  NA revenue missed plan by 4%\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 96, \"band_pct\": 2}\n  AC2  Enterprise drove the miss (depends_on: AC1)\n       check=revenue_vs_plan params={\"segment\": \"Enterprise\", \"target_pct\": 93, \"band_pct\": 2}\n  AC3  Headline coverage ~3.4x\n       check=coverage_ratio params={\"quarter\": \"FY26-Q1\", \"min_multiple\": 3.4}\n  AC4  Pipeline concentrated in lower-potential territories\n       check=potential_coverage_gap params={\"dimension\": \"territory\", \"min_gap_pp\": 15}\n  AC5  Pipeline skewed toward early-stage deals\n       check=stage_aging params={\"stale_threshold_days\": 90, \"max_stale_share_pct\": 40}\n  AC6  Close dates slipping into later quarters\n       check=slippage_trend params={\"min_increase_pp\": 12}\n  AC7  Enterprise AEs over plan-relative workload\n       check=quota_vs_potential params={\"dimension\": \"segment\", \"target_ratio_pct\": 118, \"band_pp\": 6, \"unit\": \"Enterprise\"}\n  AC8  Effective capacity below headline headcount\n       check=effective_capacity params={\"target_pct\": 82, \"band_pp\": 8, \"unit\": \"Enterprise\"}\n  AC9  Covering reps at 118% capacity-adjusted quota (depends_on: AC7, AC8)\n       check=effective_capacity params={\"target_pct\": 118, \"band_pp\": 6, \"unit\": \"Enterprise\"}\n  AC10  Referential and value sanity\n       check=data_sanity params={\"max_discount_pct\": 60}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 10 item(s) deterministically:\n  - planning: set 'Mid-Market' attainment to 0.96 for company-wide target\n  - planning: set 'SMB' attainment to 0.96 for company-wide target\n  - AC6: solved slippage path [0.1, 0.1761, 0.2521, 0.3282] (+23pp vs >= 12pp, incl. 6pp sampling-noise margin)\n  - AC5: shortened deal durations to [6, 11] - the staleness cap was unreachable at the drafted cycle length\n  - AC5: reshaped share_open_by_quarter to [0.0844, 0.0901, 0.0985, 0.727] -> predicted 34.0% stale (engine-exact model, <= 40% cap)\n  - coverage: scaled plan Q1 down x0.08 (to $739,521) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q2 down x0.48 (to $4,559,322) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q3 down x0.73 (to $6,949,118) so open pipeline covers it at the required multiple\n  - capacity: synthesized capacity block (6 reps/quarter plan across 6 units)\n  - AC8: solved ramping counts for effective capacity ~82% (band +/-8pp, unit 'Enterprise')",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     94.4% (FY26-Q2)          96% +/-2pp                     +0.42     NA revenue missed plan by 4%\nAC2   PASS     93.0% (FY26-Q4)          93% +/-2pp                     +2.00     Enterprise drove the miss\nAC3   PASS     5.58x coverage           >= 3.4x                        +2.18     Headline coverage ~3.4x\nAC4   FAIL     -1.4pp under-coverage    >= 15pp gap                    -16.42    Pipeline concentrated in lower-potential territories\n      -> top-potential units [NA-East, NA-West, EMEA-Central] hold 65.8% of market potential but only 67.3% of created pipeline\nAC5   PASS     36.9% stale              <= 40% stale                   +3.10     Pipeline skewed toward early-stage deals\nAC6   PASS     +19.3pp slip-rate change >= +12pp                       +7.33     Close dates slipping into later quarters\nAC7   FAIL     27% (Enterprise)         118% +/-6pp                    -85.43    Enterprise AEs over plan-relative workload\n      -> Enterprise: 27% of potential\nAC8   FAIL     unit 'Enterprise' absent from capacity_plan 82% +/-8pp                     -8.00     Effective capacity below headline headcount\n      -> capacity_plan covers units: ['APAC-Asia', 'APAC-Oceania', 'EMEA-Central', 'EMEA-North', 'NA-East', 'NA-West']\nAC9   FAIL     unit 'Enterprise' absent from capacity_plan 118% +/-6pp                    -6.00     Covering reps at 118% capacity-adjusted quota\n      -> capacity_plan covers units: ['APAC-Asia', 'APAC-Oceania', 'EMEA-Central', 'EMEA-North', 'NA-East', 'NA-West']\nAC10  PASS     clean                    no violations                  +1.00     Referential and value sanity\n------------------------------------------------------------------------------------------\n6/10 criteria passed - STORY NOT LANDED",
+      "AUTOPILOT: applied 3 deterministic fix(es):\n  - AC6: solved slippage path [0.1, 0.1862, 0.2724, 0.3586] (+26pp vs >= 12pp, incl. 8pp sampling-noise margin)\n  - coverage: scaled plan Q1 down x1.00 (to $739,521) so open pipeline covers it at the required multiple\n  - AC8: solved ramping counts for effective capacity ~82% (band +/-8pp, unit 'Enterprise')",
+      "--- Iteration 2 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     94.4% (FY26-Q2)          96% +/-2pp                     +0.42     NA revenue missed plan by 4%\nAC2   PASS     93.0% (FY26-Q4)          93% +/-2pp                     +2.00     Enterprise drove the miss\nAC3   PASS     5.58x coverage           >= 3.4x                        +2.18     Headline coverage ~3.4x\nAC4   FAIL     -1.4pp under-coverage    >= 15pp gap                    -16.42    Pipeline concentrated in lower-potential territories\n      -> top-potential units [NA-East, NA-West, EMEA-Central] hold 65.8% of market potential but only 67.3% of created pipeline\nAC5   PASS     36.9% stale              <= 40% stale                   +3.10     Pipeline skewed toward early-stage deals\nAC6   PASS     +21.6pp slip-rate change >= +12pp                       +9.59     Close dates slipping into later quarters\nAC7   FAIL     27% (Enterprise)         118% +/-6pp                    -85.43    Enterprise AEs over plan-relative workload\n      -> Enterprise: 27% of potential\nAC8   FAIL     unit 'Enterprise' absent from capacity_plan 82% +/-8pp                     -8.00     Effective capacity below headline headcount\n      -> capacity_plan covers units: ['APAC-Asia', 'APAC-Oceania', 'EMEA-Central', 'EMEA-North', 'NA-East', 'NA-West']\nAC9   FAIL     unit 'Enterprise' absent from capacity_plan 118% +/-6pp                    -6.00     Covering reps at 118% capacity-adjusted quota\n      -> capacity_plan covers units: ['APAC-Asia', 'APAC-Oceania', 'EMEA-Central', 'EMEA-North', 'NA-East', 'NA-West']\nAC10  PASS     clean                    no violations                  +1.00     Referential and value sanity\n------------------------------------------------------------------------------------------\n6/10 criteria passed - STORY NOT LANDED",
+      "\nNEEDS YOUR ATTENTION: structural failure(s) ['AC8', 'AC9'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC7 -85.43, AC4 -16.42, AC8 -8.00"
     ],
     "gate_decisions": [
       {
         "prompt": "Proceed with the computable claims above?",
         "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
       }
     ]
   },
   "scenario": "scenario_01",
-  "elapsed_s": 267.9
+  "elapsed_s": 340.8
 }

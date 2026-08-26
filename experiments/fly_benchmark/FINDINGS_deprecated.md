@@ -1,5 +1,8 @@
 # Fly Benchmark Findings
 
+> DEPRECATED 2026-08-26: measurement record for the frozen baseline only.
+> Certification-era findings live in `findings_v2.md`.
+>
 > M5 exit-criterion measurement: unassisted landing rate across all 25
 > v1 RevOps stories, flown one-by-one through `syngen fly` against the
 > local LLM. Batch cadence: 1 scenario per batch, status pause after
