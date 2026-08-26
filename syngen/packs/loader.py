@@ -56,6 +56,16 @@ def load_pack(path=None):
         except ConfigError as exc:
             raise PackValidationError(str(exc)) from exc
         pack.claims_matrix_path = str(matrix_path)
+    if isinstance(manifest.get("check_signatures"), str):
+        sig_path = (manifest_path.parent /
+                    manifest["check_signatures"]).resolve()
+        if not sig_path.exists():
+            raise PackValidationError(
+                f"{manifest_path}: check_signatures file not found: {sig_path}")
+        try:
+            pack.check_signatures = load_json(sig_path)
+        except ConfigError as exc:
+            raise PackValidationError(str(exc)) from exc
     schemas_ref = manifest.get("entity_schemas")
     if isinstance(schemas_ref, str):
         schemas_dir = (manifest_path.parent / schemas_ref).resolve()
@@ -216,6 +226,10 @@ def validate_against_kernel(pack):
     schema_errors, schema_warnings = validate_entity_schemas(pack)
     errors.extend(schema_errors)
     warnings.extend(schema_warnings)
+
+    sig_errors, sig_warnings = validate_check_signatures(pack)
+    errors.extend(sig_errors)
+    warnings.extend(sig_warnings)
 
     if not _compat_satisfied(pack.kernel_compat):
         errors.append(
@@ -398,6 +412,72 @@ def validate_entity_schemas(pack):
 def _known_blocks():
     from ..linter import KNOWN_BLOCKS
     return KNOWN_BLOCKS
+
+
+def validate_check_signatures(pack):
+    """Structural validation of the coordinate signature registry.
+
+    Errors: signatures naming unknown checks, malformed coordinate entries,
+    unknown unit-space references.
+    Warnings: pack checks with no declared signature.
+    """
+    errors, warnings = [], []
+    sigs = pack.check_signatures
+    if not sigs:
+        warnings.append("pack declares no check signatures")
+        return errors, warnings
+    if not isinstance(sigs, dict) or not isinstance(
+            sigs.get("signatures"), dict):
+        return [f"{pack.path}: check_signatures must contain a "
+                "'signatures' object"], []
+    spaces = sigs.get("unit_spaces", {})
+    if not isinstance(spaces, dict):
+        return [f"{pack.path}: unit_spaces must be an object"], []
+    for sname, spec in sorted(spaces.items()):
+        if not isinstance(spec, dict) or "source" not in spec:
+            errors.append(f"check_signatures: unit space '{sname}' "
+                          "needs a 'source'")
+    for cname, sig in sorted(sigs["signatures"].items()):
+        where = f"check_signatures/{cname}"
+        if cname not in pack.checks:
+            errors.append(f"{where}: signature names unknown check "
+                          f"'{cname}'")
+        if not isinstance(sig, dict):
+            errors.append(f"{where}: signature must be an object")
+            continue
+        coords = sig.get("coordinates", [])
+        if not isinstance(coords, list):
+            errors.append(f"{where}: 'coordinates' must be a list")
+            continue
+        seen_params = set()
+        for coord in coords:
+            if not isinstance(coord, dict) or \
+                    not isinstance(coord.get("param"), str):
+                errors.append(f"{where}: coordinate entries need 'param'")
+                continue
+            pname = coord["param"]
+            if pname in seen_params:
+                errors.append(f"{where}: duplicate coordinate '{pname}'")
+            seen_params.add(pname)
+            space = coord.get("space")
+            if space is not None and not isinstance(space, str):
+                errors.append(f"{where}/{pname}: 'space' must be a string "
+                              "or null (dimension selector)")
+            elif isinstance(space, str) and space not in spaces and \
+                    space != "quota_units":
+                errors.append(f"{where}/{pname}: unknown unit space "
+                              f"'{space}'")
+            via = coord.get("via_dimension")
+            if via is not None and (
+                    not isinstance(via, str)
+                    or via not in {c.get("param") for c in coords}):
+                errors.append(f"{where}/{pname}: via_dimension must name "
+                              "another coordinate param of this check")
+    undeclared = sorted(set(pack.checks) - set(sigs["signatures"]))
+    if undeclared:
+        warnings.append("checks with no declared signature: "
+                        + ", ".join(undeclared))
+    return errors, warnings
 
 
 def ensure_valid(path=None):

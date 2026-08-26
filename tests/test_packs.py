@@ -64,6 +64,9 @@ def _write_pack(tmp_path, **overrides):
         encoding="utf-8")
     shutil.copytree(REPO_PACK / "prompts", d / "prompts")
     shutil.copytree(REPO_PACK / "entities", d / "entities")
+    (d / "check_signatures.json").write_text(
+        (REPO_PACK / "check_signatures.json").read_text(encoding="utf-8"),
+        encoding="utf-8")
     return d
 
 

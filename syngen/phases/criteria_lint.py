@@ -1,0 +1,213 @@
+"""P5 flight-control envelope: coordinate linting for criteria.
+
+Two deterministic gates derived from the pack's check-signature registry:
+
+- lint_criteria_internal: config-independent consistency (Gate 1). Two
+  criteria addressing the SAME coordinate of the same check must have
+  overlapping target bands - otherwise the set is provably unsatisfiable
+  regardless of knobs (cert finding F15.2/F18.2).
+- cross_lint: criteria x config geometry (post-calibration, pre-loop).
+  Every coordinate criterion must address units that exist in the drafted
+  config's legal unit spaces (F11.1/F11.2/F18.3 pseudo-units and
+  cross-block mismatches die here instead of after generating data).
+
+Every rule is general algebra over the signature registry - no
+story-specific cases.
+"""
+import json
+
+from syngen.packs.loader import load_pack
+
+_TARGET_FIELDS = {
+    # check -> (target field, tolerance field)
+    "revenue_vs_plan": ("target_pct", "band_pct"),
+    "avg_discount_quarter": ("target_pct", "tolerance_pp"),
+    "effective_capacity": ("target_pct", "band_pp"),
+    "quota_vs_potential": ("target_ratio_pct", "band_pp"),
+    "forecast_vs_actual": ("target_pct", "band_pp"),
+    "creation_volume_trend": ("target_decline_pct", "tolerance_pp"),
+    "deal_size_trend": ("target_change_pct", "tolerance_pp"),
+    "blended_margin_trend": ("target_change_pct", "tolerance_pp"),
+}
+
+_PACK_CACHE = {}
+
+
+def _pack():
+    if "pack" not in _PACK_CACHE:
+        _PACK_CACHE["pack"] = load_pack()
+    return _PACK_CACHE["pack"]
+
+
+def reset_cache():
+    _PACK_CACHE.clear()
+
+
+def _coordinates(criterion):
+    """Resolved coordinate tuple for a criterion, per the registry."""
+    sigs = _pack().check_signatures.get("signatures", {})
+    sig = sigs.get(criterion["check"])
+    if not sig:
+        return (("__unregistered__", criterion["check"]),)
+    params = criterion.get("params", {})
+    parts = []
+    for coord in sig.get("coordinates", []):
+        pname = coord.get("param")
+        if coord.get("space") is None:
+            # dimension selector: part of the identity
+            parts.append((pname, str(params.get(pname))))
+            continue
+        via = coord.get("via_dimension")
+        dim = str(params.get(via)) if via else \
+            str(coord.get("default_dimension"))
+        value = params.get(pname)
+        allow_all = bool(coord.get("allow_all"))
+        if value is None and not allow_all:
+            value = "__unscoped__"
+        parts.append((f"{dim}:{pname}", str(value)))
+    return tuple(sorted(parts))
+
+
+def _target_band(criterion):
+    fields = _TARGET_FIELDS.get(criterion["check"])
+    if not fields:
+        return None
+    p = criterion.get("params", {})
+    target = p.get(fields[0])
+    if target is None:
+        return None
+    return float(target), float(p.get(fields[1], 0.0))
+
+
+def lint_criteria_internal(criteria_doc):
+    """Config-independent consistency findings (Gate 1, WP2).
+
+    Returns (hard_findings, notes); hard = provably unsatisfiable sets,
+    notes = unscoped-coordinate advisories.
+    """
+    groups = {}
+    notes = []
+    for c in criteria_doc.get("criteria", []):
+        sigs = _pack().check_signatures.get("signatures", {})
+        sig = sigs.get(c["check"])
+        if sig:
+            for coord in sig.get("coordinates", []):
+                if coord.get("space") and coord.get("required") and \
+                        c.get("params", {}).get(coord["param"]) is None and \
+                        not coord.get("allow_all"):
+                    notes.append(
+                        f"{c['id']}: {c['check']} does not scope "
+                        f"'{coord['param']}' - it will be interpreted per "
+                        "the config's plan geometry; scope it explicitly "
+                        "if the claim targets one unit")
+        band = _target_band(c)
+        if band is None:
+            continue
+        key = (c["check"], _coordinates(c),
+               bool(c.get("params", {}).get("exclude_outlier_deals")))
+        groups.setdefault(key, []).append((c, band))
+    hard = []
+    for (check, coords, _), members in sorted(
+            groups.items(), key=lambda kv: str(kv[0])):
+        if len(members) < 2:
+            continue
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                (ca, (t1, tol1)), (cb, (t2, tol2)) = members[i], members[j]
+                if abs(t1 - t2) > tol1 + tol2:
+                    hard.append(
+                        f"{ca['id']} and {cb['id']} pin {check} at "
+                        f"{t1:g}+/-{tol1:g} and {t2:g}+/-{tol2:g} on the "
+                        f"same coordinate {dict(coords)} - non-overlapping "
+                        "bands are jointly unsatisfiable")
+    return hard, notes
+
+
+def unit_spaces(cfg):
+    """Legal coordinate values resolvable from a drafted config."""
+    labels = cfg["time_model"]["quarter_labels"]
+    spaces = {"quarters": set(labels)}
+    acc = cfg.get("accounts") or {}
+
+    def _keys(block):
+        return set(block.keys()) if isinstance(block, dict) else set()
+
+    spaces["regions"] = _keys(acc.get("regions"))
+    spaces["segments"] = _keys(acc.get("segments"))
+    terr = acc.get("territories")
+    spaces["territories"] = _keys(terr if isinstance(terr, dict) else {})
+    quota = cfg.get("quota") or {}
+    qunits = set()
+    for sub in ("by_segment", "by_territory", "by_motion"):
+        qunits |= _keys(quota.get(sub))
+    spaces["quota_units"] = qunits
+    cap = cfg.get("capacity") or {}
+    cunits = set()
+    for sub in ("by_region", "by_territory"):
+        cunits |= _keys(cap.get(sub))
+    spaces["capacity_units"] = cunits
+    products = cfg.get("products") or {}
+    catalog = products.get("catalog")
+    tiers = set()
+    if isinstance(catalog, list):
+        tiers = {str(e.get("tier")) for e in catalog
+                 if isinstance(e, dict) and e.get("tier")}
+    spaces["tiers"] = tiers
+    return spaces
+
+
+def cross_lint(cfg, criteria_doc):
+    """Criteria x config geometry findings (WP3).
+
+    Runs AFTER calibration/synthesis so synthesized blocks count. Returns
+    HARD findings; empty = every coordinate lands inside the model.
+    """
+    spaces = unit_spaces(cfg)
+    sigs = _pack().check_signatures.get("signatures", {})
+    findings = []
+    for c in criteria_doc.get("criteria", []):
+        sig = sigs.get(c["check"])
+        if sig is None:
+            continue
+        params = c.get("params", {})
+        for coord in sig.get("coordinates", []):
+            space_name = coord.get("space")
+            if space_name is None:
+                continue
+            value = params.get(coord["param"])
+            if value is None:
+                if coord.get("required") and spaces.get(space_name):
+                    findings.append(
+                        f"{c['id']}: {c['check']} requires "
+                        f"'{coord['param']}' but none was drafted "
+                        f"(legal {space_name}: "
+                        f"{sorted(spaces[space_name])[:8]})")
+                continue
+            if bool(coord.get("allow_all")) and str(value) == "_all_":
+                continue
+            space = spaces.get(space_name, set())
+            if not space:
+                continue
+            values = value if isinstance(value, list) and \
+                coord.get("multi") else [value]
+            for v in values:
+                if str(v) not in space:
+                    findings.append(
+                        f"{c['id']}: {c['check']} '{coord['param']}'="
+                        f"'{v}' is outside the data model (legal "
+                        f"{space_name}: {sorted(space)[:8]})")
+    return findings
+
+
+def render_lint(findings):
+    return "\n".join(f"  - {f}" for f in findings)
+
+
+def corrective_brief(findings):
+    """Compact text for a corrective re-draft prompt."""
+    return ("CRITERION CONSISTENCY VIOLATIONS - fix ALL of these:\n"
+            + "\n".join(f"- {f}" for f in findings))
+
+
+def _dump(obj):
+    return json.dumps(obj, indent=2)

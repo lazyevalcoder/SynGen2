@@ -1238,6 +1238,23 @@ def _autocalibrate_blocks(cfg, criteria_doc, labels, fixes):
                      f"(price +{curve[-1]:g}% by Q{n_q}, elasticity -1.5, "
                      "high-potential mitigated)")
 
+    # P5 WP4 (F14.1): required-block handling is now UNIFORM - any check
+    # needing the capacity block gets deterministic synthesis, never a
+    # redraft demand the drafter cannot satisfy.
+    if "capacity" not in cfg and (
+            "effective_capacity" in checks
+            or "headcount_growth_placement" in checks):
+        units = list((cfg.get("accounts") or {}).get("territories")
+                     or (cfg.get("accounts") or {}).get("regions") or {})
+        if units:
+            dim = "by_territory" \
+                if (cfg.get("accounts") or {}).get("territories") \
+                else "by_region"
+            cfg["capacity"] = {
+                dim: {u: {"headcount_plan": [6] * n_q} for u in units}}
+            fixes.append("blocks: synthesized capacity block "
+                         f"(6 reps/quarter plan across {len(units)} units)")
+
     if "core_vs_headline_growth" in checks:
         p = checks["core_vs_headline_growth"]
         need_h = float(p.get("min_headline_growth_pct", 5))
@@ -1305,7 +1322,16 @@ def _autocalibrate_capacity(cfg, criteria_doc, labels, fixes):
         target = float(p.get("target_pct", 100.0))
         band = float(p.get("band_pp", 3.0))
         unit = p.get("unit")
-        affected = [unit] if unit and unit in units_map else list(units_map)
+        # P5 WP4 (F11.1/F18.1): a named unit MUST exist in the capacity
+        # block. Never silently fall back to all-units and report success
+        # under the criterion's (nonexistent) unit name.
+        if unit and unit not in units_map:
+            raise ConfigError(
+                f"{c['id']}: effective_capacity unit '{unit}' does not "
+                f"exist in the capacity plan (legal units: "
+                f"{sorted(units_map)}) - re-draft the criterion or the "
+                "capacity block")
+        affected = [unit] if unit else list(units_map)
         solved_any = False
         for u in affected:
             spec = units_map[u]

@@ -13,6 +13,7 @@ KNOWN_MANIFEST_KEYS = REQUIRED_MANIFEST_KEYS | {
     "description",
     "entities",
     "entity_schemas",
+    "check_signatures",
     "blocks",
     "checks",
     "prompts",
@@ -64,6 +65,7 @@ class DomainPack:
     recipes: List[str] = field(default_factory=list)
     examples: List[str] = field(default_factory=list)
     claims_matrix: Optional[Dict[str, Any]] = None
+    check_signatures: Dict[str, Any] = field(default_factory=dict)
     entity_schemas: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     entity_schemas_path: Optional[str] = None
     description: str = ""

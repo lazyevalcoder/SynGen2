@@ -1,0 +1,176 @@
+{
+  "_comment": "Coordinate signature registry (P5 WP1). For each proof check: which criterion params are COORDINATES into the data model's geometry (which legal unit space they address, and how the dimension is selected), plus directional-parameter sign conventions. This is normative pack data: Gate-1 lint, criteria x config cross-lint, solver preconditions, and proposer knowledge prompts all derive from this file. A check added without a signature entry is a pack-validation warning; a signature naming an unknown check is an error.",
+  "unit_spaces": {
+    "quarters": {
+      "source": "time_model.quarter_labels",
+      "description": "fiscal quarter labels from the configured calendar"
+    },
+    "regions": {
+      "source": "accounts.regions",
+      "description": "region keys with population weights"
+    },
+    "segments": {
+      "source": "accounts.segments",
+      "description": "account segment keys"
+    },
+    "territories": {
+      "source": "accounts.territories",
+      "description": "territory keys mapping to member regions; present only when accounts.territories is configured"
+    },
+    "quota_units": {
+      "source": "quota.by_<dimension>",
+      "description": "plan-unit values of the quota block for the criterion's dimension (by_segment / by_territory / by_motion)"
+    },
+    "capacity_units": {
+      "source": "capacity.by_region | capacity.by_territory",
+      "description": "plan-unit values of the capacity block"
+    },
+    "tiers": {
+      "source": "products.catalog[].tier",
+      "description": "product tier labels; present only when products block is configured"
+    }
+  },
+  "signatures": {
+    "win_rate_flat": {"coordinates": []},
+    "avg_discount_quarter": {
+      "coordinates": [
+        {"param": "quarter", "space": "quarters", "required": true}
+      ]
+    },
+    "discount_trend_monotonic": {"coordinates": []},
+    "region_discount_premium": {
+      "coordinates": [
+        {"param": "region", "space": "regions", "required": true},
+        {"param": "vs", "space": "regions", "required": true,
+         "multi": true,
+         "notes": "list of baseline regions the premium is measured against"}
+      ]
+    },
+    "end_of_quarter_effect": {"coordinates": []},
+    "realized_vs_list": {
+      "coordinates": [
+        {"param": "quarter_start", "space": "quarters", "required": false},
+        {"param": "quarter_end", "space": "quarters", "required": false}
+      ]
+    },
+    "data_sanity": {"coordinates": []},
+    "revenue_vs_plan": {
+      "coordinates": [
+        {"param": "segment", "space": "quota_units",
+         "via_dimension": "dimension", "default_dimension": "segment",
+         "allow_all": true, "required": false,
+         "notes": "'_all_' addresses the plan-weighted mean over every unit of the dimension"},
+        {"param": "dimension", "space": null, "required": false,
+         "notes": "selects which quota sub-block (by_segment/by_territory/by_motion) defines the unit space"}
+      ],
+      "pinned_quantity": "raking pins realized revenue to attainment x plan exactly"
+    },
+    "cycle_length_trend": {"coordinates": []},
+    "creation_volume_trend": {
+      "coordinates": [],
+      "directional_params": {
+        "target_decline_pct": "SIGNED: positive value demands a DECLINE of that pct; negative value demands GROWTH of that magnitude (e.g. -12 means '+12% growth'). Tolerance is tolerance_pp."
+      }
+    },
+    "deal_size_trend": {
+      "coordinates": [],
+      "directional_params": {
+        "target_change_pct": "SIGNED: demanded Q1->Q4 change of average won deal size; negative = decline."
+      }
+    },
+    "icp_creation_shift": {
+      "coordinates": [],
+      "directional_params": {
+        "min_increase_pp": "minimum required RISE in low-ICP creation share, first quarter vs last."
+      }
+    },
+    "revenue_concentration": {"coordinates": []},
+    "blended_margin_trend": {
+      "coordinates": [],
+      "directional_params": {
+        "target_change_pct": "SIGNED: demanded change in blended margin percentage points, first quarter vs last."
+      }
+    },
+    "tier_share_shift": {
+      "coordinates": [
+        {"param": "tier", "space": "tiers", "required": true}
+      ],
+      "directional_params": {
+        "from_share_pct": "entry revenue share in the FIRST quarter",
+        "to_share_pct": "tier revenue share in the LAST quarter"
+      }
+    },
+    "discount_margin_link": {"coordinates": []},
+    "avg_price_by_tier": {
+      "coordinates": [
+        {"param": "tier", "space": "tiers", "required": true}
+      ]
+    },
+    "gap_concentration": {
+      "coordinates": [
+        {"param": "dimension", "space": null, "required": false,
+         "notes": "names the grouping dimension itself (segment|territory), not a unit - no unit lookup"}
+      ]
+    },
+    "stage_aging": {"coordinates": []},
+    "slippage_trend": {"coordinates": []},
+    "coverage_ratio": {
+      "coordinates": [
+        {"param": "quarter", "space": "quarters", "required": false}
+      ]
+    },
+    "pipeline_concentration": {"coordinates": []},
+    "quota_vs_potential": {
+      "coordinates": [
+        {"param": "unit", "space": "quota_units",
+         "via_dimension": "dimension", "default_dimension": "segment",
+         "allow_all": true, "required": false,
+         "notes": "absent = whole-dimension claim (all plan units); when present it MUST name an existing plan unit of the dimension"},
+        {"param": "dimension", "space": null, "required": false,
+         "notes": "selects which quota sub-block (by_segment/by_territory/by_motion) defines the unit space"}
+      ],
+      "pinned_quantity": "plan levels are plan-of-record; market potential is generated data - ATTAINMENT KNOBS CANNOT MOVE THIS RATIO (blocked path)"
+    },
+    "effective_capacity": {
+      "coordinates": [
+        {"param": "unit", "space": "capacity_units", "allow_all": true,
+         "required": false,
+         "notes": "absent = every plan-unit row (worst row decides); when present it MUST name a capacity plan unit - narrative words ('headline', 'effective') are not units"}
+      ]
+    },
+    "potential_coverage_gap": {
+      "coordinates": [
+        {"param": "dimension", "space": null, "required": false,
+         "notes": "grouping dimension name (segment|territory), not a unit"}
+      ]
+    },
+    "headcount_growth_placement": {"coordinates": []},
+    "unowned_account_share": {
+      "coordinates": [
+        {"param": "quarter", "space": "quarters", "required": false}
+      ]
+    },
+    "post_change_revenue_decline": {"coordinates": []},
+    "forecast_vs_actual": {
+      "coordinates": [],
+      "directional_params": {
+        "target_pct": "commit as pct of actual: >100 means commit ABOVE actual i.e. a MISS; <100 means commit below actual i.e. a BEAT."
+      }
+    },
+    "commit_no_engagement_share": {"coordinates": []},
+    "core_vs_headline_growth": {
+      "coordinates": [],
+      "directional_params": {
+        "min_headline_growth_pct": "lower bound on TOTAL revenue growth",
+        "max_core_growth_pct": "upper bound on EX-OUTLIER (core) revenue growth; core may decline while headline grows only if whales add revenue"
+      }
+    },
+    "elasticity_differential": {
+      "coordinates": [],
+      "directional_params": {
+        "min_gap_pp": "minimum discount-response DIFFERENTIAL between high- and low-potential cohorts (high-potential wr change minus low-potential); driven by pricing_response.elasticity/potential_mitigation"
+      }
+    },
+    "activity_potential_misalignment": {"coordinates": []}
+  }
+}

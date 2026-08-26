@@ -17,6 +17,9 @@ from syngen.phases.amend import (
     dependency_closure,
 )
 from syngen.phases.converge import LoopEscalation, run_convergence
+from syngen.phases.criteria_lint import (corrective_brief, cross_lint,
+                                         lint_criteria_internal,
+                                         render_lint)
 from syngen.phases.diff import RoutingError, classify_story_change, validate_route
 from syngen.phases.intake import (
     draft_criteria,
@@ -206,7 +209,14 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
         findings-free draft may be missing planning synthesis like
         attainment ratios or a required quota block)."""
         f = run_pass(cfg)
-        fx = autocalibrate(cfg, doc)
+        try:
+            fx = autocalibrate(cfg, doc)
+        except ConfigError as e:
+            # P5 WP4: solver precondition violations (e.g. effective_capacity
+            # naming an absent capacity unit) become corrective findings,
+            # never crashes.
+            return [{"rule": "PF0", "severity": "HARD", "criterion": "*",
+                     "msg": str(e)}], []
         if fx:
             log("Auto-calibrated " + f"{len(fx)} item(s) deterministically:"
                 + "\n" + "\n".join(f"  - {x}" for x in fx))
@@ -481,6 +491,33 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
         session.log("COVERAGE GUARD: proceeding with noted vocabulary/"
                     "qualifier gaps (see session log).")
 
+    # --- Criterion consistency lint (P5 WP2): provably unsatisfiable
+    # criterion sets die here instead of after burning a flight ---
+    lint_hard, lint_notes = lint_criteria_internal(doc)
+    for note in lint_notes:
+        log(f"  [lint] {note}")
+    if lint_hard:
+        session.log("CRITERION CONSISTENCY LINT:\n"
+                    + render_lint(lint_hard))
+        log("Criterion consistency violations (see session log) - "
+            "one corrective re-draft.")
+        doc = draft_criteria(client, story, decisions_text + "\n\n"
+                             + corrective_brief(lint_hard))
+        doc, cov_status2 = enforce_coverage(
+            client, story, doc, claims, decisions_text=decisions_text,
+            log_fn=log)
+        lint_hard, _ = lint_criteria_internal(doc)
+        if cov_status2 == "uncovered" or lint_hard:
+            session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+            session.log("ESCALATED: criteria_consistency - conflicting "
+                        "criteria persisted past a corrective re-draft.")
+            log("\nNEEDS YOUR ATTENTION: criteria are jointly "
+                "unsatisfiable even after a corrective re-draft. See "
+                "criteria.json.")
+            return {"status": "escalated", "reason": "criteria_consistency",
+                    "session": str(session.root)}
+        session.log("CRITERION CONSISTENCY: corrective re-draft accepted.")
+
     deps_note = consistency_report(doc).strip()
     if deps_note != "(no dependencies declared)":
         log("Declared dependencies:\n" + deps_note)
@@ -543,6 +580,20 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                                      spec_notes, doc, sim_cfg, session, log)
     if sim_cfg is None:
         return {"status": "escalated", "reason": "preflight_calibration",
+                "session": str(session.root)}
+
+    # --- Criteria x config geometry lint (P5 WP3): coordinates must land
+    # inside the drafted/synthesized data model before the loop starts ---
+    geo_findings = cross_lint(sim_cfg, doc)
+    if geo_findings:
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+        session.log("CRITERIA GEOMETRY LINT:\n" + render_lint(geo_findings))
+        session.log("ESCALATED: criteria_geometry - criteria reference "
+                    "coordinates outside the data model.")
+        log("\nNEEDS YOUR ATTENTION: criteria reference coordinates that "
+            "do not exist in the drafted config (see session log). "
+            "criteria.json persisted for inspection.")
+        return {"status": "escalated", "reason": "criteria_geometry",
                 "session": str(session.root)}
 
     return _converge_and_deliver(session, client, io, doc,

@@ -163,7 +163,15 @@ def validate_simulator_doc(cfg, source="simulator"):
                 raise ConfigError("icp sampling weights must be positive")
 
     for dim in ("regions", "segments"):
-        for name, val in cfg["accounts"].get(dim, {}).items():
+        # P5 WP5 (F12.1): shape-guard before iteration - an LLM draft that
+        # writes a dimension as a LIST must raise ConfigError (corrective
+        # re-draft path), never AttributeError past the handler.
+        dim_spec = cfg["accounts"].get(dim, {})
+        if not isinstance(dim_spec, dict):
+            raise ConfigError(
+                f"accounts.{dim} must map names to weights or weight "
+                f"curves; got {type(dim_spec).__name__}")
+        for name, val in dim_spec.items():
             if isinstance(val, dict):
                 curve = val.get("weights_by_quarter")
                 if not isinstance(curve, list) or len(curve) != len(labels):
@@ -174,12 +182,12 @@ def validate_simulator_doc(cfg, source="simulator"):
                     raise ConfigError(
                         f"accounts.{dim}['{name}'] weights must be >= 0")
         # per-quarter weights across the dimension should sum to ~1
-        curves = [v["weights_by_quarter"] for v in cfg["accounts"].get(dim, {}).values()
+        curves = [v["weights_by_quarter"] for v in dim_spec.values()
                   if isinstance(v, dict)]
         if curves:
             for qi in range(len(labels)):
                 total = sum(float(c[qi]) for c in curves)
-                static = [float(v) for v in cfg["accounts"][dim].values()
+                static = [float(v) for v in dim_spec.values()
                           if not isinstance(v, dict)]
                 total += sum(static)
                 if abs(total - 1.0) > 0.05:
@@ -251,8 +259,16 @@ def validate_simulator_doc(cfg, source="simulator"):
         if dim_name == "motion":
             known_units = {"New Logo", "Expansion"}
         else:
-            known_units = set(cfg["accounts"].get(
-                "territories" if dim_name == "territory" else "segments", {}))
+            src = cfg["accounts"].get(
+                "territories" if dim_name == "territory" else "segments", {})
+            known_units = set(src)
+            # P5 WP5 (F18.4): a diagnostic that says "known: []" when the
+            # drafter omitted the whole source block is misleading
+            if not known_units:
+                raise ConfigError(
+                    f"quota.by_{dim_name} references account {dim_name}s "
+                    f"but accounts.{ 'territories' if dim_name == 'territory' else 'segments'} "
+                    "is missing from the draft - add the dimension block")
         for unit, curve in targets.items():
             if unit not in known_units:
                 raise ConfigError(
@@ -332,6 +348,10 @@ def validate_simulator_doc(cfg, source="simulator"):
         if None in tiers or not all(isinstance(t, str) for t in tiers):
             raise ConfigError("products.catalog entries need a 'tier'")
         margin = prods.get("margin_by_tier", {})
+        if not isinstance(margin, dict):
+            raise ConfigError(
+                "products.margin_by_tier must map tier names to margins; "
+                f"got {type(margin).__name__}")
         missing = tiers - set(margin)
         if missing:
             raise ConfigError(

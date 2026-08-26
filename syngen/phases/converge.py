@@ -238,13 +238,23 @@ def _remedy_quota_potential(cfg, criteria_doc, results, workbook_path,
         unit_col = dim
         if unit_col not in accounts.columns:
             continue
-        for p in params_list:
+        # P5 WP4 (F15.1): solve SCOPED criteria first and record the units
+        # they pin; an unscoped (whole-dimension) criterion then applies
+        # only to units NO scoped criterion claimed. Last-writer-wins
+        # clobbering between two same-dimension criteria is impossible.
+        pinned = set()
+        ordered = [p for p in params_list if p.get("unit")] + \
+                  [p for p in params_list if not p.get("unit")]
+        for p in ordered:
             unit = p.get("unit")
             if not unit or unit not in targets_map:
                 # a whole-dimension claim: scale every plan unit uniformly
-                # toward the target ratio using measured totals
-                unit_names = list(targets_map)
+                # toward the target ratio using measured totals - except
+                # units already pinned by a scoped criterion
+                unit_names = [u for u in targets_map if u not in pinned]
             else:
+                if unit in pinned:
+                    continue  # already solved for another criterion
                 unit_names = [unit]
             want_ratio = float(p.get("target_ratio_pct", 100.0)) / 100.0
             for u in unit_names:
@@ -259,6 +269,7 @@ def _remedy_quota_potential(cfg, criteria_doc, results, workbook_path,
                     continue  # already inside any sane band
                 new_curve = [round(float(v) * f, 2) for v in curve]
                 targets_map[u] = new_curve
+                pinned.add(u)
                 fixes.append(
                     f"scaled '{u}' {dim} plan x{f:.2f} "
                     f"(quota/potential {cur_ratio * 100:.0f}% -> "
