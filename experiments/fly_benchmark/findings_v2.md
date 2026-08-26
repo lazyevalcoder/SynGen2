@@ -35,6 +35,10 @@ criteria.json (F5.3). Vocabulary holes are roadmap notes, not failures.
 | 4 | scenario_04 | ESCALATED | preflight calibration | IMPROVED - passed guard, died later at preflight | F14.1 below |
 | 5 | scenario_05 | **LANDED** | converged iter 2 | **IMPROVED - first cert landing** (baseline: guard escalation) | - |
 | 6 | scenario_06 | ESCALATED | convergence (iter cap 10) | REGRESSION vs baseline post-fix landing | F15.x below |
+| 7 | scenario_07 | ESCALATED | oscillation guard (6 stale iters) | new flight (not in Pass 1) | F16.x below |
+| 8 | scenario_08 | ESCALATED | convergence (proposal cap 8) | new flight (not in Pass 1) | F17.x below |
+| 9 | scenario_09 | **LANDED** | converged iter 7 | new flight (not in Pass 1) - autopilot block synthesis carried | - |
+| 10 | scenario_10 | ESCALATED | convergence (structural x3) | new flight (not in Pass 1) | F18.x below |
 
 ---
 
@@ -463,5 +467,51 @@ UAT manifest). New measurement.
 **Failures & classification:** none. Positive evidence: GUARD-WORKING,
 AUTOPILOT-WORKING (block synthesis composed from multiple knobs toward a
 two-criterion joint target).
+
+**Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 10 - scenario_10 (capacity +10% but attainment -6pts, ramp placement)
+
+**Outcome:** ESCALATED at convergence - structural failures AC3/AC4/AC5,
+389s. The purest specimen yet of the scoping/feasibility family.
+
+**Progress vs baseline:** never flown in Pass 1. New measurement.
+
+**Observations:**
+- PSEUDO-UNITS FROM STORY NOUNS: the drafter invented capacity plan units
+  called 'headline' and 'effective' - story PROSE words ("headline
+  headcount", "effective productive capacity") turned into coordinate
+  names. The synthesized capacity block has real territory units; AC3/AC4
+  reference units that can never exist.
+- PHANTOM SOLVE RECURRENCE (F11.1 exactly): autopilot logged "AC4: solved
+  ramping counts for effective capacity ~92% (unit 'effective')" for the
+  nonexistent unit - success claimed, validator reports unit absent.
+- CONFLICTING UNSCOPED TARGETS PASSED GATE 1 (F15.2 exactly): AC1 wants
+  company-wide plan attainment 94%+/-2, AC2 wants 100%+/-2 on the SAME
+  check/dimension/unit - non-overlapping bands, provably jointly
+  unsatisfiable, accepted without comment.
+- Repair path worked again: first draft had quota.by_segment['_all_'] /
+  ['All'] (invalid segment labels) -> ConfigError -> corrective re-draft
+  recovered. Second F12.1-contrast data point.
+- Minor diagnostic bug: the PF0 message printed "(known: [])" although
+  accounts.segments was populated - misleading error text sent to the
+  corrective re-draft.
+
+**Failures & classification (logged only - no fixes during certification):**
+- F18.1 RECURRENCE of F11.1 (phantom solve): effective_capacity solver
+  reports success for absent units. Now observed twice; the fix must be
+  in the solver's precondition, not per-check.
+- F18.2 RECURRENCE of F15.2 (conflicting targets through Gate 1): now
+  observed twice with provably-unsatisfiable bands. Same root:
+  no cross-criterion consistency lint.
+- F18.3 BUG-GUARD-CALIBRATION (family: vocabulary grounding): drafter
+  mints pseudo-coordinates from narrative language ('headline',
+  'effective'); nothing at Gate 1 grounds criterion coordinates against
+  the legal unit space of the target dimension - which entity schemas
+  define but nothing enforces.
+- F18.4 INFRA-DIAGNOSTIC (minor): PF0 known-segments message renders an
+  empty list; corrective drafts receive wrong information.
 
 **Actions:** logged only. NO code changes (certification run in progress).

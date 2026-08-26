@@ -1,0 +1,73 @@
+{
+  "status": "escalated",
+  "reason": "structural failure(s) ['AC3', 'AC4', 'AC5'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC5 -75.00, AC3 -5.00, AC4 -5.00",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-10",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-10",
+      "Pre-check found 10 claims; 4 question(s) for user",
+      "  [+] Quota attainment declined 6 points this year - Attainment = closed-won revenue / quota; the 6-point delta is derivable from a time-series",
+      "  [+] Rep capacity increased by 10% - Capacity can be proxied by headcount or FTE count; 10% growth is computable from a headcou",
+      "  [+] The incremental headcount was added almost entirely to territories with historically strong productivity - Territory assignments and historical productivity (revenue per rep by territory) are deriv",
+      "  [-] Those territories were already highly penetrated - Penetration requires total addressable market or total installed-base data beyond a sales ",
+      "  [-] New AEs inherited limited whitespace - Whitespace is a market-size concept not present in a sales table; could be indirectly refl",
+      "  [+] New AEs produced well below steady state during the year - New-hire revenue vs. established-rep (steady-state) revenue is computable from an opportun",
+      "  [-] The new hires were ramping - Ramp is a narrative characterization; could be indirectly reflected via ramp-period revenu",
+      "  [+] The capacity investment did not translate into proportional revenue - Revenue-per-rep or revenue/headcount ratio is computable; the proportionality claim is a r",
+      "  [+] Effective productive capacity stayed below the headline headcount growth - Productive capacity proxy (revenue per rep or ramp-adjusted FTE) vs. raw headcount growth ",
+      "  [+] Attainment slipped to about 94% of plan - Final attainment % is directly derivable from closed-won revenue / quota.",
+      "  ? Do you have quota data by territory and by rep, or only aggregate quota?",
+      "  ? Are hire dates and territory assignments recorded in the data model so new-hire revenue can be isolated?",
+      "  ? Is there any market-size or TAM data that could proxy for 'penetration' and 'whitespace', or should those be dropped from the synthetic dataset?",
+      "  ? What proxy do you want for 'productive capacity' (revenue per rep, ramp-adjusted FTE, or something else)?",
+      "Coverage guard: 2 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Quota attainment declined 6 points this year' [PARAMETRIC]: AC1 only verifies attainment landed at ~94% of plan (a level check), not that it DECLINED by 6 points year-over-year. Proving a decline requires a directional comparison across periods, which revenue_vs_plan (a single-period target-vs-actual check) cannot express. No drafted criterion measures the -6 point movement. (consider check: revenue_vs_plan)",
+      "  - Uncovered claim 'The capacity investment did not translate into proportional revenue' [PARAMETRIC]: AC6 uses effective_capacity with unit='headline' and target_pct=110, which asserts headline headcount grew ~10% (the denominator). AC2 uses effective_capacity with target_pct=100, asserting effective capacity reached 100% of headline growth. The claim is that effective capacity STAYED BELOW headline growth \u2014 i.e. a ratio below 100%. AC2's target of 100% with a \u00b15pp band does not fail when effective capacity is meaningfully below headline growth, and AC6's 110% target contradicts the 10% growth magnitude. No criterion correctly measures effective capacity lagging headline headcount. (consider check: effective_capacity)",
+      "Drafted 5 criteria: AC1, AC2, AC3, AC4, AC5",
+      "Coverage guard: 2 note(s) - proceeding:",
+      "  [note] Uncovered claim 'New AEs produced well below steady state during the year' [PARAMETRIC]: The claim asserts new-hire AEs underperformed relative to steady-state expectations \u2014 a quota-vs-potential gap for the new-hire cohort. quota_vs_potential can express this (measuring whether assigned quota exceeds realistic potential), but no drafted criterion measures new-hire underperformance against steady-state capacity. AC3/AC4 measure aggregate effective capacity, not the new-hire cohort's shortfall specifically. (consider check: quota_vs_potential)",
+      "  [note] Uncovered claim 'The capacity investment did not translate into proportional revenue' [PARAMETRIC]: This claim asserts a non-proportional (diminishing) return on capacity investment \u2014 the marginal revenue per unit of added capacity fell. No drafted criterion measures the ratio of revenue growth to capacity growth or its decline. AC4's effective_capacity check measures effective-vs-headline capacity, not the revenue-to-capacity elasticity the claim describes. The claim's substance (diminishing returns) is not captured by any existing criterion's parameters. (consider check: blended_margin_trend)",
+      "Declared dependencies:\nAC1 <- depends on AC2\n  AC2 <- depends on AC1\n  AC3 <- depends on AC4\n  AC4 <- depends on AC3",
+      "  AC1  current-year attainment level (depends_on: AC2)\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 94, \"band_pct\": 2}\n  AC2  prior-year attainment level (depends_on: AC1)\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 100, \"band_pct\": 2}\n  AC3  headline headcount grew 10% (depends_on: AC4)\n       check=effective_capacity params={\"target_pct\": 110, \"band_pp\": 5, \"unit\": \"headline\"}\n  AC4  effective capacity lagged headline growth (depends_on: AC3)\n       check=effective_capacity params={\"target_pct\": 92, \"band_pp\": 5, \"unit\": \"effective\"}\n  AC5  headcount additions concentrated in strong territories\n       check=headcount_growth_placement params={\"min_growth_share_pct\": 75}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Lint gate passed.",
+      "Auto-calibrated 3 item(s) deterministically:\n  - planning: synthesized a naturally-sized quota block across 1 segment(s) - criteria require a plan to exist\n  - capacity: synthesized capacity block (6 reps/quarter plan across 7 units)\n  - AC4: solved ramping counts for effective capacity ~92% (band +/-5pp, unit 'effective')",
+      "Pre-flight calibration findings:\n  [HARD/PF0] *: config invalid: quota.by_segment['All'] is not a known account segment (known: [])",
+      "1 HARD finding(s) - corrective re-draft...",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 5 item(s) deterministically:\n  - planning: set 'Enterprise' attainment to 1.00 for company-wide target\n  - planning: set 'Mid-Market' attainment to 1.00 for company-wide target\n  - planning: set 'SMB' attainment to 1.00 for company-wide target\n  - capacity: synthesized capacity block (6 reps/quarter plan across 6 units)\n  - AC4: solved ramping counts for effective capacity ~92% (band +/-5pp, unit 'effective')",
+      "Re-drafted calibration:\n",
+      "Pre-flight calibration passed.",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   FAIL     100.0% (FY26-Q4)         94% +/-2pp                     -4.00     current-year attainment level\n      -> FY26-Q1: 100.00% of plan; FY26-Q2: 100.00% of plan; FY26-Q3: 100.00% of plan; FY26-Q4: 100.00% of plan\nAC2   PASS     100.0% (FY26-Q1)         100% +/-2pp                    +2.00     prior-year attainment level\nAC3   FAIL     unit 'headline' absent from capacity_plan 110% +/-5pp                    -5.00     headline headcount grew 10%\n      -> capacity_plan covers units: ['APAC East', 'APAC West', 'EMEA North', 'EMEA South', 'North America East', 'North America West']\nAC4   FAIL     unit 'effective' absent from capacity_plan 92% +/-5pp                     -5.00     effective capacity lagged headline growth\n      -> capacity_plan covers units: ['APAC East', 'APAC West', 'EMEA North', 'EMEA South', 'North America East', 'North America West']\nAC5   FAIL     no headcount additions   >= 75% of additions            -75.00    headcount additions concentrated in strong territories\n      -> headcount unchanged FY26-Q1 -> FY26-Q4\n------------------------------------------------------------------------------------------\n1/5 criteria passed - STORY NOT LANDED",
+      "AUTOPILOT: applied 1 deterministic fix(es):\n  - AC4: solved ramping counts for effective capacity ~92% (band +/-5pp, unit 'effective')",
+      "--- Iteration 2 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   FAIL     100.0% (FY26-Q4)         94% +/-2pp                     -4.00     current-year attainment level\n      -> FY26-Q1: 100.00% of plan; FY26-Q2: 100.00% of plan; FY26-Q3: 100.00% of plan; FY26-Q4: 100.00% of plan\nAC2   PASS     100.0% (FY26-Q1)         100% +/-2pp                    +2.00     prior-year attainment level\nAC3   FAIL     unit 'headline' absent from capacity_plan 110% +/-5pp                    -5.00     headline headcount grew 10%\n      -> capacity_plan covers units: ['APAC East', 'APAC West', 'EMEA North', 'EMEA South', 'North America East', 'North America West']\nAC4   FAIL     unit 'effective' absent from capacity_plan 92% +/-5pp                     -5.00     effective capacity lagged headline growth\n      -> capacity_plan covers units: ['APAC East', 'APAC West', 'EMEA North', 'EMEA South', 'North America East', 'North America West']\nAC5   FAIL     no headcount additions   >= 75% of additions            -75.00    headcount additions concentrated in strong territories\n      -> headcount unchanged FY26-Q1 -> FY26-Q4\n------------------------------------------------------------------------------------------\n1/5 criteria passed - STORY NOT LANDED",
+      "\nNEEDS YOUR ATTENTION: structural failure(s) ['AC3', 'AC4', 'AC5'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC5 -75.00, AC3 -5.00, AC4 -5.00"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_10",
+  "elapsed_s": 388.8
+}
