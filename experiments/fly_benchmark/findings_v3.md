@@ -18,6 +18,48 @@
 | 14 | **LANDED** | 1 | 576s | - |
 | 15 | escalated | 0 | - | criteria_geometry |
 | 16 | escalated | 0 | - | generation failed on initial config ('segments') |
+| 17 | escalated | 7 | - | oscillating (no net score improvement) |
+
+---
+
+## Batch 17 (2026-08-26) — scenario_17 · ESCALATED ❌ (oscillation guard, 7 iters)
+
+Whale-deal story (headline revenue carried by few huge deals while core
+ex-whale volume declined; end-of-quarter close clustering; region beat
+plan; top-3 concentration).
+
+### Outcome
+Escalated by the WP8 **oscillation** guard (2nd live fire of the
+escalation family): "no net score improvement for 6 iterations (proposals
+keep trading criteria against each other); still failing ['AC2','AC3',
+'AC4']". Best-observed state was iter 1–2 at 3/5 passing; guard cut it
+off honestly instead of burning the full budget.
+
+### Failures
+
+- **F19.9 (proposer knob-blindness): headline growth is insensitive to
+  every knob the proposer tried.** AC2 wants headline (total) Q1→Q4
+  growth ≥10%; across seven proposals — attainment raised 1.04→1.12,
+  outlier share 0.02→0.16, multiplier 13→16 — headline printed **+0.0% in
+  every single iteration** while the ex-whale core moved freely (-81 → -54
+  → +1.3%). The proposer's model treats level-shifts (attainment,
+  share-by-quarter) as growth-shifts; nothing actually moved the endpoint
+  differential. AC4 is a second data point: `close_clustering`
+  0.3→0.55/0.62 moved the EOQ-vs-mid gap only 5.4→6.0pp against a +25pp
+  target — a weak-effect knob. The search had no effective lever on two of
+  its three failures, guaranteeing the oscillation the guard detected.
+- **F19.4 (best-partial amnesia) recurs with concrete numbers**: best
+  states (3 passing, AC3 +22.23) were discarded for 2-passing states with
+  AC3 at -20.48; revert restores the *worst* partial every time.
+
+### Positives
+- Autopilot sized the outlier_deals block once deterministically.
+- Oscillation guard's message names mechanism, failing criteria, and
+  worst margins — exactly the actionable-death design.
+- The whale↔core tradeoff is genuinely adversarial (raising whale share
+  helps AC2/AC3 but violates AC5's core decline bound); the search
+  correctly identified it repeatedly, it just lacked a joint lever.
+
 
 ---
 
