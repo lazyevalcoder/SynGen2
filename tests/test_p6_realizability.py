@@ -149,3 +149,107 @@ def test_tier_share_reasonable_target_is_not_flagged():
         crit("AC3", "tier_share_shift", tier="core",
              from_share_pct=20, to_share_pct=45, tolerance_pp=5)]})
     assert not any("arithmetically unreachable" in f for f in findings)
+
+
+# --- P2.5: hiring-flow surface ---------------------------------------------
+
+
+def _cfg_no_capacity():
+    import copy
+    from syngen.config import validate_simulator_doc
+    from test_entity_schemas import ALL_BLOCKS_CFG
+    cfg = copy.deepcopy(ALL_BLOCKS_CFG)
+    cfg.pop("capacity", None)
+    return validate_simulator_doc(cfg)
+
+
+def test_capacity_synthesis_rises_headcount_when_growth_required():
+    from syngen.phases.preflight import autocalibrate
+    cfg = _cfg_no_capacity()
+    doc = {"criteria": [crit("AC3", "headcount_growth_placement",
+                             min_growth_share_pct=60)]}
+    autocalibrate(cfg, doc)
+    cap = cfg.get("capacity", {})
+    assert cap, "capacity block must be synthesized"
+    for spec in next(iter(cap.values())).values():
+        actual = spec["headcount_actual"]
+        assert actual[-1] > actual[0], "headcount flow must be rising"
+
+
+def test_capacity_synthesis_stays_flat_without_growth_claim():
+    from syngen.phases.preflight import autocalibrate
+    cfg = _cfg_no_capacity()
+    doc = {"criteria": [crit("AC2", "effective_capacity",
+                             target_pct=87, band_pp=2)]}
+    autocalibrate(cfg, doc)
+    cap = cfg.get("capacity", {})
+    assert cap
+    for spec in next(iter(cap.values())).values():
+        actual = spec.get("headcount_actual") or spec["headcount_plan"]
+        assert actual[-1] == actual[0], \
+            "level checks keep the flat plan (no additions flow)"
+
+
+def test_headcount_growth_remedy_concentrates_additions(tmp_path):
+    from syngen.phases.converge import _remedy_headcount_growth
+    cfg = base_cfg()
+    cfg["output"] = {"workbook": str(tmp_path / "out.xlsx")}
+    # flat headcount across the board -> the criterion is structurally dead
+    # on "no additions"; the remedy must seed a flow and concentrate it.
+    for u, spec in cfg["capacity"]["by_territory"].items():
+        spec["headcount_actual"] = [9] * 4
+    frames, path = generate_to_workbook(cfg)
+    doc = {"criteria": [crit("AC3", "headcount_growth_placement",
+                             min_growth_share_pct=60)]}
+    results = [{"id": "AC3", "verdict": "FAIL"}]
+
+    class _S:
+        def log(self, t):
+            pass
+
+    fixes = _remedy_headcount_growth(
+        cfg, doc, results, path, lambda t: None, _S())
+    assert fixes, "remedy must apply when the criterion fails"
+    for spec in cfg["capacity"]["by_territory"].values():
+        assert spec["headcount_actual"][-1] > spec["headcount_actual"][0]
+
+
+# --- P2.6: elasticity differential solver -----------------------------------
+
+
+def test_elasticity_solver_lands_the_differential(tmp_path):
+    from syngen.phases.preflight import autocalibrate
+    from syngen.validator.checks import check_elasticity_differential
+    cfg = base_cfg()
+    cfg["output"] = {"workbook": str(tmp_path / "out.xlsx")}
+    cfg.pop("pricing_response", None)
+    doc = {"criteria": [crit("AC6", "elasticity_differential",
+                             min_gap_pp=5, tolerance_pp=1)]}
+    fixes = autocalibrate(cfg, doc)
+    assert "pricing_response" in cfg
+    frames, _ = generate_to_workbook(cfg)
+    r = check_elasticity_differential(
+        frames["opportunities"], frames["accounts"], {"min_gap_pp": 5})
+    assert r["ok"], f"{r['detail']} (fixes={fixes})"
+
+
+# --- P2.7: cohort expressions -----------------------------------------------
+
+
+def test_cohort_is_not_a_foreign_coordinate():
+    cfg = base_cfg()
+    findings = cross_lint(cfg, {"criteria": [
+        crit("AC3", "quota_vs_potential", dimension="territory",
+             cohort={"top_pct": 50}, target_ratio_pct=120, band_pp=10)]})
+    assert not findings, f"cohort must be identity, not a unit: {findings}"
+
+
+def test_cohort_criteria_do_not_conflict_in_consistency_lint():
+    doc = {"criteria": [
+        crit("AC3", "quota_vs_potential", dimension="territory",
+             cohort={"top_pct": 50}, target_ratio_pct=120, band_pp=10),
+        crit("AC4", "quota_vs_potential", dimension="territory",
+             cohort={"bottom_pct": 50}, target_ratio_pct=70, band_pp=10),
+    ]}
+    hard, _ = lint_criteria_internal(doc)
+    assert not hard, "different cohorts are different coordinates"

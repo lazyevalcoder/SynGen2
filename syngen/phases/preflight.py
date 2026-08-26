@@ -440,6 +440,52 @@ def _set_count_share(cfg, tier, qi, count_share):
         p_t["share"] = {"weights_by_quarter": [cs] * n_q}
 
 
+def _autocalibrate_elasticity(cfg, criteria_doc, labels, fixes):
+    """P6 P2.6 (cert s20 F19.9/AC6): solve elasticity_differential targets.
+
+    Engine model (WS8): won-rate multiplier = 1 + elas*d_p/100*(1 - mit*
+    normed_potential). Across a median-split of accounts the high-minus-low
+    won-rate-change gap ~= win_rate * |elas| * d_p/100 * mit * 0.5 (the 0.5
+    is the mean-normed spread between the halves). Solve the last-quarter
+    price change with 2x margin so sampling noise cannot eat the band."""
+    crits = [c for c in criteria_doc["criteria"]
+             if c["check"] == "elasticity_differential"]
+    if not crits:
+        return
+    opps = cfg["opportunities"]
+    win_rate = float(opps.get("win_rate", 0.3)) or 0.3
+    n_q = len(labels)
+    # The check estimates a per-cohort won-rate CHANGE; at the default deal
+    # counts the estimator noise (~sqrt(p(1-p)/n) per cohort) swamps a
+    # 5pp target. Floor the deal count so the differential is measurable
+    # (same pattern as the core_vs_headline deal-count floor).
+    opps["per_quarter"] = max(int(opps.get("per_quarter", 0)), 3000)
+    for c in crits:
+        gap = float(c.get("params", {}).get("min_gap_pp", 5))
+        block = dict(cfg.get("pricing_response") or {})
+        elas = abs(float(block.get("elasticity", -3.0))) or 3.0
+        mit = float(block.get("potential_mitigation", 0.85)) or 0.85
+        denom = win_rate * elas * mit * 0.5
+        if denom <= 0:
+            continue
+        d_last = min(30.0, 2.0 * gap / denom)
+        if d_last >= 30.0:
+            # price path capped: raise elasticity to fit the gap in-band
+            elas = max(1.0, 2.0 * gap / (win_rate * mit * 0.5 * 30.0))
+            block["elasticity"] = -elas
+            d_last = 30.0
+        if d_last < 1.0:
+            continue
+        curve = [round(d_last * qi / max(1, n_q - 1), 2) for qi in range(n_q)]
+        block["price_change_pct_by_quarter"] = curve
+        block["potential_mitigation"] = mit
+        cfg["pricing_response"] = block
+        fixes.append(
+            f"{c['id']}: solved elasticity price path -> +{d_last:g}% by "
+            f"{labels[-1]} (elas {elas:g}, differential >= {gap:g}pp at "
+            f"win-rate {win_rate:.2f})")
+
+
 def autocalibrate(cfg, criteria_doc):
     """Deterministically patch pinned levels and tier-mix shares.
     Returns a list of human-readable fixes applied (empty = nothing done)."""
@@ -468,7 +514,8 @@ def autocalibrate(cfg, criteria_doc):
     # other quarter's achievable share, so counts must re-solve against
     # the final multipliers before levels are solved.
     for mode in ("blocks", "tier", "tier", "levels", "planning", "margin",
-                 "pipeline", "coverage", "concentration", "capacity"):
+                 "pipeline", "coverage", "concentration", "capacity",
+                 "elasticity"):
         _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost,
                             rw, fixes, mode=mode,
                             tier_term=tier_term, bases_sum_at=bases_sum_at)
@@ -1250,10 +1297,25 @@ def _autocalibrate_blocks(cfg, criteria_doc, labels, fixes):
             dim = "by_territory" \
                 if (cfg.get("accounts") or {}).get("territories") \
                 else "by_region"
-            cfg["capacity"] = {
-                dim: {u: {"headcount_plan": [6] * n_q} for u in units}}
+            # P6 P2.5 (F19.10): headcount_growth_placement measures the
+            # share of headcount ADDITIONS landing in strong units. A flat
+            # headcount_actual is structurally dead ("no headcount
+            # additions") - synthesize a rising flow (Q1 stays at plan so
+            # effective_capacity level checks are unaffected).
+            blocks = {}
+            for u in units:
+                spec = {"headcount_plan": [6] * n_q}
+                if "headcount_growth_placement" in checks:
+                    spec["headcount_actual"] = \
+                        [round(6.0 + qi * 1.5, 2) for qi in range(n_q)]
+                    spec["ramping_reps_by_quarter"] = [1] * n_q
+                blocks[u] = spec
+            cfg["capacity"] = {dim: blocks}
             fixes.append("blocks: synthesized capacity block "
-                         f"(6 reps/quarter plan across {len(units)} units)")
+                         f"(6 reps/quarter plan across {len(units)} units"
+                         + (", rising headcount flow for growth placement"
+                            if "headcount_growth_placement" in checks else "")
+                         + ")")
 
     if "core_vs_headline_growth" in checks:
         p = checks["core_vs_headline_growth"]
@@ -1389,6 +1451,8 @@ def _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost, rw,
         return _autocalibrate_margin(cfg, criteria_doc, labels, fixes)
     elif mode == "pipeline":
         return _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes)
+    elif mode == "elasticity":
+        return _autocalibrate_elasticity(cfg, criteria_doc, labels, fixes)
     else:
         wanted = set()
     crit_list = [c for c in criteria_doc["criteria"]

@@ -126,6 +126,8 @@
          "via_dimension": "dimension", "default_dimension": "segment",
          "allow_all": true, "required": false,
          "notes": "absent = whole-dimension claim (all plan units); when present it MUST name an existing plan unit of the dimension"},
+        {"param": "cohort", "space": null, "required": false,
+         "notes": "SUBSET expression (P6 P2.7): {'top_pct': N} restricts to the top N% of plan units by market potential, {'bottom_pct': N} the bottom N%. Use this for 'the largest/smallest territories' - do NOT invent pseudo-units."},
         {"param": "dimension", "space": null, "required": false,
          "notes": "selects which quota sub-block (by_segment/by_territory/by_motion) defines the unit space"}
       ],
