@@ -63,6 +63,7 @@ def _write_pack(tmp_path, **overrides):
         (REPO_PACK / "claims" / "matrix.json").read_text(encoding="utf-8"),
         encoding="utf-8")
     shutil.copytree(REPO_PACK / "prompts", d / "prompts")
+    shutil.copytree(REPO_PACK / "entities", d / "entities")
     return d
 
 

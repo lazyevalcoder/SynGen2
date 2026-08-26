@@ -1,0 +1,16 @@
+{
+  "entity": "account_activity",
+  "sheet": "account_activity",
+  "presence": "activity",
+  "entities": ["activity"],
+  "grain": "one row per account x fiscal quarter",
+  "columns": [
+    {"name": "account_id", "type": "fk", "required": true,
+     "semantics": "-> accounts.account_id"},
+    {"name": "fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "FY26-Qn label from the configured calendar"},
+    {"name": "touches", "type": "integer", "required": true,
+     "semantics": "Poisson draws with optional potential-tilt factor"}
+  ],
+  "derived": []
+}

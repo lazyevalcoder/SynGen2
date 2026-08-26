@@ -56,6 +56,24 @@ def load_pack(path=None):
         except ConfigError as exc:
             raise PackValidationError(str(exc)) from exc
         pack.claims_matrix_path = str(matrix_path)
+    schemas_ref = manifest.get("entity_schemas")
+    if isinstance(schemas_ref, str):
+        schemas_dir = (manifest_path.parent / schemas_ref).resolve()
+        if not schemas_dir.is_dir():
+            raise PackValidationError(
+                f"{manifest_path}: entity_schemas dir not found: {schemas_dir}")
+        for schema_file in sorted(schemas_dir.glob("*.json")):
+            try:
+                doc = load_json(schema_file)
+            except ConfigError as exc:
+                raise PackValidationError(str(exc)) from exc
+            name = schema_file.stem
+            if name in pack.entity_schemas:
+                raise PackValidationError(
+                    f"entity_schemas: duplicate schema '{name}'")
+            doc["_source"] = str(schema_file)
+            pack.entity_schemas[name] = doc
+        pack.entity_schemas_path = str(schemas_dir)
     return pack
 
 
@@ -195,6 +213,10 @@ def validate_against_kernel(pack):
     errors.extend(matrix_errors)
     warnings.extend(matrix_warnings)
 
+    schema_errors, schema_warnings = validate_entity_schemas(pack)
+    errors.extend(schema_errors)
+    warnings.extend(schema_warnings)
+
     if not _compat_satisfied(pack.kernel_compat):
         errors.append(
             f"pack requires kernel {pack.kernel_compat}; "
@@ -270,6 +292,112 @@ def validate_claims_matrix(pack):
         warnings.append("checks proven by no matrix cell: "
                         + ", ".join(uncovered))
     return errors, warnings
+
+
+def validate_entity_schemas(pack):
+    """Structural validation of column-level entity schemas.
+
+    Errors: malformed schema docs, duplicate/invalid column names, unknown
+    types, block references this kernel does not know.
+    Warnings: schemas whose 'entities' links name taxonomy entries the pack
+    does not declare; declared entities no schema materializes.
+    """
+    from .api import COLUMN_TYPE_VOCAB
+
+    errors, warnings = [], []
+    if not pack.entity_schemas:
+        warnings.append("pack declares no entity schemas")
+        return errors, warnings
+
+    def _block_ref_ok(ref):
+        if not isinstance(ref, str) or not re.fullmatch(
+                r"[a-z][a-z0-9_]*(\.[a-z_]+)*", ref):
+            return False
+        return True
+
+    linked_entities = set()
+    for sname, doc in sorted(pack.entity_schemas.items()):
+        where = f"entity_schemas/{sname}"
+        for key in ("entity", "sheet", "grain", "presence", "columns"):
+            if key not in doc:
+                errors.append(f"{where}: missing required key '{key}'")
+        if errors and any(e.startswith(where) for e in errors):
+            continue
+        presence = doc["presence"]
+        if presence != "always":
+            if not _block_ref_ok(presence):
+                errors.append(f"{where}: invalid presence {presence!r}")
+            elif presence.split(".")[0] not in _known_blocks():
+                errors.append(f"{where}: presence block "
+                              f"'{presence}' is not a known engine block")
+        columns = doc.get("columns")
+        if not isinstance(columns, list) or not columns:
+            errors.append(f"{where}: 'columns' must be a non-empty list")
+            continue
+        seen_cols = set()
+        for col in columns:
+            cname = col.get("name") if isinstance(col, dict) else None
+            cwhere = f"{where} column {cname!r}" if cname else \
+                f"{where}: unnamed column"
+            if not isinstance(cname, str) or not re.fullmatch(
+                    r"[a-z][a-z0-9_]*", cname):
+                errors.append(f"{cwhere}: invalid column name")
+                continue
+            if cname in seen_cols:
+                errors.append(f"{where}: duplicate column '{cname}'")
+            seen_cols.add(cname)
+            if col.get("type") not in COLUMN_TYPE_VOCAB:
+                errors.append(
+                    f"{cwhere}: unknown type {col.get('type')!r}")
+            when = col.get("when")
+            if when is not None:
+                if not _block_ref_ok(when):
+                    errors.append(f"{cwhere}: invalid 'when' ref {when!r}")
+                elif when.split(".")[0] not in _known_blocks():
+                    errors.append(
+                        f"{cwhere}: 'when' block '{when}' is not known")
+            alts = col.get("alternatives")
+            if alts is not None and (
+                    not isinstance(alts, list)
+                    or not all(isinstance(a, str) for a in alts)):
+                errors.append(f"{cwhere}: 'alternatives' must be a list "
+                              "of strings")
+        derived = doc.get("derived", [])
+        if not isinstance(derived, list):
+            errors.append(f"{where}: 'derived' must be a list when present")
+        else:
+            for d in derived:
+                if not isinstance(d, dict) or "field" not in d or \
+                        "formula" not in d:
+                    errors.append(
+                        f"{where}: derived entries need 'field'+'formula'")
+        linked = doc.get("entities", [])
+        if isinstance(linked, list):
+            linked_entities.update(linked)
+        for ref in doc.get("blocks_used", []):
+            if not _block_ref_ok(ref):
+                errors.append(f"{where}: invalid blocks_used ref {ref!r}")
+            elif ref.split(".")[0] not in _known_blocks():
+                errors.append(f"{where}: blocks_used '{ref}' "
+                              "is not a known engine block")
+
+    unknown_links = sorted(linked_entities - set(pack.entities))
+    if unknown_links:
+        warnings.append("entity schemas link undeclared taxonomy entities: "
+                        + ", ".join(unknown_links))
+    materialized = set()
+    for doc in pack.entity_schemas.values():
+        materialized.update(doc.get("entities", []))
+    unmaterialized = sorted(set(pack.entities) - materialized)
+    if unmaterialized:
+        warnings.append("taxonomy entities no schema materializes: "
+                        + ", ".join(unmaterialized))
+    return errors, warnings
+
+
+def _known_blocks():
+    from ..linter import KNOWN_BLOCKS
+    return KNOWN_BLOCKS
 
 
 def ensure_valid(path=None):

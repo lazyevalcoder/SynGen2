@@ -94,5 +94,6 @@
   "solvers": [],
   "recipes": [],
   "examples": [],
-  "claims_matrix": "claims/matrix.json"
+  "claims_matrix": "claims/matrix.json",
+  "entity_schemas": "entities"
 }

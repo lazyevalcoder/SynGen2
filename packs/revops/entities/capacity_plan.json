@@ -1,0 +1,30 @@
+{
+  "entity": "capacity_plan",
+  "sheet": "capacity_plan",
+  "presence": "capacity",
+  "entities": ["rep"],
+  "grain": "one row per plan unit x fiscal quarter",
+  "columns": [
+    {"name": "fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "FY26-Qn label from the configured calendar"},
+    {"name": "plan_unit_type", "type": "categorical", "required": true,
+     "semantics": "same convention as quota_plan"},
+    {"name": "plan_unit", "type": "string", "required": true,
+     "semantics": "value of that dimension"},
+    {"name": "headcount_plan", "type": "integer", "required": true,
+     "semantics": "what the annual plan assumed (fully productive)"},
+    {"name": "headcount_actual", "type": "integer", "required": true,
+     "semantics": "staffed reality"},
+    {"name": "ramping_reps", "type": "integer", "required": true,
+     "semantics": "hires still below full productivity"},
+    {"name": "ramp_productivity_pct", "type": "decimal", "required": true,
+     "semantics": "ramp curve assumption"},
+    {"name": "effective_capacity_pct", "type": "decimal", "required": true,
+     "semantics": "DERIVED: where '98% staffed but 85-90% effective' stories live"}
+  ],
+  "derived": [
+    {"field": "effective_capacity_pct",
+     "formula": "((headcount_actual - ramping_reps) + ramping_reps * ramp_productivity_pct / 100) / headcount_plan * 100",
+     "enforcement": "capacity build step"}
+  ]
+}

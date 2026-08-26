@@ -12,6 +12,7 @@ REQUIRED_MANIFEST_KEYS = {"name", "version", "kernel_compat"}
 KNOWN_MANIFEST_KEYS = REQUIRED_MANIFEST_KEYS | {
     "description",
     "entities",
+    "entity_schemas",
     "blocks",
     "checks",
     "prompts",
@@ -22,6 +23,11 @@ KNOWN_MANIFEST_KEYS = REQUIRED_MANIFEST_KEYS | {
     "claims_matrix",
 }
 LIST_MANIFEST_KEYS = ("blocks", "checks", "prompts", "cohorts", "solvers", "recipes", "examples")
+
+COLUMN_TYPE_VOCAB = frozenset({
+    "id", "fk", "string", "categorical", "boolean", "decimal", "integer",
+    "date", "derived",
+})
 
 METRIC_VOCAB = frozenset({
     "level", "trend", "share", "ratio", "divergence", "concentration",
@@ -58,6 +64,8 @@ class DomainPack:
     recipes: List[str] = field(default_factory=list)
     examples: List[str] = field(default_factory=list)
     claims_matrix: Optional[Dict[str, Any]] = None
+    entity_schemas: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    entity_schemas_path: Optional[str] = None
     description: str = ""
     path: Optional[str] = None
 

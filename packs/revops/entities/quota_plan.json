@@ -1,0 +1,19 @@
+{
+  "entity": "quota_plan",
+  "sheet": "quota_plan",
+  "presence": "quota",
+  "entities": ["quota"],
+  "grain": "one row per plan unit x fiscal quarter",
+  "columns": [
+    {"name": "plan_unit_type", "type": "categorical", "required": true,
+     "semantics": "segment | territory | motion - names the grouping dimension"},
+    {"name": "plan_unit", "type": "string", "required": true,
+     "semantics": "value of that dimension"},
+    {"name": "fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "FY26-Qn label from the configured calendar"},
+    {"name": "target_realized_usd", "type": "decimal", "required": true,
+     "semantics": "the plan actuals are raked/measured against"}
+  ],
+  "derived": [],
+  "notes": "Unified plan_unit_type + plan_unit naming keeps checks domain-neutral."
+}

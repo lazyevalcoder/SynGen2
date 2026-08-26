@@ -1,7 +1,10 @@
 # SynGen RevOps Entity Schema — Review Draft
 
-> **Status:** REVIEW DRAFT (2026-08-25, M6 P1 entry step). This document
-> organizes the RevOps domain pack using the canonical taxonomy structure
+> **Status:** REVIEW DRAFT (2026-08-25, M6 P1 entry step); machine-readable
+> since 2026-08-26 (M6 P3.5) as `packs/revops/entities/*.json`, enforced by
+> the pack loader with header-drift tripwires
+> (`tests/test_entity_schemas.py`). This document organizes the RevOps
+> domain pack using the canonical taxonomy structure
 > (`Type | Entity | Role`), extended with Planning/Capacity-facts and
 > History/State sections. Every physical schema below is transcribed from
 > the implemented engine (`syngen/generator/engine.py`) and validation
@@ -10,8 +13,9 @@
 >
 > **Review ask:** does this capture real-world RevOps business taxonomy?
 > Column choices, grain decisions, derived-field rules, and KPI definitions
-> are all fair game. After sign-off these tables become machine-readable
-> `packs/revops/entities/*.json` enforced by the pack loader.
+> are all fair game. After sign-off, edits go to the JSON files first
+> (source of truth) and mirror back here - tripwires flag any divergence
+> from engine reality instantly.
 
 ---
 
@@ -226,6 +230,7 @@ contract, ARTIFACT_CONTRACTS A8).
 | `activity` | `account_activity` | — |
 | `forecast` | `forecast_snapshot` | `in_commit` |
 | `opportunities.outlier_deals` | — | `is_outlier` |
+| `pricing_response` | — | (no new columns; reshapes the `discount_pct` effect curve via price changes + elasticity) |
 
 ---
 

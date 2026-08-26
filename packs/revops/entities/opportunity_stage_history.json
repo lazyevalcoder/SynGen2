@@ -1,0 +1,18 @@
+{
+  "entity": "opportunity_stage_history",
+  "sheet": "opportunity_stage_history",
+  "presence": "pipeline",
+  "entities": ["stage_history"],
+  "grain": "one row per open-stage entry event (open pipeline cohort per quarter)",
+  "columns": [
+    {"name": "opportunity_id", "type": "fk", "required": true,
+     "semantics": "-> opportunities.opportunity_id"},
+    {"name": "stage", "type": "categorical", "required": true,
+     "semantics": "open stage at evaluation time"},
+    {"name": "entered_date", "type": "date", "required": true,
+     "semantics": "opportunity creation date"},
+    {"name": "fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "quarter the stage was entered"}
+  ],
+  "derived": []
+}

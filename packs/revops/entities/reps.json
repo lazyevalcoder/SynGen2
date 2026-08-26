@@ -1,0 +1,22 @@
+{
+  "entity": "reps",
+  "sheet": "reps",
+  "presence": "capacity",
+  "entities": ["rep"],
+  "grain": "one row per rep ever on staff during the window (initial cohort + net hires; attrition not modeled)",
+  "columns": [
+    {"name": "rep_id", "type": "id", "required": true,
+     "semantics": "REP-nnnn primary key"},
+    {"name": "rep_name", "type": "string", "required": true,
+     "semantics": "name pool"},
+    {"name": "region", "type": "categorical", "required": false,
+     "alternatives": ["territory"],
+     "when": "capacity",
+     "semantics": "capacity plan dimension: region by default, territory when capacity.by_territory is set - exactly one of the alternatives is present"},
+    {"name": "hire_fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "NULL = tenured before the window"}
+  ],
+  "derived": [],
+  "notes": "The plan-dimension column is region OR territory depending on capacity.by_territory.",
+  "blocks_used": ["capacity", "capacity.by_territory"]
+}

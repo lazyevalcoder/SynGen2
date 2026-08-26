@@ -1,0 +1,29 @@
+{
+  "entity": "quarterly_summary",
+  "sheet": "quarterly_summary",
+  "presence": "always",
+  "entities": [],
+  "grain": "one row per fiscal quarter (derived view)",
+  "columns": [
+    {"name": "fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "FY26-Qn label from the configured calendar"},
+    {"name": "opportunities", "type": "integer", "required": true,
+     "semantics": "count of all opportunities created in the quarter"},
+    {"name": "closed_won", "type": "integer", "required": true,
+     "semantics": "count with stage = Closed Won"},
+    {"name": "win_rate_pct", "type": "decimal", "required": true,
+     "semantics": "won / total x 100"},
+    {"name": "avg_discount_won_pct", "type": "decimal", "required": true,
+     "semantics": "mean discount of won deals"},
+    {"name": "realized_vs_list_pct", "type": "decimal", "required": true,
+     "semantics": "sum(realized) / sum(list) x 100 over won deals"},
+    {"name": "total_realized_usd", "type": "decimal", "required": true,
+     "semantics": "sum of realized_price over won deals"}
+  ],
+  "derived": [
+    {"field": "*",
+     "formula": "aggregates over fact rows only",
+     "enforcement": "black-box rule: validator never reads summaries; never an input to validation"}
+  ],
+  "notes": "Computed from fact rows ONLY - never authored independently. Presence checked by the linter, columns free."
+}

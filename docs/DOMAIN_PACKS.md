@@ -163,6 +163,7 @@ Golden-anchor byte-identical reproduction tests gate every phase.
 | P1 ✅ | Claim matrix (33 cells, one per check, KPI-bound, with vocab docs); cohort algebra (`syngen/packs/cohorts.py`); `PackTaxonomy` adapter; **graduated guard** (PROCEED → PROCEED-WITH-NOTE → REDRAFT bounded → ESCALATE near-zero/impossible-math only); auditor PARAMETRIC/VOCAB_GAP/QUALIFIER contract with existing-check naming. |
 | P2 ✅ | Generated catalogs: decompose/coverage_audit prompts render `{{check_catalog}}`/`{{check_names}}` from the matrix - hand-maintained prompt check lists deleted. |
 | P3 ✅ | Check library moved into `syngen/packs/revops/checks.py` (kernel shim keeps legacy imports); prompt fragments moved to `packs/revops/prompts/`; F8.1 sigma-less hardening (schema contract + deterministic 0.6 default in preflight); F8.2 crash-path session inference in fly reports; F5.3 rejected criteria persisted on guard escalation. |
+| P3.5 ✅ | Entity schemas machine-readable: `packs/revops/entities/*.json` (10 artifacts) transcribed from ENTITY_SCHEMA.md; loader loads + structurally validates them; tripwires: matrix cells ↔ schema links, generated workbook headers == schema contract, all 25 UAT scenario block refs expressible + criteria checks pack-declared. |
 | P4 ⏳ | Certification: all 25 UAT scenarios via `syngen fly`; results vs baseline-as-built (7 flown, 14.3%). |
 
 ### Deferred within P3 (documented decision)

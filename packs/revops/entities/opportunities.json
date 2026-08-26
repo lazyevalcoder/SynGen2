@@ -1,0 +1,166 @@
+{
+  "entity": "opportunities",
+  "sheet": "opportunities",
+  "presence": "always",
+  "entities": [
+    "opportunity",
+    "product",
+    "revenue_motion",
+    "booking",
+    "time_period"
+  ],
+  "grain": "one row per opportunity created inside the simulation window; lifecycle lives on the row - terminal rows carry close_date + won/lost stage, open rows carry an open stage, null close_date and a revised expected_close_date",
+  "columns": [
+    {
+      "name": "opportunity_id",
+      "type": "id",
+      "required": true,
+      "semantics": "OPP-nnnnn globally sequential primary key"
+    },
+    {
+      "name": "account_id",
+      "type": "fk",
+      "required": true,
+      "semantics": "-> accounts.account_id"
+    },
+    {
+      "name": "owner",
+      "type": "string",
+      "required": true,
+      "semantics": "rep name pool; respects ownership history when present"
+    },
+    {
+      "name": "region",
+      "type": "categorical",
+      "required": true,
+      "semantics": "denormalized from account"
+    },
+    {
+      "name": "segment",
+      "type": "categorical",
+      "required": true,
+      "semantics": "denormalized from account"
+    },
+    {
+      "name": "icp",
+      "type": "boolean",
+      "required": true,
+      "semantics": "denormalized from account"
+    },
+    {
+      "name": "fiscal_quarter",
+      "type": "categorical",
+      "required": true,
+      "semantics": "FY26-Qn label from the configured calendar"
+    },
+    {
+      "name": "created_date",
+      "type": "date",
+      "required": true,
+      "semantics": "close date minus duration draw"
+    },
+    {
+      "name": "close_date",
+      "type": "date",
+      "required": true,
+      "semantics": "within quarter; NULL while the deal is open"
+    },
+    {
+      "name": "expected_close_date",
+      "type": "date",
+      "required": false,
+      "when": "pipeline",
+      "semantics": "pipeline block; inserted adjacent to close_date; slips past quarter-end per slip-rate knobs"
+    },
+    {
+      "name": "stage",
+      "type": "categorical",
+      "required": true,
+      "semantics": "ONE canonical lifecycle field: Closed Won / Closed Lost terminal; open stages come from pipeline block config"
+    },
+    {
+      "name": "list_price",
+      "type": "decimal",
+      "required": true,
+      "semantics": "lognormal median/sigma knobs; whale multiplier applied to outliers"
+    },
+    {
+      "name": "discount_pct",
+      "type": "decimal",
+      "required": true,
+      "semantics": "effect-driven curve (group x period base, pricing_response elasticity modifiers, end-of-quarter boost, noise)"
+    },
+    {
+      "name": "realized_price",
+      "type": "decimal",
+      "required": true,
+      "semantics": "DERIVED: list_price x (1 - discount_pct/100); never sampled independently"
+    },
+    {
+      "name": "territory",
+      "type": "categorical",
+      "required": false,
+      "when": "accounts.territories",
+      "semantics": "emitted before product columns"
+    },
+    {
+      "name": "product_id",
+      "type": "fk",
+      "required": false,
+      "when": "products",
+      "semantics": "products block attribution trio"
+    },
+    {
+      "name": "product_tier",
+      "type": "categorical",
+      "required": false,
+      "when": "products",
+      "semantics": "tier label driving price/tier analyses"
+    },
+    {
+      "name": "cogs_ratio",
+      "type": "decimal",
+      "required": false,
+      "when": "products",
+      "semantics": "cost-of-goods ratio enabling margin math"
+    },
+    {
+      "name": "is_outlier",
+      "type": "boolean",
+      "required": false,
+      "when": "opportunities.outlier_deals",
+      "semantics": "persistent replay of the whale selection stream"
+    },
+    {
+      "name": "motion",
+      "type": "categorical",
+      "required": false,
+      "when": "quota.by_motion",
+      "semantics": "derived chronologically: first deal per account = New Logo, later = Expansion"
+    },
+    {
+      "name": "in_commit",
+      "type": "boolean",
+      "required": false,
+      "when": "forecast",
+      "semantics": "share of WON deals flagged as org commit; optional bias toward zero-touch accounts"
+    }
+  ],
+  "derived": [
+    {
+      "field": "realized_price",
+      "formula": "list_price * (1 - discount_pct / 100)",
+      "enforcement": "generation-time compute; independent sampling is a sanity violation"
+    }
+  ],
+  "notes": "Column order matters: insertion order defines workbook sheet columns.",
+  "blocks_used": [
+    "products",
+    "pipeline",
+    "quota.by_motion",
+    "forecast",
+    "accounts.territories",
+    "opportunities.outlier_deals",
+    "pricing_response"
+  ]
+}

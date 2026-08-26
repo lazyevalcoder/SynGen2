@@ -1,0 +1,22 @@
+{
+  "entity": "forecast_snapshot",
+  "sheet": "forecast_snapshot",
+  "presence": "forecast",
+  "entities": ["forecast_snapshot", "time_period"],
+  "grain": "one row per fiscal quarter, organization-wide",
+  "columns": [
+    {"name": "fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "FY26-Qn label from the configured calendar"},
+    {"name": "committed_usd", "type": "decimal", "required": true,
+     "semantics": "the story's claim: actual x commit_ratio (plan-like semantics)"},
+    {"name": "actual_usd", "type": "decimal", "required": true,
+     "semantics": "measured from won-deal realized_price sums"},
+    {"name": "commit_vs_actual_pct", "type": "decimal", "required": true,
+     "semantics": "DERIVED: committed / actual x 100"}
+  ],
+  "derived": [
+    {"field": "commit_vs_actual_pct",
+     "formula": "committed_usd / actual_usd * 100",
+     "enforcement": "snapshot build step"}
+  ]
+}

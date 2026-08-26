@@ -1,0 +1,28 @@
+{
+  "entity": "accounts",
+  "sheet": "accounts",
+  "presence": "always",
+  "entities": ["account", "segment", "territory", "penetration_whitespace"],
+  "grain": "one row per selling account; snapshot only - no slowly-changing dimensions at v1 scale",
+  "columns": [
+    {"name": "account_id", "type": "id", "required": true,
+     "semantics": "ACC-nnnn primary key"},
+    {"name": "account_name", "type": "string", "required": true,
+     "semantics": "generated display name (industry + suffix)"},
+    {"name": "region", "type": "categorical", "required": true,
+     "semantics": "e.g. AMER / EMEA / APAC (config weights)"},
+    {"name": "segment", "type": "categorical", "required": true,
+     "semantics": "e.g. Enterprise / Mid-Market / SMB / CSB"},
+    {"name": "industry", "type": "categorical", "required": true,
+     "semantics": "sampled industry pool"},
+    {"name": "market_potential_usd", "type": "decimal", "required": true,
+     "semantics": "addressable potential; uniform draw with optional per-territory/per-region affine rank-preserving overrides"},
+    {"name": "icp", "type": "boolean", "required": true,
+     "semantics": "ideal-customer-profile flag (share knob)"},
+    {"name": "territory", "type": "categorical", "required": false,
+     "when": "accounts.territories",
+     "semantics": "present when territories map regions to territories; a region MAY split across territories"}
+  ],
+  "derived": [],
+  "notes": "Denormalized dimension values copied onto fact tables deliberately so consumers aggregate without joins."
+}

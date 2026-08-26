@@ -1,0 +1,16 @@
+{
+  "entity": "account_ownership",
+  "sheet": "account_ownership",
+  "presence": "ownership",
+  "entities": ["ownership_history"],
+  "grain": "one row per account x fiscal quarter (dated rep-account assignment)",
+  "columns": [
+    {"name": "account_id", "type": "fk", "required": true,
+     "semantics": "-> accounts.account_id"},
+    {"name": "fiscal_quarter", "type": "categorical", "required": true,
+     "semantics": "quarter the assignment is valid for"},
+    {"name": "owner", "type": "string", "required": true,
+     "semantics": "drives opportunity owner; changes feed post-change analyses"}
+  ],
+  "derived": []
+}
