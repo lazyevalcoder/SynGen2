@@ -515,3 +515,66 @@ two-criterion joint target).
   empty list; corrective drafts receive wrong information.
 
 **Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+## MID-CERT SYNTHESIS (after 10 flights - introspection pause)
+
+### Scoreboard
+
+| Metric | Certification (n=10) | Baseline-as-built |
+|---|---|---|
+| Flown | 10 | 7 |
+| Landed unassisted | 2 (scenario_05, 09) | 1 of 7 (14.3%) |
+| Escalated | 7 | 5 of 7 |
+| Crashed | 1 (scenario_02) | 1 of 7 |
+| Landing rate | 20.0% | 14.3% |
+
+**Death-layer shift:** baseline non-landings died at the coverage guard
+5-of-6. Certification non-landings: ZERO guard deaths. Deaths now sit at:
+simulator draft crash 1 (F12.1), preflight calibration 1 (F14.1),
+convergence loop 5. The M6 guard thesis is CONFIRMED; the bottleneck has
+moved downstream exactly as designed.
+
+### The one common denominator (now unambiguous)
+
+**Coordinate scoping + feasibility are unvalidated at Gate 1.** Counting
+recurrences: phantom solves (F11.1+F18.1), cross-block dimension
+mismatch (F11.2), remedy unit-clobber (F15.1), conflicting targets
+(F15.2+F18.2), pseudo-units from story nouns (F18.3), economic
+infeasibility chased to cap (F13.2). Eight failures across five flights,
+one family: *criteria reference coordinates/targets that nothing checks
+against the data model's actual geometry.* The entity schemas describe
+that geometry completely and enforce nothing at flight time.
+
+Secondary families: proposer knowledge gaps (sign conventions, blocked
+paths, pricing_response semantics - F16.1/F17.1/F15.3); solver-framework
+fragmentation (F14.1/F11.3); search dynamics without constraint freezing
+or normalized margins (F13.4/F17.2).
+
+### What works (positive evidence)
+
+- Guard graduation: notes path x4, bounded redrafts, zero false kills.
+- Corrective-redraft repair net: saved invalid drafts 3x (scenario_05
+  list-scalar, scenario_10 bad segment labels, plus scenario_05's own
+  redraft); crashes only where errors escape ConfigError typing.
+- Deterministic layer is the workhorse in every single flight;
+  both landings were carried by autopilot synthesis with minimal LLM
+  proposals.
+- Oscillation guard fired EARLY (batch 7); regression reverts protected
+  best-partial in every escalated flight.
+
+### Candidate P5 package (post-certification, priority order)
+
+1. Gate-1 criteria lint against entity schemas + plan-unit registry +
+   cross-criterion consistency (kills the scoping family at the door).
+2. Solver-framework unification: shared unit-target ledger, uniform
+   required-block synthesis, no phantom solves (solver precondition).
+3. Feasibility pre-check: pinned-constraint vs free-knob solvability
+   sketch before entering the loop; impossible -> early structural
+   escalation with named contradiction.
+4. Complete input hardening: ConfigError on every type-shape deviation.
+5. Proposer knowledge injection: check signatures/sign conventions,
+   blocked paths, transfer functions via pack SemanticPrompts.
+6. Search dynamics: margin normalization, constraint freezing once a
+   criterion enters band, stale-passing-set escalation.
