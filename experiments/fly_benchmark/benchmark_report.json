@@ -1,25 +1,23 @@
 {
   "summary": {
     "stories": 1,
-    "landed": 0,
-    "unassisted_landing_rate_pct": 0.0,
-    "escalated": 1,
-    "escalation_reasons": [
-      "structural failure(s) ['AC3', 'AC4', 'AC5'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC5 -75.00, AC3 -5.00, AC4 -5.00"
-    ],
+    "landed": 1,
+    "unassisted_landing_rate_pct": 100.0,
+    "escalated": 0,
+    "escalation_reasons": [],
     "other": []
   },
   "reports": [
     {
-      "status": "escalated",
-      "reason": "structural failure(s) ['AC3', 'AC4', 'AC5'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC5 -75.00, AC3 -5.00, AC4 -5.00",
+      "status": "converged",
+      "reason": null,
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-10",
-      "iterations": null,
-      "llm_proposals": null,
-      "thin_margins": null,
-      "scenario": "scenario_10",
-      "elapsed_s": 388.8
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-11",
+      "iterations": 1,
+      "llm_proposals": 0,
+      "thin_margins": [],
+      "scenario": "scenario_11",
+      "elapsed_s": 670.3
     }
   ]
 }
