@@ -16,6 +16,96 @@
 | 12 | escalated | 8 | - | stale passing set |
 | 13 | **LANDED** | 1 | 585s | - |
 | 14 | **LANDED** | 1 | 576s | - |
+| 15 | escalated | 0 | - | criteria_geometry |
+
+---
+
+## Batch 15 (2026-08-26) — scenario_15 · ESCALATED ❌ (criteria_geometry, pre-convergence)
+
+Territory quota-design story (quotas 20–25% above addressable market on
+large territories, modest quotas + whitespace on small ones). First-ever
+flight of this scenario (v1 baseline flew 06,01–05,17 — **no regression**).
+
+### Outcome
+Died at the WP3 geometry cross-lint, pre-convergence, with criteria.json
+persisted and legal units named in the message:
+- AC3 `quota_vs_potential unit="top_potential_territories"` — not in the
+  data model.
+- AC4 `unit="small_territories"` — not in the data model.
+
+### Diagnosis
+
+- **The kill is correct-by-design.** These are drafter-minted *cohort
+  pseudo-units* — exactly the F18.3 class P5 was built to stop. Under
+  the old line they would have sailed into convergence and produced a
+  phantom solve or vacuous pass (F11.1). An honest death beats a fake
+  landing.
+- **But the root cause is a vocabulary gap wearing a geometry costume**
+  (**F19.6**): the story legitimately needs *subset/cohort expressions*
+  ("the largest territories", "smaller territories") and the pack has no
+  way to say them — no top-N-by-potential parameter, no size-bucket
+  cohorts. The drafter did the only thing it could: invent units.
+  Doctrine says vocabulary holes should route to the roadmap queue, not
+  kill flights; here the hole is flight-fatal because geometry lint has
+  no bounded re-draft path.
+- **An expressible form existed**: AC5 already encodes the same substance
+  as `min_spread_pp: 60` across the whole territory dimension — no units
+  needed. A corrective re-draft prompted with the lint findings would
+  plausibly have rewritten AC3/AC4 into spread/per-unit forms and saved
+  the flight.
+
+### Improvement candidates (for the fix wave, NOT mid-run)
+1. **Bounded corrective re-draft on geometry findings** (mirror WP2's
+   consistency-lint loop): feed lint output back to the drafter once
+   before escalating. Cheapest high-yield fix.
+2. Long-term: cohort parameter support in quota_vs_potential
+   (`cohort: {by: potential, top_pct: N}` / size buckets) — real engine
+   semantics for subset claims.
+
+### Positives
+- Gate placement validated: died BEFORE burning a proposal budget;
+  persisted artifacts make post-mortem trivial; message names the legal
+  coordinate space explicitly (F18.4's misleading-diagnostic lesson held).
+- Critic A's pre-Gate-1 blocks were substantive (caught AC4's
+  name/params/claim contradiction; grounded AC3's band against the
+  story's 20–25% range).
+
+---
+
+## Fresh-Cohort Summary (scenarios 11–15, code line 6d91bdc)
+
+| Metric | 01–10 (P4, pre-P5) | 11–15 (post-P5) | Baseline-as-built |
+|---|---|---|---|
+| Landed | 2/10 (20%) | **3/5 (60%)** | 1/7 (14.3%) |
+| Escalated | 7 | 2 | 5 |
+| Crashed | 1 (unhandled exception) | **0** | 0* |
+| Guard deaths | 0 | 1 (correct) | 6/6 non-landings |
+
+### Generalization verdict: P5 fixes hold on unseen ground ✅
+- **Zero crashes** across the cohort (F12.1 class stayed dead; PF0 even
+  self-healed one range violation live in scenario_11).
+- **No recurrence of any F11.x–F18.x family** P5 targeted — including on
+  machinery the fixes never saw (stage-history aging, activity blocks,
+  forecast integrity).
+- Every new defense fired live at least once: critic A/B (all five),
+  PF0 hard-finding self-heal (s11), stale-set escalation (s12, first
+  live fire), geometry lint (s15).
+- **Remaining failure families are NEW and different in kind**: not
+  intake/guard deaths but *model accuracy* (F19.2 calibration↔engine
+  drift, F19.3 unreachable-without-joint-moves) and *search dynamics*
+  (F19.4 best-partial amnesia) — i.e., deaths moved downstream of
+  everything P5 addressed, consistent with the death-layer-shift
+  pattern from v2.
+- Vocabulary queue grew by three fidelity items (F19.1 directional
+  endpoints, F19.5 one-sided bands, F19.6 cohort expressions) — all
+  landed-anyway or logged-only, none flight-fatal except F19.6.
+
+### Recommended next wave (priority order)
+1. Geometry-lint corrective re-draft (fixes F19.6's fatality cheaply).
+2. Best-partial revert keyed to failing-criterion margins (F19.4).
+3. Tier-share/blended-margin calibration model recalibration (F19.2).
+4. Joint price_mult×count-share remedy for tier-share targets (F19.3).
+
 
 ---
 

@@ -1,0 +1,55 @@
+{
+  "status": "escalated",
+  "reason": "criteria_geometry",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-15",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-15",
+      "Pre-check found 7 claims; 4 question(s) for user",
+      "  [+] Revenue missed plan by about 5% this year - Revenue vs. plan/target is directly computable from an accounts/opportunities or quota dat",
+      "  [+] Enterprise pipeline coverage remaining above 3x - Pipeline coverage ratio = pipeline value / quota or revenue target; computable from pipeli",
+      "  [+] The largest sales territories were carrying quotas set 20 to 25 percent above their estimated addressable market - Requires quota per territory and an addressable market (TAM/SAM) figure per territory. Quo",
+      "  [-] Their numbers [were] structurally unreachable - Interpretive framing. Could indirectly reflect computable claims: quota > addressable mark",
+      "  [-] Several smaller territories held significant untapped whitespace - Whitespace is a market-estimation concept, not a sales-table field. Could indirectly refle",
+      "  [+] Smaller territories had been assigned comparatively modest quotas - Relative quota assignment across territories is computable from quota fields.",
+      "  [-] This created a structural mismatch between quota setting, territory potential, and pipeline capacity rather than a simple execution problem - Causal/interpretive conclusion. Could indirectly reflect computable claims: quota vs. addr",
+      "  ? Is there a tabular figure for each territory's estimated addressable market (TAM/SAM), or must this be treated as an external/non-computable input?",
+      "  ? How is 'pipeline coverage' defined in your data model (pipeline value / quota, or pipeline value / revenue target)?",
+      "  ? Do you have per-territory quota assignments in the data, and are they tied to a specific fiscal year?",
+      "  ? How would you operationally define 'untapped whitespace' so it maps to computable fields (e.g., addressable market minus current revenue, or pipeline gap)?",
+      "Coverage guard: 1 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'This created a structural mismatch between quota setting, territory potential, and pipeline capacity rather than a simple execution problem' [PARAMETRIC]: The claim's measurable substance is that the quota-potential gap is concentrated among the largest territories (structural mismatch). AC5's gap_concentration check exists and CAN express this, but its parameter min_bottom_gap_share_pct=50 measures the bottom (smallest) territories' share of the gap, which is the inverse of the claim. The claim requires the gap to be concentrated at the TOP (largest territories), so the parameter direction contradicts the claim's stated structure. An existing check can prove it, but the drafted criterion would not catch the claim being false. (consider check: gap_concentration)",
+      "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
+      "Critic flagged 1 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "Declared dependencies:\nAC5 <- depends on AC3, AC4",
+      "  AC1  revenue_vs_plan_missed_5pct\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 95, \"band_pct\": 2}\n  AC2  enterprise_pipeline_coverage_above_3x\n       check=coverage_ratio params={\"quarter\": \"FY26-Q4\", \"min_multiple\": 3}\n  AC3  large_territory_quota_exceeds_potential\n       check=quota_vs_potential params={\"dimension\": \"territory\", \"target_ratio_pct\": 122, \"band_pp\": 4, \"unit\": \"top_potential_territories\"}\n  AC4  small_territory_quota_below_potential\n       check=quota_vs_potential params={\"dimension\": \"territory\", \"target_ratio_pct\": 40, \"band_pp\": 10, \"unit\": \"small_territories\"}\n  AC5  quota_potential_mismatch_spread (depends_on: AC3, AC4)\n       check=quota_vs_potential params={\"dimension\": \"territory\", \"min_spread_pp\": 60}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Critic flagged 3 block issue(s) in the drafted config - one corrective re-draft.",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 11 item(s) deterministically:\n  - planning: set 'North America Central' attainment to 0.95 for company-wide target\n  - planning: set 'North America West' attainment to 0.95 for company-wide target\n  - planning: set 'North America East' attainment to 0.95 for company-wide target\n  - planning: set 'EMEA North' attainment to 0.95 for company-wide target\n  - planning: set 'EMEA South' attainment to 0.95 for company-wide target\n  - planning: set 'APAC East' attainment to 0.95 for company-wide target\n  - planning: set 'APAC West' attainment to 0.95 for company-wide target\n  - coverage: scaled plan Q1 down x0.35 (to $3,439,659) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q2 down x0.67 (to $6,839,804) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q3 down x0.97 (to $10,239,949) so open pipeline covers it at the required multiple\n  - coverage: scaled plan Q4 down x0.46 (to $5,059,740) so open pipeline covers it at the required multiple",
+      "\nNEEDS YOUR ATTENTION: criteria reference coordinates that do not exist in the drafted config (see session log). criteria.json persisted for inspection."
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_15",
+  "elapsed_s": 539.3
+}

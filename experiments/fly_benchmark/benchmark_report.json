@@ -1,23 +1,25 @@
 {
   "summary": {
     "stories": 1,
-    "landed": 1,
-    "unassisted_landing_rate_pct": 100.0,
-    "escalated": 0,
-    "escalation_reasons": [],
+    "landed": 0,
+    "unassisted_landing_rate_pct": 0.0,
+    "escalated": 1,
+    "escalation_reasons": [
+      "criteria_geometry"
+    ],
     "other": []
   },
   "reports": [
     {
-      "status": "converged",
-      "reason": null,
+      "status": "escalated",
+      "reason": "criteria_geometry",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-14",
-      "iterations": 1,
-      "llm_proposals": 0,
-      "thin_margins": [],
-      "scenario": "scenario_14",
-      "elapsed_s": 575.8
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-15",
+      "iterations": null,
+      "llm_proposals": null,
+      "thin_margins": null,
+      "scenario": "scenario_15",
+      "elapsed_s": 539.3
     }
   ]
 }
