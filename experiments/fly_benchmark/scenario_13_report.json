@@ -1,0 +1,78 @@
+{
+  "status": "converged",
+  "reason": null,
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-13",
+  "iterations": 1,
+  "llm_proposals": 0,
+  "thin_margins": [],
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-13",
+      "Pre-check found 8 claims; 4 question(s) for user",
+      "  [+] Sales activity increased this year - Verifiable by comparing total activity counts (calls, emails, meetings) year-over-year.",
+      "  [+] Meeting and touch volume grew steadily - Verifiable via time-series of meeting/touch counts; 'steadily' implies monotonic or consis",
+      "  [+] The majority of that activity flowed to accounts with below-median market potential - Requires a market-potential field on accounts; compute median and the share of activity vo",
+      "  [+] High-potential accounts were comparatively neglected - Verifiable by comparing activity volume or share directed at top-quartile/top-decile poten",
+      "  [+] Effort rose while its alignment with account potential deteriorated - Verifiable by correlating activity volume with account-potential distribution over time (e",
+      "  [-] The activity was aimed at the wrong accounts - Normative framing; the computable proxy is the below-median activity share and declining p",
+      "  [-] The team was working harder, not smarter - Narrative judgment; indirectly reflected by rising effort (COMPUTABLE) combined with poor ",
+      "  [+] Effort rose - Synonymous with activity/touch volume growth; verifiable from activity records.",
+      "  ? Does the data model include a 'market potential' (or equivalent) field on accounts, and is it numeric so a median/quartiles can be computed?",
+      "  ? What time periods are available to establish 'this year' vs. prior year and to confirm 'steady' growth?",
+      "  ? How is 'touch' defined in the data (meetings only, or calls/emails/etc.)?",
+      "  ? What threshold defines 'high-potential' accounts (top quartile, top decile, above-median)?",
+      "Coverage guard: 3 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Sales activity increased this year' [PARAMETRIC]: The claim asserts an increasing trend in sales activity volume over the year. The check creation_volume_trend can express a directional trend in activity/creation volume, but no drafted criterion applies it to activity volume. AC1 measures misalignment (a level/gap metric), not the upward trend. An honest increase claim is unverified. (consider check: creation_volume_trend)",
+      "  - Uncovered claim 'Meeting and touch volume grew steadily' [PARAMETRIC]: This asserts a steady upward trend in meeting/touch volume. creation_volume_trend is the appropriate existing check to verify a directional volume trend, but no criterion applies it. AC1's misalignment check measures the gap between activity and potential, not whether volume grew. The claim being false (flat or declining volume) would not fail AC1. (consider check: creation_volume_trend)",
+      "  - Uncovered claim 'Effort rose' [PARAMETRIC]: This is a bare assertion that effort (activity volume) increased. creation_volume_trend can verify an upward trend in activity volume, but no criterion applies it. AC1's misalignment check does not verify that effort rose at all. The claim being false would not fail AC1. (consider check: creation_volume_trend)",
+      "Drafted 4 criteria: AC1, AC2, AC3, AC4",
+      "Coverage guard: 2 note(s) - proceeding:",
+      "  [note] Uncovered claim 'High-potential accounts were comparatively neglected' [PARAMETRIC]: AC1's activity_potential_misalignment check measures the gap between activity share and potential share, but 'comparatively neglected' is a distinct relational claim about high-potential accounts specifically being under-served relative to their potential. The check as drafted (min_gap_pp: 10) measures aggregate misalignment, not the specific neglect of high-potential accounts. If high-potential accounts were NOT neglected (i.e., they received fair activity share), the aggregate gap could still be driven by other account tiers, meaning AC1 would pass while this claim is false. (consider check: activity_potential_misalignment)",
+      "  [note] Uncovered claim 'Effort rose while its alignment with account potential deteriorated' [PARAMETRIC]: This claim has two conjuncts: (1) effort rose AND (2) alignment with potential deteriorated over time. AC1 measures the level of misalignment at a point but does not capture the temporal deterioration of alignment. No criterion checks that alignment worsened year-over-year. If alignment improved or stayed flat while effort rose, this compound claim would be false but AC1 could still pass. (consider check: activity_potential_misalignment)",
+      "Critic flagged 3 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "Coverage guard: 3 gap(s); corrective re-draft...",
+      "  - Uncovered claim 'Meeting and touch volume grew steadily' [PARAMETRIC]: The claim asserts a steady GROWTH trend, but the drafted AC2 uses creation_volume_trend with target_decline_pct=15, which is configured to detect a decline. This is a wrong-direction parameter that contradicts the claim's stated direction of increase. A criterion measuring decline cannot fail if the claim (steady growth) is false. (consider check: creation_volume_trend)",
+      "  - Uncovered claim 'The majority of that activity flowed to accounts with below-median market potential, while high-potential accounts were comparatively neglected' [PARAMETRIC]: The claim's substance is the misalignment between activity volume and account market potential (activity flowing to below-median-potential accounts). The drafted AC4 uses activity_potential_misalignment, but that check measures the shift in activity composition over time (a temporal trend), not the static concentration of activity toward low-potential accounts. No existing check measures activity share by account potential tier, so the substance is unexpressed. (consider check: activity_potential_misalignment)",
+      "  - Uncovered claim 'Effort rose while its alignment with account potential deteriorated' [PARAMETRIC]: This claim combines two substance elements: (1) effort rose, and (2) alignment with account potential deteriorated over time. The drafted AC5 uses activity_potential_misalignment with min_gap_pp=10, which measures the temporal deterioration of activity-potential alignment. However, it does not verify the 'effort rose' component (the growth in activity volume). No criterion verifies that effort/volume increased, so half the claim's substance is uncovered. (consider check: activity_potential_misalignment)",
+      "Drafted 4 criteria: AC1, AC2, AC3, AC4",
+      "Coverage guard: 3 note(s) - proceeding:",
+      "  [note] Uncovered claim 'High-potential accounts were comparatively neglected' [QUALIFIER]: The measurable substance of neglect (activity share concentrated in below-median-potential accounts relative to high-potential) is captured by activity_potential_misalignment in AC2/AC3. The word 'comparatively' is a narrative framing of the same misalignment already covered; no additional metric primitive is needed.",
+      "  [note] Uncovered claim 'Sales activity increased this year' [PARAMETRIC]: The claim that total sales activity increased this year is directly expressible by creation_volume_trend, which measures the trend in creation/touch volume. AC1 uses this check but its params are inverted for this claim: target_decline_pct=-10 with tolerance_pp=8 means the criterion only FAILS if volume drops below -10%\u00b18% (i.e. below roughly -18%). A flat or declining year would PASS, so this criterion cannot prove activity increased. The claim needs a criterion that fails when volume does not increase (e.g. target_growth positive or target_decline_pct positive). (consider check: creation_volume_trend)",
+      "  [note] Uncovered claim 'Effort rose' [PARAMETRIC]: This is the same substance as 'Sales activity increased this year' \u2014 effort rose means touch/meeting volume increased. AC1's creation_volume_trend has target_decline_pct=-10 with tolerance_pp=8, which only fails on a steep decline; it passes on flat or declining data, so it cannot prove effort rose. A criterion with a positive growth/decline target is required. (consider check: creation_volume_trend)",
+      "Declared dependencies:\nAC3 <- depends on AC1",
+      "  AC1  activity_volume_growth\n       check=creation_volume_trend params={\"target_decline_pct\": -10, \"tolerance_pp\": 8}\n  AC2  activity_concentrated_below_median_potential\n       check=activity_potential_misalignment params={\"min_gap_pp\": 10}\n  AC3  effort_rise_with_alignment_deterioration (depends_on: AC1)\n       check=activity_potential_misalignment params={\"min_gap_pp\": 10}\n  AC4  data_referential_sanity\n       check=data_sanity params={\"max_discount_pct\": 90}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Critic flagged 2 block issue(s) in the drafted config - one corrective re-draft.",
+      "  LINT [R4/ADVISE] accounts.segments uses ['Enterprise', 'Mid-Market', 'SMB']; real-world taxonomy likely includes ['CSB', 'Consumer', 'Small Business']. Include the full taxonomy unless the story excludes it",
+      "Lint gate passed.",
+      "Auto-calibrated 1 item(s) deterministically:\n  - blocks: synthesized activity block with potential_tilt -0.7 (misalignment)",
+      "--- Iteration 1 ---\nID    Verdict  Actual                   Target                         Margin    Criterion\n------------------------------------------------------------------------------------------\nAC1   PASS     +15.0% (FY26-Q1 -> FY26-Q4) decline ~-10% +/-8pp           +3.00     activity_volume_growth\nAC2   PASS     +16.9pp misalignment     >= 10pp toward low potential   +6.85     activity_concentrated_below_median_potential\nAC3   PASS     +16.9pp misalignment     >= 10pp toward low potential   +6.85     effort_rise_with_alignment_deterioration\nAC4   PASS     clean                    no violations                  +1.00     data_referential_sanity\n------------------------------------------------------------------------------------------\n4/4 criteria passed - STORY LANDED",
+      "\nDeliverables in experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-13",
+      "  dataset:   experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-13\\output\\dataset.xlsx",
+      "  proof:     validation_report.md",
+      "  config:    simulator.json (tweak knobs anytime, regenerate)"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Inspect and accept delivery?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_13",
+  "elapsed_s": 584.9
+}
