@@ -486,6 +486,32 @@ def _autocalibrate_elasticity(cfg, criteria_doc, labels, fixes):
             f"win-rate {win_rate:.2f})")
 
 
+_NOISE_SENSITIVE = {
+    "blended_margin_trend", "tier_share_shift", "avg_price_by_tier",
+    "elasticity_differential",
+}
+
+
+def _ensure_deal_count(cfg, criteria_doc):
+    """P6 P3.8: revenue-share / margin / wr-differential checks are measured
+    from generated won-revenue; at the default per-quarter deal counts the
+    estimator noise swamps a +/-1pp band (sweep caught margin + tier share
+    failing purely on n~16 won deals/quarter). Floor the deal count so the
+    checks are measurable - same reasoning as the core_vs_headline deal
+    floor. Pure additive guard; returns a human-readable note."""
+    checks = {c["check"] for c in criteria_doc.get("criteria", [])}
+    if not (checks & _NOISE_SENSITIVE):
+        return ""
+    opps = cfg["opportunities"]
+    old = int(opps.get("per_quarter", 0))
+    floor = 2000
+    if old < floor:
+        opps["per_quarter"] = floor
+        return (f"deal-count floor raised {old} -> {floor}/quarter "
+                "for noise-sensitive margin/share checks")
+    return ""
+
+
 def autocalibrate(cfg, criteria_doc):
     """Deterministically patch pinned levels and tier-mix shares.
     Returns a list of human-readable fixes applied (empty = nothing done)."""
@@ -493,6 +519,9 @@ def autocalibrate(cfg, criteria_doc):
     sigma_note = _ensure_deal_sigma(cfg)
     if sigma_note:
         fixes.append(f"blocks: {sigma_note}")
+    count_note = _ensure_deal_count(cfg, criteria_doc)
+    if count_note:
+        fixes.append(f"blocks: {count_note}")
     labels = cfg["time_model"]["quarter_labels"]
     dspec = cfg["opportunities"]["discount"]
     eoq = cfg["opportunities"]["close_clustering"][

@@ -35,7 +35,8 @@ def test_autocalibrate_solves_tier_share_targets():
     doc = crit("tier_share_shift", tier="entry", from_share_pct=10,
                to_share_pct=30, tolerance_pp=3)
     fixes = autocalibrate(cfg, doc)
-    assert len(fixes) == 2, fixes
+    assert 2 <= len(fixes), fixes
+    assert any("count share" in f and "entry" in f for f in fixes)
     hard = hard_findings(calibrate(cfg, doc))
     assert not hard, hard
     from syngen.phases.preflight import _tier_revenue_shares_at

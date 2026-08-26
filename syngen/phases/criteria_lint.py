@@ -97,6 +97,16 @@ def lint_criteria_internal(criteria_doc):
                 "Re-express the claim with a real check or classify it as "
                 "a vocabulary gap.")
             continue
+        # P6 P3.8: blended-margin trend is measured from won-revenue whose
+        # lognormal tail carries ~3-4pp of seed noise; a tighter band is not
+        # deterministically landable (sweep caught the drift).
+        if c["check"] == "blended_margin_trend" and \
+                float(c.get("params", {}).get("tolerance_pp", 0) or 0) < 4.0:
+            notes.append(
+                f"{c['id']}: blended_margin_trend band +/-"
+                f"{c['params'].get('tolerance_pp')}pp is below the "
+                "metric's ~4pp seed-noise floor - not deterministically "
+                "landable; widen the band or drop the criterion.")
         sigs = _pack().check_signatures.get("signatures", {})
         sig = sigs.get(c["check"])
         if sig:
