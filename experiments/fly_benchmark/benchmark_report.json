@@ -5,21 +5,21 @@
     "unassisted_landing_rate_pct": 0.0,
     "escalated": 1,
     "escalation_reasons": [
-      "structural failure(s) ['AC3'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC3 -60.00"
+      "oscillating: no net score improvement for 6 iterations (proposals keep trading criteria against each other); still failing: ['AC1', 'AC5', 'AC6']; worst margins: AC5 -6.22, AC6 -4.44, AC1 -1.46"
     ],
     "other": []
   },
   "reports": [
     {
       "status": "escalated",
-      "reason": "structural failure(s) ['AC3'] - criteria reference something outside the data model even after deterministic re-calibration; worst margins: AC3 -60.00",
+      "reason": "oscillating: no net score improvement for 6 iterations (proposals keep trading criteria against each other); still failing: ['AC1', 'AC5', 'AC6']; worst margins: AC5 -6.22, AC6 -4.44, AC1 -1.46",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-19",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-20",
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_19",
-      "elapsed_s": 829.1
+      "scenario": "scenario_20",
+      "elapsed_s": 954.3
     }
   ]
 }

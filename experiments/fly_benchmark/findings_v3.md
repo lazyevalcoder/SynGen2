@@ -21,6 +21,101 @@
 | 17 | escalated | 7 | - | oscillating (no net score improvement) |
 | 18 | escalated | 0 | - | criteria_consistency |
 | 19 | escalated | 2 | - | structural failure (AC3 outside data model) |
+| 20 | escalated | 9 | - | oscillating (no net score improvement) |
+
+---
+
+## Batch 20 (2026-08-26) — scenario_20 · ESCALATED ❌ (oscillation guard, 9 iters)
+
+The most compound story yet — 8 criteria: blended margin +2pp, company
+miss ~95%, Enterprise below target, SMB mix → higher-margin core, pricing
+realization 87→92, elasticity driver ≥5pp, discount guardrails, opposite
+directions. Peaked at 5/8 passing, oscillated, guard cut at 9.
+
+### Failures (three recurrences, one new)
+
+- **F19.9 knob-blindness, strongest instance yet**: AC6
+  (`realization_elasticity_driver`) printed **+0.6pp differential in all
+  9 iterations — never moved once**, because the config has no
+  territory-potential dimension for the elasticity signal to construct
+  (same missing surface as scenario_16). AC8 headline also pinned at
+  +0.0% (exact scenario_17 signature). Two metrics in one flight are
+  knob-inert.
+- **F19.2 margin-model error recurs**: autopilot predicted "+0.0pp
+  blended margin change" after scaling spread ×0.02; actual deltas swung
+  +3.8 → -0.5 → +2.5 across iterations. The margin predictor is not
+  trustworthy for target ±1pp bands (third recurrence: s12, s20).
+- **F19.4 best-partial amnesia recurs**: 5-passing states (iters 3, 6, 7,
+  8) reverted to 4- or worse states via the "reverting to best partial"
+  path — the 5-passing state was never the restored baseline.
+- **F19.11 (new, search-quality): unstable target tracking under wide
+  overshoot.** AC5 (realization 87→92 ±2) oscillated 84→89.5→92→85→91.5→
+  83.4→81→95.2 across proposals — the proposer overshoots both ends of
+  the band and never converges onto it. Combined with the revert logic
+  discarding its own best hits, the search jitters instead of homing.
+
+### Positives
+- Oscillation guard fired correctly (3rd live fire) with precise
+  failing set + margins.
+- Autopilot still sized outlier_deals + deal-count floor and ran the
+  AC5 base-shift + AC1 spread paths without crashing.
+- The compound claim structure (8 criteria over 3 story clusters) was
+  decomposed and Gate-1-signed cleanly — decomposition quality held even
+  on the hardest story so far.
+
+---
+
+## Fresh-Cohort Summary — Scenarios 16–20 (code line 6d91bdc)
+
+| Metric | 11–15 | 16–20 | 11–20 combined | Baseline-as-built |
+|---|---|---|---|---|
+| Landed | 3/5 (60%) | **0/5 (0%)** | 3/10 (30%) | 1/7 (14.3%) |
+| Escalated | 2 | 5 | 7 | 5 |
+| Crashed | 0 | 0 | 0 | 0 |
+| Guard deaths (correct) | 1 | 5 | 6 | 6/6 non-landings |
+
+### The 16–20 cohort is a different animal
+Three structural/vocabulary deaths (16 crash-class via F19.7+F19.8,
+18 F19.6 consistency, 19 F19.10 missing surface) and two search-quality
+deaths (17, 20 oscillation). All five deaths were **cheap and
+precise** — Gate-1 or early-loop, named criteria, actionable messages.
+No flight died in an unhandled exception; no phantom success was claimed.
+
+### Failure-family tally across v3 (11–20)
+| Family | Name | Flights |
+|---|---|---|
+| F19.6 | cohort/subset vocabulary gap (geometry-fatal) | 15, 18 |
+| F19.9 | proposer knob-blindness (metric inert to knobs) | 17, 20 |
+| F19.2 | calibration↔engine model drift (margin, tier-share) | 12, 20 |
+| F19.4 | best-partial revert discards margin progress | 12, 17, 20 |
+| F19.10 | check needs data-model surface generator lacks | 19, (20-AC6) |
+| F19.11 | unstable band tracking under overshoot | 20 |
+| F19.7 | crash-class: engine hard-key on absent config key | 16 |
+| F19.8 | guard-policy: unknown checks passed Gate 1 | 16 |
+| F19.5 | one-sided band semantics (vocabulary) | 13, 14 |
+| F19.1 | directional endpoint semantics (vocabulary) | 11 |
+
+### Verdict
+- P5's defenses held **everywhere**: zero unhandled crashes, every new
+  guard family fired live at least once, all deaths are honest,
+  precisely-attributed, and cheap. Generalization confirmed.
+- The remaining killers are **not** the P5 target families — they are
+  (a) vocabulary gaps masquerading as gate failures (F19.6/F19.8), (b)
+  missing generator surfaces for declared checks (F19.10), (c) search
+  dynamics (F19.4/F19.9/F19.11), (d) calibration-model fidelity
+  (F19.2). This is the second death-layer shift — from intake/guard to
+  engine-surface + search quality.
+
+### Next-wave priority (supersedes earlier list)
+1. **Vocabulary & surfaces (biggest lever)**: cohort expressions
+   (F19.6), hiring-flow surface for headcount_growth_placement (F19.10),
+   territory-potential dimension (F19.9-AC6/s16), and unknown-check ⇒
+   gap escalation (F19.8). These four close 6 of 10 deaths.
+2. **Best-partial revert keyed to margin quality** (F19.4) + band-homing
+   guidance for overshooting proposer (F19.11).
+3. **Margin predictor recalibration** (F19.2).
+4. **Engine default for `accounts.segments`** when absent (F19.7).
+
 
 ---
 
