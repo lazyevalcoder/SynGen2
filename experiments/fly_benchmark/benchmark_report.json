@@ -5,21 +5,21 @@
     "unassisted_landing_rate_pct": 0.0,
     "escalated": 1,
     "escalation_reasons": [
-      "LLM proposal cap (8) reached; still failing: ['AC2', 'AC9', 'AC10']; worst margins: AC9 -67384.12, AC2 -1.21, AC10 -0.09"
+      "preflight_calibration"
     ],
     "other": []
   },
   "reports": [
     {
       "status": "escalated",
-      "reason": "LLM proposal cap (8) reached; still failing: ['AC2', 'AC9', 'AC10']; worst margins: AC9 -67384.12, AC2 -1.21, AC10 -0.09",
+      "reason": "preflight_calibration",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-03",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-04",
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_03",
-      "elapsed_s": 615.7
+      "scenario": "scenario_04",
+      "elapsed_s": 385.0
     }
   ]
 }

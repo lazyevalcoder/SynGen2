@@ -32,6 +32,7 @@ criteria.json (F5.3). Vocabulary holes are roadmap notes, not failures.
 | 1 | scenario_01 | ESCALATED | convergence (iter 2) | IMPROVED - reached generation for the first time | F11.x below |
 | 2 | scenario_02 | CRASHED | simulator draft | NEW FAILURE MODE (baseline: guard escalation) | F12.1 below |
 | 3 | scenario_03 | ESCALATED | convergence (proposal cap 8, iter 10) | IMPROVED - sigma crash gone, ran full loop to 8/11 | F13.x below |
+| 4 | scenario_04 | ESCALATED | preflight calibration | IMPROVED - passed guard, died later at preflight | F14.1 below |
 
 ---
 
@@ -197,5 +198,47 @@ fixed six criteria in three iterations.
   candidate post-certification fixes: per-criterion margin normalization
   or escalate when the PASSING SET is stale N iterations even if scores
   wobble.
+
+**Actions:** logged only. NO code changes (certification run in progress).
+
+---
+
+### Batch 4 - scenario_04 (whitespace under-covered after capacity added)
+
+**Outcome:** ESCALATED at preflight calibration, 385s, zero iterations.
+Two corrective simulator drafts both missing the same block; escalation
+on "no improvement across corrective drafts".
+
+**Progress vs baseline:** previously ESCALATED at the coverage guard
+(F9.1 qualifier pedantry + F9.2 portfolio-composition vocab hole +
+hallucinated check suggestion). This time the guard PROCEEDED WITH NOTES -
+the portfolio-composition claim was noted as a vocabulary gap and the
+other five claims were accepted. Guard is no longer this story's bottleneck.
+
+**Observations:**
+- Deterministic synthesis worked for two other needs: ownership block
+  (unowned curve 38%, churn 8%/qtr for AC4) and heterogeneous territory
+  attainment (laggards 0.7 for AC2).
+- The killer: AC3 `headcount_growth_placement` requires the `capacity`
+  config block; the drafter never drafted one, and the corrective re-draft
+  loop could not fix it in two attempts.
+- The irony: the autopilot CAN synthesize capacity blocks - scenario_01's
+  log shows "capacity: synthesized capacity block (6 reps/quarter plan)"
+  when effective_capacity criteria need it. But the headcount_growth_placement
+  requirement path only emits a HARD finding demanding a re-draft instead
+  of triggering the existing deterministic synthesis.
+- The corrective-findings message ("criterion ... but the required config
+  block is missing (capacity)") names the block but gives the drafter no
+  SHAPE to copy, and both redrafts came back without it.
+
+**Failures & classification (logged only - no fixes during certification):**
+- F14.1 BUG-PREFLIGHT (family: block-synthesis coverage): required-block
+  handling is inconsistent across checks - some requirements trigger
+  deterministic synthesis (capacity-for-effective_capacity,
+  pricing_response), others only a HARD redraft demand
+  (capacity-for-headcount_growth_placement); when the drafter has a blind
+  spot, the redraft loop dead-ends. Candidate fixes (post-certification):
+  route all known required blocks through deterministic synthesis, or
+  embed a concrete block skeleton in the corrective findings message.
 
 **Actions:** logged only. NO code changes (certification run in progress).

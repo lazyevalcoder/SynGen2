@@ -1,41 +1,66 @@
 {
   "status": "escalated",
-  "reason": "criteria_coverage",
+  "reason": "preflight_calibration",
   "detail": null,
-  "session": "experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-04",
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-04",
   "iterations": null,
   "llm_proposals": null,
   "thin_margins": null,
   "telemetry": {
     "messages": [
-      "Session: experiments\\fly_benchmark\\sessions\\2026-08-25_bench-scenario-04",
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-04",
       "Pre-check found 7 claims; 5 question(s) for user",
       "  [+] NA missed quota attainment by 5 points - Quota attainment is directly computable from quota vs. actuals in an accounts/opportunitie",
-      "  [+] The largest gaps were concentrated in newly assigned Enterprise territories - Territory assignment and attainment gaps are computable if territories are tagged and atta",
-      "  [-] Capacity had been added based on historical bookings rather than whitespace potential - The rationale/motivation behind capacity decisions is narrative. Could be indirectly refle",
-      "  [+] Several AEs are over-indexed to mature accounts - Compute share of each AE's pipeline/booking from mature vs. new accounts if account age or",
-      "  [-] High-potential whitespace territories remained under-covered - Whitespace potential is external market data, not in a sales table. Could be indirectly re",
-      "  [-] Territories holding most of the market potential generated far less than their fair share of new pipeline during the year - New pipeline per territory is computable. 'Fair share' and 'market potential' require an e",
-      "  [+] The analysis applies to the NA region over a one-year period - Region and time-window filters are directly available in the data model.",
-      "  ? Is '5 points' 5 percentage points of quota attainment, or 5 points on some other scale?",
-      "  ? How are 'territories' and 'newly assigned Enterprise territories' defined and tagged in the data?",
-      "  ? How is 'mature accounts' vs. 'new/whitespace' defined (e.g., account age, segment field)?",
-      "  ? What defines 'fair share' of pipeline (equal split, quota-weighted, market-size-weighted)?",
-      "  ? Is there any external market-size or whitespace data available to proxy the NON_COMPUTABLE claims, or should those be dropped?",
+      "  [+] The largest gaps were concentrated in newly assigned Enterprise territories - Gap-by-territory is computable; 'newly assigned' requires a territory-assignment effective",
+      "  [-] Capacity had been added based on historical bookings rather than whitespace potential - The rationale/intent behind capacity decisions is narrative. Could indirectly reflect via ",
+      "  [+] Several AEs are over-indexed to mature accounts - Compute revenue/bookings concentration per AE (e.g., % of pipeline or bookings from accoun",
+      "  [-] High-potential whitespace territories remained under-covered - Whitespace potential is external market data not present in a sales table. Could indirectl",
+      "  [-] Territories holding most of the market potential generated far less than their fair share of new pipeline during the year - New pipeline per territory is computable. 'Market potential' and 'fair share' require a po",
+      "  [-] The territories holding most market potential generated far less than their fair share of new pipeline during the year - Depends on a market-potential field that cannot exist in a standard sales table. The pipel",
+      "  ? Does the data model include a quota field and an actuals/bookings field for the NA region, and is attainment expressed in percentage points?",
+      "  ? Is there a territory segment label (e.g., Enterprise) and a territory-assignment effective date or 'newly assigned' flag?",
+      "  ? Is there an account maturity/tenure classification to identify mature vs. whitespace accounts?",
+      "  ? Is there any territory or market-potential field, or a coverage/whitespace benchmark, or is 'market potential' purely narrative?",
+      "  ? How is 'fair share' defined (equal split, weighted by potential, by headcount) so the pipeline-distribution claim can be tested?",
       "Coverage guard: 2 gap(s); corrective re-draft...",
-      "  - Uncovered claim 'The largest gaps were concentrated in newly assigned Enterprise territories': AC2 (gap_concentration) measures that gaps concentrate in the bottom 40% of territories by dimension, but it has no parameter to verify the gap-holding territories are 'newly assigned Enterprise' territories. The claim's substance is that the concentration is specifically in newly-assigned Enterprise segments, which no criterion checks. AC3 (quota_vs_potential) measures under-coverage of high-potential whitespace territories, which is a related but distinct claim (AC3 covers that separately). (consider check: gap_concentration)",
-      "  - Uncovered claim 'Several AEs are over-indexed to mature accounts': AC5 (effective_capacity) measures whether capacity is set at 100% target with a 10pp band, which is a generic capacity-level check. It does not measure the composition of AE portfolios (mature vs. whitespace accounts). No criterion checks whether AEs are over-indexed to mature accounts. (consider check: unowned_account_share)",
+      "  - Uncovered claim 'The largest gaps were concentrated in newly assigned Enterprise territories' [PARAMETRIC]: AC2 uses gap_concentration with dimension=territory, which measures concentration of gaps across a dimension but has no way to distinguish 'newly assigned Enterprise' territories from any other territory type. The claim's substance requires the gaps to be concentrated specifically in newly-assigned Enterprise territories \u2014 a categorical qualifier on territory type that no existing check can express. The existing check CAN measure gap concentration but cannot verify the 'newly assigned Enterprise' attribute that is the substance of this claim. (consider check: gap_concentration)",
+      "  - Uncovered claim 'Several AEs are over-indexed to mature accounts' [PARAMETRIC]: AC4 uses headcount_growth_placement, which measures where capacity/headcount growth was placed \u2014 it does not measure individual AEs' account portfolio composition. The claim's substance is that AEs' existing book-of-business is skewed toward mature accounts. unowned_account_share measures share of accounts without ownership, not the maturity concentration of an AE's portfolio. No existing check measures the proportion of mature vs. new accounts in an individual AE's assigned portfolio, which is the substance of this claim. (consider check: unowned_account_share)",
       "Drafted 6 criteria: AC1, AC2, AC3, AC4, AC5, AC6",
-      "Coverage guard: gaps persist after corrective re-draft.",
-      "\nNEEDS YOUR ATTENTION: the drafted criteria express none of the story's computable claims (even after a corrective re-draft). Review/extend criteria.json manually or re-run."
+      "Coverage guard: 2 note(s) - proceeding:",
+      "  [note] Uncovered claim 'The largest gaps were concentrated in newly assigned Enterprise territories' [PARAMETRIC]: AC2 uses gap_concentration on dimension 'territory', which measures the concentration of gap magnitude among the bottom territories but cannot verify that those territories are 'newly assigned Enterprise' territories. The claim's substance requires the gap-concentrated territories to be newly-assigned Enterprise ones \u2014 a classification attribute that no existing check can express. The substance (that gaps concentrate in a specific territory class) is not measurable; the entity qualifier ('newly assigned Enterprise') is a VOCAB_GAP, but the coverage check itself cannot prove the claim's direction or that the concentrated gaps fall in that segment. No existing check ties gap concentration to territory-assignment-recency or Enterprise classification. (consider check: gap_concentration)",
+      "  [note] Uncovered claim 'Several AEs are over-indexed to mature accounts' [PARAMETRIC]: AC4 measures unowned account share, which is not the substance of the claim. 'Over-indexed to mature accounts' means AEs' revenue/pipeline is disproportionately weighted toward mature (existing) accounts relative to new/whitespace potential. unowned_account_share measures accounts without an assigned owner, a different entity and metric. The correct check would measure the share of revenue or pipeline attributable to mature accounts per AE (or the maturity mix of each AE's portfolio), which is not expressible by any existing check. The claim's substance \u2014 disproportionate concentration in mature accounts \u2014 has no matching primitive. (consider check: unowned_account_share)",
+      "Declared dependencies:\nAC2 <- depends on AC1",
+      "  AC1  NA missed quota by 5 points\n       check=revenue_vs_plan params={\"segment\": \"_all_\", \"target_pct\": 95, \"band_pct\": 2}\n  AC2  gaps concentrated in bottom territories (depends_on: AC1)\n       check=gap_concentration params={\"dimension\": \"territory\", \"min_bottom_gap_share_pct\": 60}\n  AC3  headcount growth placed in historical revenue units\n       check=headcount_growth_placement params={\"min_growth_share_pct\": 60}\n  AC4  top-value accounts left unowned\n       check=unowned_account_share params={\"min_unowned_share_pct\": 30, \"quarter\": \"FY26-Q4\"}\n  AC5  high-potential territories under-covered vs potential\n       check=potential_coverage_gap params={\"dimension\": \"territory\", \"min_gap_pp\": 20}\n  AC6  high-potential territories generated below fair-share pipeline\n       check=potential_coverage_gap params={\"dimension\": \"territory\", \"min_gap_pp\": 25}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Lint gate passed.",
+      "Auto-calibrated 2 item(s) deterministically:\n  - blocks: synthesized ownership block (unowned curve -> 38%, churn 8%/qtr)\n  - planning: synthesized heterogeneous attainment (laggards 0.7, others 1.0333) for territory gap-concentration claim",
+      "Pre-flight calibration findings:\n  [HARD/PF1] AC3: headcount_growth_placement criterion but the required config block is missing (capacity)",
+      "1 HARD finding(s) - corrective re-draft...",
+      "Lint gate passed.",
+      "Auto-calibrated 2 item(s) deterministically:\n  - blocks: synthesized ownership block (unowned curve -> 38%, churn 8%/qtr)\n  - planning: synthesized heterogeneous attainment (laggards 0.7, others 1.075) for territory gap-concentration claim",
+      "Re-drafted calibration:\n  [HARD/PF1] AC3: headcount_growth_placement criterion but the required config block is missing (capacity)",
+      "HARD findings did not shrink (1 >= 1) - escalating early."
     ],
     "gate_decisions": [
       {
         "prompt": "Proceed with the computable claims above?",
         "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
       }
     ]
   },
   "scenario": "scenario_04",
-  "elapsed_s": 257.4
+  "elapsed_s": 385.0
 }
