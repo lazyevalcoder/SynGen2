@@ -17,6 +17,52 @@
 | 13 | **LANDED** | 1 | 585s | - |
 | 14 | **LANDED** | 1 | 576s | - |
 | 15 | escalated | 0 | - | criteria_geometry |
+| 16 | escalated | 0 | - | generation failed on initial config ('segments') |
+
+---
+
+## Batch 16 (2026-08-26) — scenario_16 · ESCALATED ❌ (generation crash on initial config)
+
+Territory price-elasticity story (high-potential territories held
+conversion through a price increase; low-potential deteriorated; SMB
+bookings down ~5%, concentrated by potential tier).
+
+### Outcome
+Generation crashed at iteration 1 with `KeyError: 'segments'`. Error-path
+telemetry worked exactly as designed (F8.2/F5.3): caught, logged,
+escalated with the exception name — **not an unhandled crash** — but it
+is still a crash-class death.
+
+### Failures
+
+- **F19.7 (F12.1-family recurrence, unhardened spot): engine
+  hard-requires `accounts.segments`.** The drafter legitimately omitted
+  segments (story never mentions them; config used
+  regions/territories/industries — all valid shapes). Every consumer
+  reads `accounts.get("segments", {})` defensively EXCEPT
+  `build_accounts` (generator/engine.py:73), which does bare
+  `spec["segments"]`. WP5's shape guard validates dict-shape *if
+  present* but absence sails through validation into the KeyError.
+  Fix shape: default `{"All": 1.0}` when absent (mirroring
+  preflight.py:501) + a regression test with a segment-less config.
+- **F19.8 (guard-policy hole): unknown checks passed Gate 1 as display
+  annotations.** The final criteria contain two hallucinated checks
+  (`post_change_bookings_decline`, `bookings_deterioration_concentration`)
+  rendered `[UNKNOWN CHECK]` in the criteria table — yet signed off.
+  M6 doctrine says the auditor must name an EXISTING check or classify
+  VOCAB-GAP; here non-existent names flowed to convergence where they
+  would have failed at evaluation (had generation survived). Unknown
+  check ⇒ coverage gap ⇒ bounded redraft → escalate, same as any
+  vocabulary hole.
+
+### Positives
+- Critic B's config blocks were exceptional this flight — it correctly
+  identified that the simulator has NO territory-potential dimension at
+  all, so AC1's elasticity differential "can pass or fail on noise
+  rather than proving the story's mechanism," and that AC2/AC3's overall
+  decline and its concentration are decoupled in the generator. That is
+  a real structural read of the data model, not pattern-matching.
+
 
 ---
 

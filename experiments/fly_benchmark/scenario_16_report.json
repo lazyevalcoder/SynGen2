@@ -1,0 +1,56 @@
+{
+  "status": "escalated",
+  "reason": "generation failed on the initial config: 'segments'",
+  "detail": null,
+  "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-16",
+  "iterations": null,
+  "llm_proposals": null,
+  "thin_margins": null,
+  "telemetry": {
+    "messages": [
+      "Session: experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-16",
+      "Pre-check found 7 claims; 4 question(s) for user",
+      "  [+] SMB bookings declined about 5 percent following this year's pricing change - Verifiable from bookings/revenue data before vs. after pricing change date; 'about 5 perce",
+      "  [+] The decline was far from uniform - Verifiable by comparing booking decline rates across territories; requires per-territory b",
+      "  [+] High-potential territories maintained their conversion despite the price increase - Conversion rate per territory is computable from opportunities (converted/total). Requires",
+      "  [+] Low-potential territories saw significant volume deterioration - Volume (number of bookings/deals) per territory is computable; 'significant' is qualitativ",
+      "  [+] Price elasticity varied sharply by territory potential - Price elasticity (response of quantity demanded to price) is computable from price and vol",
+      "  [-] Future pricing decisions should incorporate willingness-to-pay rather than applying uniform increases - Prescriptive recommendation/narrative framing. Indirectly reflected by computable claims: ",
+      "  [+] Territories can be classified as high-potential vs. low-potential - Requires a territory potential field or proxy (e.g., historical revenue, pipeline capacity",
+      "  ? Does the data model include a territory potential field or a proxy (e.g., historical revenue, market size, pipeline) to classify territories as high- vs. low-potential?",
+      "  ? Is there a clear pricing change date to define the before/after comparison window for bookings?",
+      "  ? Are conversion rates tracked per territory, or only deal-level win rates available?",
+      "  ? Is per-territory bookings volume available to assess uniformity of the decline?",
+      "Coverage guard: 1 note(s) - proceeding:",
+      "  [note] Uncovered claim 'Territories can be classified as high-potential vs. low-potential' [QUALIFIER]: The existence of a binary high-vs-low potential classification is a narrative framing device. The measurable substance it supports (that territories differ in potential and that outcomes vary by that potential) is already covered by AC1 and AC3. No additional metric primitive is needed to express the claim's verifiable content; the classification itself is an interpretive label, not a distinct measurable claim.",
+      "Critic flagged 2 block issue(s) in the drafted criteria - one corrective re-draft.",
+      "Coverage guard: 1 note(s) - proceeding:",
+      "  [note] Uncovered claim 'Territories can be classified as high-potential vs. low-potential' [QUALIFIER]: This claim asserts the existence of a territory-potential classification schema (the categorical dimension used to bucket territories). No available check verifies that such a classification exists or is populated in the data; it is a structural precondition rather than a measurable claim about metric values or directions.",
+      "Declared dependencies:\nAC3 <- depends on AC2",
+      "  AC1  elasticity_differential\n       check=elasticity_differential params={\"min_gap_pp\": 10, \"tolerance_pp\": 2}\n  AC2  post_change_bookings_decline [UNKNOWN CHECK]\n       check=post_change_bookings_decline params={\"min_gap_pp\": 5, \"tolerance_pp\": 1}\n  AC3  bookings_deterioration_concentration [UNKNOWN CHECK] (depends_on: AC2)\n       check=bookings_deterioration_concentration params={\"dimension\": \"territory\", \"min_bottom_gap_share_pct\": 60, \"tolerance_pp\": 5}\n  AC4  data_sanity\n       check=data_sanity params={\"max_discount_pct\": 90}",
+      "Gate 1 passed.",
+      "Personas SKIPPED (A/B control arm)",
+      "Critic flagged 3 block issue(s) in the drafted config - one corrective re-draft.",
+      "Lint gate passed.",
+      "Auto-calibrated 1 item(s) deterministically:\n  - blocks: synthesized pricing_response block (price +4.5% by Q4, elasticity -1.5, high-potential mitigated)",
+      "Iteration 1 raised KeyError: 'segments'",
+      "\nNEEDS YOUR ATTENTION: generation failed on the initial config: 'segments'"
+    ],
+    "gate_decisions": [
+      {
+        "prompt": "Proceed with the computable claims above?",
+        "answer": true
+      },
+      {
+        "prompt": "Sign off these criteria?",
+        "answer": true
+      },
+      {
+        "prompt": "Accept simulator.json knobs and start generating?",
+        "answer": true
+      }
+    ]
+  },
+  "scenario": "scenario_16",
+  "elapsed_s": 349.7
+}

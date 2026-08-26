@@ -5,21 +5,21 @@
     "unassisted_landing_rate_pct": 0.0,
     "escalated": 1,
     "escalation_reasons": [
-      "criteria_geometry"
+      "generation failed on the initial config: 'segments'"
     ],
     "other": []
   },
   "reports": [
     {
       "status": "escalated",
-      "reason": "criteria_geometry",
+      "reason": "generation failed on the initial config: 'segments'",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-15",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-16",
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_15",
-      "elapsed_s": 539.3
+      "scenario": "scenario_16",
+      "elapsed_s": 349.7
     }
   ]
 }
