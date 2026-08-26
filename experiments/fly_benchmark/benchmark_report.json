@@ -1,23 +1,25 @@
 {
   "summary": {
     "stories": 1,
-    "landed": 1,
-    "unassisted_landing_rate_pct": 100.0,
-    "escalated": 0,
-    "escalation_reasons": [],
+    "landed": 0,
+    "unassisted_landing_rate_pct": 0.0,
+    "escalated": 1,
+    "escalation_reasons": [
+      "stale passing set: identical 3 criteria passing for 6 consecutive iterations while ['AC2', 'AC3'] never crossed - remaining failures are not reachable by knob turns; worst margins: AC3 -9.77, AC2 -3.70"
+    ],
     "other": []
   },
   "reports": [
     {
-      "status": "converged",
-      "reason": null,
+      "status": "escalated",
+      "reason": "stale passing set: identical 3 criteria passing for 6 consecutive iterations while ['AC2', 'AC3'] never crossed - remaining failures are not reachable by knob turns; worst margins: AC3 -9.77, AC2 -3.70",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-11",
-      "iterations": 1,
-      "llm_proposals": 0,
-      "thin_margins": [],
-      "scenario": "scenario_11",
-      "elapsed_s": 670.3
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-12",
+      "iterations": null,
+      "llm_proposals": null,
+      "thin_margins": null,
+      "scenario": "scenario_12",
+      "elapsed_s": 844.4
     }
   ]
 }

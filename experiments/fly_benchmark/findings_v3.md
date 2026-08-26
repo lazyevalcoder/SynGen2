@@ -13,6 +13,57 @@
 | Scenario | Outcome | Iterations | Elapsed | Escalation reason |
 |---|---|---|---|---|
 | 11 | **LANDED** | 1 | 670s | - |
+| 12 | escalated | 8 | - | stale passing set |
+
+---
+
+## Batch 12 (2026-08-26) — scenario_12 · ESCALATED ❌ (stale passing set, 3/5)
+
+Pricing/mix story: SMB attainment 102% (passed immediately), blended
+margin declined 2pts (AC2), entry-tier mix shift 25%→40% (AC3), discounts
+rising (AC4), realized-vs-list slide (AC5).
+
+### Outcome
+Escalated after 8 iterations with AC2/AC3 never crossing. **The WP8
+stale-set escalation fired live for the first time and its message is
+exactly what we designed**: identical 3 criteria passing for 6 consecutive
+iterations while ['AC2','AC3'] never crossed — remaining failures are not
+reachable by knob turns. Honest early death instead of burning the full
+budget against an unreachable target.
+
+### Failures
+
+- **F19.2 (calibration↔engine model error, tier revenue share):**
+  Autopilot calibrated entry count-share "to solve ~25% revenue share"
+  (Q1) but the engine measured 18.4% — the predictor materially
+  underestimates the count→revenue share attenuation through
+  price_mult/discounts. Same family as F13.3/F16.2 (model inaccuracy),
+  new surface: tier mix.
+- **F19.3 (unreachable target without joint moves):** AC3 wants 40%
+  entry *revenue* share while `price_multiplier_by_tier.entry` = 0.4;
+  revenue share ≈ count_share × price_mult makes that arithmetically
+  near-impossible (~100% count share needed). The one proposal that
+  attacked price_mult directly (iter 5, 0.4→0.25) regressed on other
+  criteria and was reverted; no remedy composes count-share + price_mult
+  jointly. Cross-lint (WP6) checks price caps vs raking floors but not
+  tier-share reachability — candidate extension.
+- **F19.4 (search dynamics, best-partial amnesia):** "Reverting to best
+  partial state" repeatedly restored the SAME state (18.4% / -9.06pp)
+  even though later iterations reached strictly better margins on the
+  failing criteria (iter 4: AC3 27.4%, -7.63). Best-partial selection
+  appears keyed to the passing set only, discarding margin-quality
+  progress on failing criteria — the search throws away its own
+  gradient information.
+
+### Positives
+- Bad-proposal rejection worked: shares summing to 1.164 rejected with
+  a precise reason, zero corruption ("WARN bad proposal path skipped").
+- Critic A blocked direction-contradiction criteria (+2 vs "declined")
+  pre-Gate-1; redraft fixed them — sign-convention knowledge (WP7)
+  visible in the guard notes' reasoning.
+- Regression-revert discipline held throughout; escalation cause is
+  actionable (names unreachable criteria + worst margins).
+
 
 ---
 
