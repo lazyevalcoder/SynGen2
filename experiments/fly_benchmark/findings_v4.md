@@ -81,6 +81,24 @@
 | 25 | escalated (stale set) | 7 | **S25.1 [INFEASIBLE GROWTH TARGET]:** AC2 `core_vs_headline_growth` drafted `min_headline_growth_pct=101` — requires ~2x YoY headline growth, but raking pins total revenue to plan (flat YoY by construction), so the margin sat at -101.00 for all 7 iterations. Drafter translated an *attainment beat vs plan* (AC1's 101% attainment PASSED every iteration) into a *growth* parameter. Growth ceilings not covered by the P1.4 lint. **S25.2 [FEASIBILITY CEILING, same family as S24.2]:** AC3 top-5-of-308 deals ≥ 70% share peaked at 62.9%; raising outlier multiplier 40→120 spread value across MORE outliers and made it worse (46-48%). **S25.3 [VACUOUS CRITERIA ACCEPTED at Gate 1]:** AC4 `avg_price_by_tier` with `max_avg_realized_usd=1,000,000,000` (a $1B cap on a ~$619k actual — margin +999M) and AC5 `end_of_quarter_effect` with `min_gap_pp=0` (any gap passes) both passed trivially every iteration, inflating the 3/5. Degenerate thresholds accepted without a realizability/strength check. Genuine criteria: AC1 attainment +2.00pp (real), AC2/AC3 infeasible, AC4/AC5 vacuous. |
 
 **Cohort 21-25 tally:** 1 LANDED (23), 4 escalated (21 structural-order-block after a genuine 4/4 pass; 22 NaN-dimension + two-bound oscillation; 24 proxy-criterion + concentration ceiling; 25 infeasible-growth + concentration ceiling + vacuous passes). Landing rate 20% — matches the P5-era 20% (3/15) headline on the 11-15 subcohort, and is the same as the pre-P5 aggregate, but every death this wave is honest, cheap, and names a NEW realizability surface the gate does not yet cover. Confirmed GENERALIZABLE fixes that hold on fresh ground: unknown-check rejection, engine segment default, geometry re-draft, tier-share ceiling, rising-capacity, elasticity solver, cohort expressions, deal-count floor, margin noise note — none fired spuriously here. New uncovered surfaces (NOT fixing, per protocol): quota_vs_potential dimension↔plan-unit NaN not flagged structural (S22.1); two-bound tier_share shaping (S22.2); revenue_concentration top-N ceilings (S24.2/S25.2); core_vs_headline_growth growth-ceiling feasibility (S25.1); degenerate/vacuous thresholds at Gate 1 (S25.3); structure-check column-order tolerance (S21.1). All parked in the findings above; landing-set preservation re-fly still pending.
-| 23 |  |  |  |
-| 24 |  |  |  |
-| 25 |  |  |  |
+
+---
+
+## P7 addendum (2026-09-09): the flexible stage-rework loop turns deaths into re-landings
+
+After P6, escalations were terminal by design. The P7 rework loop (see
+DOMAIN_PACKS.md P7 row) made them *re-routable*: an escalation emits an
+evidence packet, an LLM judge routes the next attempt to a claim-preserving
+criteria re-draft or a config re-draft (coverage re-verified against the
+persisted original claims), bounded to 2 rounds and tagged in the report.
+
+Two random live flights (not a protocol cohort) validate it end-to-end:
+
+| Scenario | Result | rework | Notes |
+|---|---|---|---|
+| 23 (re-fly) | **LANDED** 4/4 (attempt 3) | 2 rounds, both `rework_criteria` | Drafter drafted a harder contract this run (-50%±5pp the loop could not reach, plus an entry-tier "doubling" the story never quantified). Judge re-expressed AC1 and AC3 with explicit claim-preservation guidance; attempt 3 landed (deal size -54.8%, tier share 25.1%→32.3%, win-rate flat, sanity clean). |
+| 24 (re-fly) | **LANDED** 3/3 (iter 6) | 0 rounds (clean) | Previous death was an unreachable top-3-concentration proxy (S24.1/S24.2). This run the drafter expressed the story as `post_change_revenue_decline` (gap ≥10pp) — buildable — and the autopilot landed it (-26.6% changed-owner vs +60.6% stable = +77pp) on the ownership/outlier synthesis. |
+
+Both are tagged (`rework.rounds`) so the scoreboard keeps clean vs reworked
+landings honest. No P7 regression: every P6 rule stayed silent; landing-set
+preservation re-fly (05/09/11/13/14) still owed.

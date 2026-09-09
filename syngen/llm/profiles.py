@@ -34,6 +34,10 @@ PROFILES = {
     # structured verdict, no thinking needed - same shape as coverage_audit.
     # A critic failure fails OPEN (flight proceeds without critique).
     "critic": {"max_tokens": 4096, "enable_thinking": False},
+    # rework judge: reads escalation evidence and routes the next attempt
+    # (criteria / config / escalate). Deterministic guardrails re-check the
+    # route, so a routing error is cheap and survivable.
+    "rework_judge": {"max_tokens": 4096, "enable_thinking": False},
 }
 
 

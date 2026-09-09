@@ -164,6 +164,30 @@ the math can see it.
 *Safety net:* the loop can't run forever, can't regress silently, and can't
 die in silence. Escalation means *explained*, not *abandoned*.
 
+### Revision — when a stage fails, the flight can go back
+
+The journey above is written as a straight line, but the system is now
+**flexible, not rigid**. Since the P7 rework loop shipped, an escalation is
+no longer the end of the story — it is *evidence* that gets handed back:
+
+1. Every escalation carries a structured **evidence packet**: what kind of
+   failure it was, which criteria were failing, and their worst margins.
+2. A **rework judge** (a model) reads the evidence and decides the single
+   most promising revision: re-express the **criteria**, fix the **config**,
+   or escalate honestly because no revision helps.
+3. A criteria revision is **claim-preserving**: the coverage guard re-checks
+   it against the *original* story claims (which the system saved at the
+   start). A revision that drops or weakens a claim is rejected — the system
+   can change *how* a claim is expressed, never whether it is expressed.
+4. The budget is bounded (usually **2 revision rounds**), every round is
+   logged, and a landing that needed revisions is tagged separately from a
+   clean one — so the system can't quietly "fix" its way to success.
+
+So a flight that fails at Stage 5 can indeed return to Stage 2 (or Stage 3)
+with the evidence in hand — the very feedback loop a rigid pipeline lacks.
+The deterministic guards stay as the safety rail: they decide what evidence
+exists, not where the flight goes next.
+
 ### Stage 6 — Structure gate + final proof
 *(code: `linter.structure_findings`, `pipeline.run_validation_final`)*
 
@@ -314,6 +338,14 @@ Every escalation is logged with its diagnosis in `findings_v4.md`, so the
 system gets measurably more honest — and more buildable — over time. The
 goal is not a 100% landing rate; it's a system that never lies about
 whether it landed.
+
+Since the P7 rework loop, some of those escalations now *re-land*. On two
+live flights: scenario 24, which previously died on an unreachable
+concentration target, landed clean on a single attempt after the claim was
+expressed in a buildable form; and scenario 23 re-landed after two
+rework rounds — the judge re-expressed two criteria the tuning loop had
+proven unreachable, without dropping the story's claims. The tag on each
+report (`rework.rounds`) keeps those landings honest.
 
 *Continue reading: `docs/DOMAIN_PACKS.md` for the engineering history,
 `docs/JOURNEY_PLAN.md` for the observability design, and

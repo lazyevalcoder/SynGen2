@@ -29,6 +29,7 @@ from syngen.phases.intake import (
     enforce_coverage,
     precheck_claims,
 )
+from syngen.phases.rework import judge_revision, make_evidence, redraft_criteria
 from syngen.phases.spec import draft_simulator, persona_critique
 from syngen.session import Session
 from syngen.utils import set_at_path
@@ -285,21 +286,27 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
 
 def post_generate_structure_gate(workbook_path, log, cfg=None):
     """Post-generation structural check (FR4): workbook must match the
-    engine contract exactly (columns depend on optional config blocks)."""
+    engine contract exactly (columns depend on optional config blocks).
+    Returns (ok, findings) so callers can carry the mismatch into evidence."""
     findings = structure_findings(workbook_path, cfg=cfg)
     for rule, sev, msg in findings:
         log(f"  STRUCTURE [{rule}/{sev}] {msg}")
-    return not has_blocking(findings)
+    return not has_blocking(findings), findings
 
 
 def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                   max_iterations=10, max_llm_proposals=8, use_personas=False,
-                  use_critic=True):
+                  use_critic=True, max_rework_rounds=0):
     """use_personas defaults OFF: the M4 A/B (experiments/M4_persona_ab)
     found no measurable quality benefit and a consistent ~35s latency cost.
     The P5 critic (use_critic) defaults ON: two bounded verification calls
     that catch intent errors (dropped claims, direction inversions) the
-    deterministic gates cannot see."""
+    deterministic gates cannot see.
+
+    max_rework_rounds: the flexible stage-rework budget (P7). 0 = rigid
+    one-way pipeline (legacy behavior, tests depend on exact call counts);
+    >0 lets an LLM judge route escalation evidence back to criteria or
+    config drafting before the flight ends. run_fly enables 2."""
     session = Session.create(sessions_dir, slug=slug or story[:40])
     log = io.inform
     session.save_story(story)
@@ -309,7 +316,8 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                          max_iterations=max_iterations,
                          max_llm_proposals=max_llm_proposals,
                          use_personas=use_personas,
-                         use_critic=use_critic)
+                         use_critic=use_critic,
+                         max_rework_rounds=max_rework_rounds)
 
 
 def run_resume(session_root, client, io, new_story=None,
@@ -416,7 +424,9 @@ def run_resume(session_root, client, io, new_story=None,
 
 def _converge_and_deliver(session, client, io, doc, sim_path, log,
                           max_iterations, max_llm_proposals):
-    """Shared tail of both flows: converge, structure-gate, deliver."""
+    """Shared tail of both flows: converge, structure-gate, deliver.
+    Escalations return with an `evidence` packet (P7) so the rework judge
+    can route the next attempt."""
     criteria_path = session.root / "criteria.json"
     try:
         summary = run_convergence(session, client, sim_path, criteria_path,
@@ -426,14 +436,26 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
     except LoopEscalation as esc:
         session.log(f"ESCALATED: {esc.reason}")
         log(f"\nNEEDS YOUR ATTENTION: {esc.reason}")
+        margins = {}
+        for r in esc.results or []:
+            if r.get("verdict") != "PASS" and r.get("margin") is not None:
+                margins[r.get("id")] = round(float(r["margin"]), 2)
+        evidence = make_evidence("convergence", esc.reason, doc,
+                                 margins=margins,
+                                 detail="tuning loop could not satisfy all criteria")
         return {"status": "escalated", "reason": esc.reason,
-                "session": str(session.root)}
+                "session": str(session.root), "evidence": evidence}
 
     sim_cfg = load_json(sim_path) if not isinstance(sim_path, dict) else sim_path
-    if not post_generate_structure_gate(summary["workbook"], log, cfg=sim_cfg):
+    ok, sfindings = post_generate_structure_gate(summary["workbook"], log,
+                                                 cfg=sim_cfg)
+    if not ok:
         session.log("STRUCTURE GATE FAILED")
+        detail = "; ".join(msg for _, _, msg in sfindings)
+        evidence = make_evidence("structure", "workbook schema mismatch",
+                                 doc, detail=detail)
         return {"status": "structure_check_failed",
-                "workbook": summary["workbook"]}
+                "workbook": summary["workbook"], "evidence": evidence}
 
     results, all_pass = run_validation_final(summary, criteria_path)
     report_md = render_table(results, all_pass) if all_pass else "(see log)"
@@ -453,13 +475,195 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
             "thin_margins": summary["thin_margins"]}
 
 
+def _delivery_attempt(session, client, io, story, doc, claims,
+                      decisions_text, spec_notes, log, max_iterations,
+                      max_llm_proposals, use_critic, guidance=""):
+    """One full post-criteria delivery attempt (P7): simulator draft ->
+    critic B -> schema lint -> pre-flight calibration -> geometry lint ->
+    converge -> structure gate -> deliver.
+
+    Returns (result, doc, evidence). `doc` may be mutated (calendar sync,
+    criteria repair, a geometry corrective re-draft). On escalation the
+    result carries an `evidence` packet for the rework judge.
+    """
+    crit_summary = criteria_summary(doc)
+    sim_notes = ((spec_notes + "\n\n" + guidance).strip()
+                 if guidance else spec_notes)
+
+    sim_cfg = draft_simulator(client, story, crit_summary, sim_notes)
+
+    # --- Critic pass B (P5 WP9): config vs criteria semantics. Block
+    # findings trigger exactly one corrective simulator re-draft.
+    if use_critic:
+        verdict = critique_artifact(client, story,
+                                    "simulator.json (data generator config)",
+                                    {"criteria": doc.get("criteria"),
+                                     "simulator": sim_cfg})
+        issues = block_issues(verdict)
+        if issues:
+            session.log("CRITIC (config) block findings:\n"
+                        + render_issues(issues))
+            log(f"Critic flagged {len(issues)} block issue(s) in the "
+                "drafted config - one corrective re-draft.")
+            sim_cfg = draft_simulator(
+                client, story, crit_summary,
+                (sim_notes or "") + "\n\n"
+                + critic_corrective_brief(issues),
+                corrective_findings=critic_corrective_brief(issues))
+
+    # Calendar flows from the generator's config into criteria so validation
+    # stays consistent with what the engine actually generated (live-smoke bug).
+    doc.setdefault("definitions", {})["quarter_end_dates"] = dict(
+        zip(sim_cfg["time_model"]["quarter_labels"],
+            sim_cfg["time_model"]["quarter_end_dates"])
+    )
+    session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+
+    # --- Schema lint gate (FR4) ---
+    sim_cfg = gate_lint(io, session, sim_cfg, log)
+    if sim_cfg is None:
+        return {"status": "manual_edit", "session": str(session.root)}, doc, None
+
+    # --- Pre-flight calibration gate (F17) ---
+    sim_cfg, status = calibrate_gate(client, io, story, crit_summary,
+                                     sim_notes, doc, sim_cfg, session, log)
+    if sim_cfg is None:
+        evidence = make_evidence("preflight_persist",
+                                 f"preflight calibration: {status}", doc,
+                                 detail="deterministic calibration could not "
+                                        "make the config satisfy the criteria")
+        return {"status": "escalated", "reason": "preflight_calibration",
+                "session": str(session.root), "evidence": evidence}, doc, evidence
+
+    # --- Criteria x config geometry lint (P5 WP3): coordinates must land
+    # inside the drafted/synthesized data model before the loop starts.
+    # P6 P1.3: one bounded corrective criteria re-draft before escalating.
+    geo_findings = cross_lint(sim_cfg, doc)
+    if geo_findings:
+        session.log("CRITERIA GEOMETRY LINT:\n" + render_lint(geo_findings))
+        log("Criteria coordinates fall outside the drafted data model - "
+            "one corrective re-draft.")
+        geo_brief = ("CRITERIA GEOMETRY FINDINGS - fix ALL of these. "
+                     "Reference only coordinates/units that exist in the "
+                     "drafted data model, or re-express subset claims as a "
+                     "spread/min-spread criterion or per-unit scoping "
+                     "(a cohort pseudo-unit like 'top territories' cannot "
+                     "be built):\n" + render_lint(geo_findings))
+        doc = draft_criteria(client, story, decisions_text + "\n\n"
+                             + geo_brief)
+        doc, cov_status2 = enforce_coverage(
+            client, story, doc, claims, decisions_text=decisions_text,
+            log_fn=log)
+        lint_hard, _ = lint_criteria_internal(doc)
+        geo_findings = cross_lint(sim_cfg, doc)
+        if cov_status2 == "uncovered" or lint_hard or geo_findings:
+            session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+            session.log("ESCALATED: criteria_geometry - criteria reference "
+                        "coordinates outside the data model even after a "
+                        "corrective re-draft.")
+            log("\nNEEDS YOUR ATTENTION: criteria reference coordinates "
+                "that do not exist in the drafted config, even after a "
+                "corrective re-draft (see session log). criteria.json "
+                "persisted for inspection.")
+            evidence = make_evidence("geometry_persist", "criteria_geometry",
+                                     doc,
+                                     detail="; ".join(geo_findings)[:500])
+            return {"status": "escalated", "reason": "criteria_geometry",
+                    "session": str(session.root),
+                    "evidence": evidence}, doc, evidence
+        session.log("CRITERIA GEOMETRY: corrective re-draft accepted.")
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+
+    result = _converge_and_deliver(session, client, io, doc,
+                                   session.root / "simulator.json", log,
+                                   max_iterations, max_llm_proposals)
+    return result, doc, result.get("evidence")
+
+
+def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
+                     spec_notes, log, max_iterations, max_llm_proposals,
+                     use_critic, max_rework_rounds):
+    """Bounded rework coordinator (P7): run the delivery attempt; when it
+    escalates with evidence, ask the LLM judge to route the next attempt
+    back to criteria or config drafting. Deterministic guards (coverage vs
+    the original claims, consistency lint) keep every rework claim-preserving,
+    so a revision can never erode the story to force a landing."""
+    directives = []
+    cur_doc = doc
+    guidance = ""
+    for rnd in range(max_rework_rounds + 1):
+        result, cur_doc, evidence = _delivery_attempt(
+            session, client, io, story, cur_doc, claims, decisions_text,
+            spec_notes, log, max_iterations, max_llm_proposals, use_critic,
+            guidance=guidance)
+        guidance = ""
+        if result.get("status") in ("converged", "delivered_unaccepted",
+                                    "manual_edit"):
+            result["rework"] = {"rounds": rnd, "directives": directives}
+            return result
+        if rnd >= max_rework_rounds:
+            session.log("REWORK budget exhausted "
+                        f"({max_rework_rounds}); final escalation: "
+                        f"{result.get('reason')}")
+            result["rework"] = {"rounds": rnd, "directives": directives}
+            return result
+        if evidence is None:
+            evidence = make_evidence(
+                "unknown", result.get("reason") or result.get("status")
+                or "escalated", cur_doc)
+        log(f"\nREWORK round {rnd + 1}/{max_rework_rounds}: escalation "
+            f"({evidence.get('kind')}) - judging the revision...")
+        verdict = judge_revision(client, story, evidence, cur_doc, rnd + 1,
+                                 log_fn=log)
+        directive = {"round": rnd + 1, "kind": evidence.get("kind"),
+                     "escalation": result.get("reason"),
+                     "action": verdict["action"], "scope": verdict["scope"],
+                     "reason": verdict["reason"],
+                     "guidance": verdict["guidance"]}
+        directives.append(directive)
+        session.log("REWORK verdict: " + json.dumps(directive, indent=1))
+        if verdict["action"] == "escalate":
+            log(f"Rework judge escalated: {verdict['reason'] or 'no revision helps'}")
+            result["reason"] = f"{result.get('reason')} [judge: {verdict['reason'] or 'no revision credibly helps'}]"
+            result["rework"] = {"rounds": rnd + 1, "directives": directives}
+            return result
+        if verdict["action"] == "rework_criteria":
+            new_doc, ok = redraft_criteria(client, story, cur_doc, claims,
+                                           decisions_text,
+                                           verdict["guidance"], log_fn=log)
+            if not ok:
+                log("Criteria rework rejected by the claim-preservation "
+                    "guards - final escalation.")
+                result["rework"] = {"rounds": rnd + 1,
+                                    "directives": directives}
+                return result
+            cur_doc = new_doc
+            session.write_artifact("criteria.json",
+                                   json.dumps(cur_doc, indent=2))
+            log(f"Criteria re-drafted (round {rnd + 1}) - retrying delivery.")
+            continue
+        # rework_config: steer the next attempt's simulator draft.
+        guidance = ("PREVIOUS ATTEMPT's config could not satisfy the "
+                    "criteria. Fix these in the simulator draft:\n"
+                    + (verdict["guidance"] or verdict["reason"]))
+        log(f"Config rework ordered (round {rnd + 1}) - retrying delivery.")
+
+    return {"status": "escalated", "reason": "rework exhausted",
+            "session": str(session.root),
+            "rework": {"rounds": max_rework_rounds, "directives": directives}}
+
+
 def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                   max_iterations=10, max_llm_proposals=8, use_personas=True,
-                  use_critic=True):
-    """Fresh-story flow: pre-check, Gate 1, personas+draft, converge, deliver."""
-
+                  use_critic=True, max_rework_rounds=0):
+    """Fresh-story flow: pre-check, Gate 1, personas+draft, then the
+    delivery tail wrapped in the bounded rework coordinator (P7)."""
     # --- Pre-check ---
     claims = precheck_claims(client, story, log_fn=log)
+    # P7: the original claims are the anti-goalpost floor for any later
+    # criteria rework - persist them now so rework can re-verify coverage.
+    session.write_artifact("computable_claims.json",
+                           json.dumps(claims, indent=2))
     for c in claims.get("claims", []):
         marker = "+" if c.get("classification") == "COMPUTABLE" else "-"
         log(f"  [{marker}] {c.get('claim')} - {c.get('note', '')[:90]}")
@@ -594,88 +798,11 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                   + f"\n\nUser resolutions:\n{conflict_notes}").strip()
     session.write_artifact("spec.md", f"# Data Spec\n\n{spec_notes or 'none'}\n")
 
-    sim_cfg = draft_simulator(client, story, crit_summary, spec_notes)
-
-    # --- Critic pass B (P5 WP9): config vs criteria semantics. Block
-    # findings trigger exactly one corrective simulator re-draft.
-    if use_critic:
-        verdict = critique_artifact(client, story,
-                                    "simulator.json (data generator config)",
-                                    {"criteria": doc.get("criteria"),
-                                     "simulator": sim_cfg})
-        issues = block_issues(verdict)
-        if issues:
-            session.log("CRITIC (config) block findings:\n"
-                        + render_issues(issues))
-            log(f"Critic flagged {len(issues)} block issue(s) in the "
-                "drafted config - one corrective re-draft.")
-            sim_cfg = draft_simulator(
-                client, story, crit_summary,
-                (spec_notes or "") + "\n\n"
-                + critic_corrective_brief(issues),
-                corrective_findings=critic_corrective_brief(issues))
-
-    # Calendar flows from the generator's config into criteria so validation
-    # stays consistent with what the engine actually generated (live-smoke bug).
-    doc.setdefault("definitions", {})["quarter_end_dates"] = dict(
-        zip(sim_cfg["time_model"]["quarter_labels"],
-            sim_cfg["time_model"]["quarter_end_dates"])
-    )
-    session.write_artifact("criteria.json", json.dumps(doc, indent=2))
-
-    # --- Schema lint gate (FR4) ---
-    sim_cfg = gate_lint(io, session, sim_cfg, log)
-    if sim_cfg is None:
-        return {"status": "manual_edit", "session": str(session.root)}
-
-    # --- Pre-flight calibration gate (F17) ---
-    sim_cfg, status = calibrate_gate(client, io, story, crit_summary,
-                                     spec_notes, doc, sim_cfg, session, log)
-    if sim_cfg is None:
-        return {"status": "escalated", "reason": "preflight_calibration",
-                "session": str(session.root)}
-
-    # --- Criteria x config geometry lint (P5 WP3): coordinates must land
-    # inside the drafted/synthesized data model before the loop starts.
-    # P6 P1.3: one bounded corrective criteria re-draft before escalating -
-    # the drafter may not have known the config's legal units (cert
-    # s15/s18: cohort pseudo-units from story nouns are re-expressible as
-    # spread/scoped forms). Escalate only if still unrealizable.
-    geo_findings = cross_lint(sim_cfg, doc)
-    if geo_findings:
-        session.log("CRITERIA GEOMETRY LINT:\n" + render_lint(geo_findings))
-        log("Criteria coordinates fall outside the drafted data model - "
-            "one corrective re-draft.")
-        geo_brief = ("CRITERIA GEOMETRY FINDINGS - fix ALL of these. "
-                     "Reference only coordinates/units that exist in the "
-                     "drafted data model, or re-express subset claims as a "
-                     "spread/min-spread criterion or per-unit scoping "
-                     "(a cohort pseudo-unit like 'top territories' cannot "
-                     "be built):\n" + render_lint(geo_findings))
-        doc = draft_criteria(client, story, decisions_text + "\n\n"
-                             + geo_brief)
-        doc, cov_status2 = enforce_coverage(
-            client, story, doc, claims, decisions_text=decisions_text,
-            log_fn=log)
-        lint_hard, _ = lint_criteria_internal(doc)
-        geo_findings = cross_lint(sim_cfg, doc)
-        if cov_status2 == "uncovered" or lint_hard or geo_findings:
-            session.write_artifact("criteria.json", json.dumps(doc, indent=2))
-            session.log("ESCALATED: criteria_geometry - criteria reference "
-                        "coordinates outside the data model even after a "
-                        "corrective re-draft.")
-            log("\nNEEDS YOUR ATTENTION: criteria reference coordinates "
-                "that do not exist in the drafted config, even after a "
-                "corrective re-draft (see session log). criteria.json "
-                "persisted for inspection.")
-            return {"status": "escalated", "reason": "criteria_geometry",
-                    "session": str(session.root)}
-        session.log("CRITERIA GEOMETRY: corrective re-draft accepted.")
-        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
-
-    return _converge_and_deliver(session, client, io, doc,
-                                 session.root / "simulator.json", log,
-                                 max_iterations, max_llm_proposals)
+    # --- Delivery tail, wrapped in the bounded rework coordinator (P7) ---
+    return _delivery_rework(session, client, io, story, doc, claims,
+                            decisions_text, spec_notes, log,
+                            max_iterations, max_llm_proposals,
+                            use_critic, max_rework_rounds)
 
 
 def run_validation_final(summary, criteria_path):
