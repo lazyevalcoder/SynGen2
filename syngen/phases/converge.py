@@ -245,19 +245,37 @@ def _remedy_quota_potential(cfg, criteria_doc, results, workbook_path,
         # only to units NO scoped criterion claimed. Last-writer-wins
         # clobbering between two same-dimension criteria is impossible.
         pinned = set()
-        ordered = [p for p in params_list if p.get("unit")] + \
-                  [p for p in params_list if not p.get("unit")]
+        ordered = [p for p in params_list if p.get("unit") or p.get("cohort")] + \
+                  [p for p in params_list if not p.get("unit")
+                   and not p.get("cohort")]
         for p in ordered:
             unit = p.get("unit")
-            if not unit or unit not in targets_map:
+            cohort = p.get("cohort")
+            if unit and unit not in targets_map:
+                continue
+            if unit:
+                if unit in pinned:
+                    continue  # already solved for another criterion
+                unit_names = [unit]
+            elif cohort:
+                # P6 P2.7: subset claim - restrict to the top/bottom N% of
+                # plan units by measured market potential.
+                side = cohort.get("top_pct") is not None
+                pct = float(cohort.get("top_pct")
+                            or cohort.get("bottom_pct") or 0)
+                if not pct:
+                    continue
+                pot_by_unit = accounts.loc[
+                    accounts[unit_col].isin(targets_map),
+                    [unit_col, pot_col]].groupby(unit_col).sum()[pot_col]
+                order = pot_by_unit.sort_values(ascending=not side)
+                n_cohort = max(1, int(round(pct / 100.0 * len(order))))
+                unit_names = list(order.index[:n_cohort])
+            else:
                 # a whole-dimension claim: scale every plan unit uniformly
                 # toward the target ratio using measured totals - except
                 # units already pinned by a scoped criterion
                 unit_names = [u for u in targets_map if u not in pinned]
-            else:
-                if unit in pinned:
-                    continue  # already solved for another criterion
-                unit_names = [unit]
             want_ratio = float(p.get("target_ratio_pct", 100.0)) / 100.0
             for u in unit_names:
                 pot_sum = float(
@@ -285,6 +303,107 @@ def _remedy_quota_potential(cfg, criteria_doc, results, workbook_path,
     return fixes
 
 
+def _remedy_headcount_growth(cfg, criteria_doc, results, workbook_path,
+                             log_fn, session):
+    """P6 P2.5 (F19.10): headcount_growth_placement measures the share of
+    headcount ADDITIONS (first -> last quarter headcount_actual) absorbed
+    by units ranked strong by first-quarter won revenue. Once the workbook
+    exists both inputs are MEASURED, so the addition distribution is
+    re-shapeable deterministically: strong units get the required share,
+    weak units the remainder, Q1 headcount unchanged (effective_capacity
+    level checks unaffected). One shot per session, mirroring the
+    quota-vs-potential remedy."""
+    wanted = {}
+    for c in criteria_doc.get("criteria", []):
+        if c["check"] == "headcount_growth_placement" and \
+                any(r["id"] == c["id"] and r["verdict"] == "FAIL"
+                    for r in results):
+            wanted[c["id"]] = c["params"]
+    if not wanted:
+        return None
+    try:
+        opps = pd.read_excel(workbook_path, sheet_name="opportunities")
+        cap = pd.read_excel(workbook_path, sheet_name="capacity_plan")
+    except Exception:  # noqa: BLE001 - no measurable sheet -> no remedy
+        return []
+    if not len(opps) or not len(cap):
+        return []
+    dim = str(cap["plan_unit_type"].iloc[0])
+    if dim not in opps.columns:
+        return []
+    labels = list(pd.unique(cap["fiscal_quarter"]))
+    if len(labels) < 2:
+        return []
+    first, last = labels[0], labels[-1]
+    q1 = cap[cap["fiscal_quarter"] == first].set_index("plan_unit")
+    ql = cap[cap["fiscal_quarter"] == last].set_index("plan_unit")
+    won_q1 = opps[opps["stage"] == "Closed Won"]
+    won_q1 = won_q1[won_q1["fiscal_quarter"] == first]
+    rev = won_q1.groupby(dim)["realized_price"].sum()
+
+    # the check's strong set: top half of units by first-quarter revenue
+    units = [u for u in q1.index]
+    strength = {u: float(rev.get(u, 0.0)) for u in units}
+    ranked = sorted(strength, key=strength.get, reverse=True)
+    strong = set(ranked[:max(1, len(ranked) // 2)])
+
+    cap_cfg = cfg.get("capacity") or {}
+    by = next((v for k, v in cap_cfg.items()
+               if k in ("by_territory", "by_region")), None)
+    if by is None:
+        return []
+
+    n_q = len(labels)
+    fixes = []
+    for cid, p in wanted.items():
+        need = float(p.get("min_growth_share_pct", 50)) / 100.0
+        additions = {}
+        for u in units:
+            if u in ql.index:
+                additions[u] = (float(ql.loc[u, "headcount_actual"])
+                                - float(q1.loc[u, "headcount_actual"]))
+        total_add = sum(max(a, 0.0) for a in additions.values())
+        if total_add <= 0:
+            # no flow exists (flat drafted headcount): seed a modest one so
+            # the criterion is measurable instead of structurally dead
+            base_flow = {u: 2.0 for u in units}
+            total_add = 2.0 * len(units)
+        else:
+            base_flow = {u: max(a, 0.0) for u, a in additions.items()}
+        strong_add = sum(base_flow.get(u, 0.0) for u in strong)
+        share = strong_add / total_add
+        if share >= need:
+            continue
+        target_strong = total_add * need
+        strong_units = sorted(strong, key=lambda u: -strength[u])
+        weak_units = [u for u in units if u not in strong]
+        sw = sum(max(strength[u], 1e-9) for u in strong_units)
+        alloc = {u: target_strong * max(strength[u], 1e-9) / sw
+                 for u in strong_units}
+        if weak_units:
+            alloc.update({u: total_add * (1.0 - need) / len(weak_units)
+                          for u in weak_units})
+        for u, add in alloc.items():
+            if u not in by or u not in q1.index:
+                continue
+            base = float(q1.loc[u, "headcount_actual"])
+            spec = by[u]
+            spec["headcount_actual"] = [
+                round(base + add * qi / max(1, n_q - 1), 2)
+                for qi in range(n_q)]
+        fixes.append(
+            f"{cid}: concentrated {need * 100:.0f}% of headcount additions "
+            f"into strong units [{', '.join(sorted(strong))}] "
+            f"(share was {share * 100:.0f}%)")
+    if fixes:
+        cfg["capacity"] = cap_cfg
+        session.log("## AUTOPILOT: headcount-growth placement\n"
+                    + "\n".join(f"- {x}" for x in fixes))
+        log_fn("AUTOPILOT: concentrated headcount additions into strong "
+               "units:\n" + "\n".join(f"  - {x}" for x in fixes))
+    return fixes
+
+
 def run_convergence(session, client, sim_path, criteria_path,
                     max_iterations=10, max_llm_proposals=5, log_fn=print,
                     thin_margin_pp=0.5, max_hardening_rounds=2):
@@ -308,6 +427,7 @@ def run_convergence(session, client, sim_path, criteria_path,
     remediations = []
     recal_done = False
     qp_done = False
+    hc_done = False
     seed_bump_done = False
     stall_count = 0
     since_improve = 0
@@ -508,6 +628,28 @@ def run_convergence(session, client, sim_path, criteria_path,
                                           encoding="utf-8")
                 continue
 
+        # --- AUTOPILOT remedy A3 (measured headcount placement): the
+        # headcount_growth_placement criterion measures ADDITIONS against
+        # generated first-quarter revenue - only measurable after the
+        # workbook exists. Re-shape the addition distribution once
+        # (F19.10 / cert s19). Runs BEFORE the structural check so a flat
+        # drafted headcount is repaired, not escalated.
+        if not hc_done:
+            hc_fixes = _remedy_headcount_growth(
+                cfg, criteria_doc, results, wb, log_fn, session)
+            if hc_fixes is not None:
+                hc_done = True
+            if hc_fixes:
+                remediations.append({"iteration": iteration,
+                                     "remedy": "headcount_placement",
+                                     "fixes": hc_fixes})
+                history_lines.append(
+                    f"iter {iteration}: AUTOPILOT headcount placement "
+                    f"({len(hc_fixes)} units)")
+                Path(sim_path).write_text(json.dumps(cfg, indent=2),
+                                          encoding="utf-8")
+                continue
+
         # Live M4 lesson: a criterion that references something the data
         # model cannot express (absent segment, missing sheet) is not
         # fixable by knob turns - looping just burns proposals (G14 family).
@@ -561,6 +703,27 @@ def run_convergence(session, client, sim_path, criteria_path,
                 history_lines.append(
                     f"iter {iteration}: AUTOPILOT quota-vs-potential "
                     f"scaling ({len(qp_fixes)} units)")
+                Path(sim_path).write_text(json.dumps(cfg, indent=2),
+                                          encoding="utf-8")
+                continue
+
+        # --- AUTOPILOT remedy A3 (measured headcount placement): the
+        # headcount_growth_placement criterion measures ADDITIONS against
+        # generated first-quarter revenue - only measurable after the
+        # workbook exists. Re-shape the addition distribution once
+        # (F19.10 / cert s19).
+        if not hc_done:
+            hc_fixes = _remedy_headcount_growth(
+                cfg, criteria_doc, results, wb, log_fn, session)
+            if hc_fixes is not None:
+                hc_done = True
+            if hc_fixes:
+                remediations.append({"iteration": iteration,
+                                     "remedy": "headcount_placement",
+                                     "fixes": hc_fixes})
+                history_lines.append(
+                    f"iter {iteration}: AUTOPILOT headcount placement "
+                    f"({len(hc_fixes)} units)")
                 Path(sim_path).write_text(json.dumps(cfg, indent=2),
                                           encoding="utf-8")
                 continue

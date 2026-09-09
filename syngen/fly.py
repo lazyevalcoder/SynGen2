@@ -47,12 +47,19 @@ def _newest_session(sessions_dir):
 
 
 def run_fly(story, client, sessions_dir="sessions", slug=None,
-            max_iterations=10, max_llm_proposals=8, use_critic=True):
+            max_iterations=10, max_llm_proposals=8, use_critic=True,
+            max_rework_rounds=2):
     """Fly one story end-to-end without human input. Returns the report.
 
     The report ALWAYS contains: status ('converged' | 'escalated' |
     'aborted' | ...), reason (for non-landings), session path, and full
     telemetry (every pipeline message + every gate decision taken).
+
+    max_rework_rounds defaults to 2: the flexible stage-rework loop (P7) -
+    an LLM judge routes escalation evidence back to criteria/config drafting
+    (bounded, claim-preserving) before the flight ends. A converged report
+    carries `rework.rounds` (0 = clean single attempt) so certification can
+    tell clean landings from reworked ones.
     """
     io = _FlyIO()
     try:
@@ -60,7 +67,8 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
                                slug=slug or "fly",
                                max_iterations=max_iterations,
                                max_llm_proposals=max_llm_proposals,
-                               use_critic=use_critic)
+                               use_critic=use_critic,
+                               max_rework_rounds=max_rework_rounds)
     except Exception as e:  # noqa: BLE001 - the harness must ALWAYS emit a
         # report; a crash mid-flight is itself a finding for maintenance
         # F8.2: the Session is created before any LLM traffic, so even a
@@ -85,6 +93,7 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
         "iterations": result.get("iterations"),
         "llm_proposals": result.get("llm_proposals"),
         "thin_margins": result.get("thin_margins"),
+        "rework": result.get("rework"),
         "telemetry": {
             "messages": io.messages,
             "gate_decisions": io.decisions,

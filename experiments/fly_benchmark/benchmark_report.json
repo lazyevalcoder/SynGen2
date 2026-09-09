@@ -5,21 +5,21 @@
     "unassisted_landing_rate_pct": 0.0,
     "escalated": 1,
     "escalation_reasons": [
-      "oscillating: no net score improvement for 6 iterations (proposals keep trading criteria against each other); still failing: ['AC1', 'AC5', 'AC6']; worst margins: AC5 -6.22, AC6 -4.44, AC1 -1.46"
+      "stale passing set: identical 3 criteria passing for 6 consecutive iterations while ['AC2', 'AC3'] never crossed - remaining failures are not reachable by knob turns; worst margins: AC2 -101.00, AC3 -7.12"
     ],
     "other": []
   },
   "reports": [
     {
       "status": "escalated",
-      "reason": "oscillating: no net score improvement for 6 iterations (proposals keep trading criteria against each other); still failing: ['AC1', 'AC5', 'AC6']; worst margins: AC5 -6.22, AC6 -4.44, AC1 -1.46",
+      "reason": "stale passing set: identical 3 criteria passing for 6 consecutive iterations while ['AC2', 'AC3'] never crossed - remaining failures are not reachable by knob turns; worst margins: AC2 -101.00, AC3 -7.12",
       "detail": null,
-      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-20",
+      "session": "experiments\\fly_benchmark\\sessions\\2026-08-26_bench-scenario-25",
       "iterations": null,
       "llm_proposals": null,
       "thin_margins": null,
-      "scenario": "scenario_20",
-      "elapsed_s": 954.3
+      "scenario": "scenario_25",
+      "elapsed_s": 1034.4
     }
   ]
 }

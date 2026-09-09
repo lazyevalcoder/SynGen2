@@ -70,8 +70,9 @@ def build_accounts(cfg, rng):
     # static account mix uses the mean weight of any per-quarter curves
     region_p = np.array([np.mean(c) for c in region_curves])
     region_p = region_p / region_p.sum()
-    segment_names = list(spec["segments"])
-    segment_curves = [_weight_curve(v, quarters_n) for v in spec["segments"].values()]
+    segment_names = list(spec.get("segments") or {"All": 1.0})
+    segment_curves = [_weight_curve(v, quarters_n)
+                      for v in (spec.get("segments") or {"All": 1.0}).values()]
     segment_p = np.array([np.mean(c) for c in segment_curves])
     segment_p = segment_p / segment_p.sum()
     industries = rng.choice(spec["industries"], size=n)

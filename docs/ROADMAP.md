@@ -127,7 +127,11 @@ Each milestone answers exactly one trust question before the next begins — the
 
 Web UI, multi-user/server mode, BI-tool integrations, additional domains beyond M4's scope, orchestration frameworks. Revisit only after M5.
 
-## Future Enhancement — P6 "Flight Journal" (hero-journey observability)
+## Future Enhancement — "Flight Journal" (hero-journey observability)
+
+> **Note (2026-08-26):** the "P6" label was reassigned to the realizability
+> fix wave (see DOMAIN_PACKS.md P6 row); this observability item is now
+> unnumbered future work. Design of record: `JOURNEY_PLAN.md`.
 
 **Status:** PLANNED, vanity/visibility work - explicitly deprioritized
 behind unassisted landing rate. Design of record: `JOURNEY_PLAN.md`.

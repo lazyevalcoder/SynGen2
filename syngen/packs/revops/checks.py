@@ -705,10 +705,34 @@ def check_quota_vs_potential(opp, accounts, params):
         return r
     dim = params.get("dimension", "territory")
     unit = params.get("unit")
+    cohort = params.get("cohort")
     if dim == "territory" and dim not in accounts.columns:
         # fall back to region-level analysis when no territories exist
         dim = "region"
     pot = accounts.groupby(dim)["market_potential_usd"].sum()
+    if cohort:
+        # P6 P2.7 (F19.6): subset expressions - "the largest territories",
+        # "the smaller territories". Restrict to the top/bottom N% of plan
+        # units by summed market potential, then evaluate the ratio over
+        # that cohort only. Never structural: a cohort with no data simply
+        # reports a missing unit set.
+        side = cohort.get("top_pct") is not None
+        pct = float(cohort.get("top_pct") or cohort.get("bottom_pct") or 0)
+        pct = max(0.0, min(100.0, pct))
+        if not pct or not len(pot):
+            return _result(False, "cohort selects no units", "-",
+                           f"cohort={cohort!r} matched no plan units",
+                           -1.0)
+        order = pot.sort_values(ascending=not side)
+        n_cohort = max(1, int(round(pct / 100.0 * len(order))))
+        cohort_units = set(order.index[:n_cohort])
+        pot = pot[pot.index.isin(cohort_units)]
+        if not len(pot):
+            return _result(False, "cohort selects no units", "-",
+                           f"cohort={cohort!r} matched no plan units",
+                           -1.0)
+        plan = plan[plan["plan_unit"].isin(cohort_units)] \
+            if "plan_unit" in plan.columns else plan
     if unit is not None:
         pot = pot[pot.index == unit]
         if not len(pot):
