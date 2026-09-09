@@ -11,6 +11,11 @@ tests/test_workbooks/
 output_*.json
 output_simdraft_debug.txt
 
+# Per-flight benchmark dumps (regenerable; distilled record lives in
+# experiments/fly_benchmark/findings_v4.md + findings_stage_diagnosis.md)
+experiments/fly_benchmark/scenario_*_report.json
+experiments/fly_benchmark/benchmark_report.json
+
 # OS / editor
 Thumbs.db
 .DS_Store

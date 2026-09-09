@@ -2,7 +2,7 @@
 
 margin > 0  : passing, value is distance from the threshold (bigger = safer)
 margin <= 0 : failing, magnitude is distance from passing
-Ported from experiments/C_validator/validate.py (Experiment C, gate PASS),
+ Ported from experiments/archive/C_validator/validate.py (Experiment C, gate PASS),
 extended with numeric margins per PRD FR6 / Experiment D thin-margin lesson.
 """
 import numpy as np

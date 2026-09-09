@@ -1,6 +1,6 @@
 """Deterministic dataset generator: reads simulator.json, emits a multi-sheet workbook.
 
-Ported from experiments/B_config_generator/generate.py (Experiment B, gate PASS).
+ Ported from experiments/archive/B_config_generator/generate.py (Experiment B, gate PASS).
 Business numbers live ONLY in the config - this engine never hardcodes them.
 """
 import hashlib
