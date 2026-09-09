@@ -102,3 +102,22 @@ Two random live flights (not a protocol cohort) validate it end-to-end:
 Both are tagged (`rework.rounds`) so the scoreboard keeps clean vs reworked
 landings honest. No P7 regression: every P6 rule stayed silent; landing-set
 preservation re-fly (05/09/11/13/14) still owed.
+
+---
+
+## P7 addendum 2 (2026-09-09): landing-set preservation re-fly — 5/5 LANDED
+
+Run on master after the P6+P7 merge, the promised regression check. All five
+preservation scenarios still land (05, 09, 11, 13, 14 — status converged).
+Rework rounds required on master (rework loop now enabled): 05→1, 09→1,
+13→2, 11→0, 14→0 — i.e. three needed the LLM-judged loop to get there, two
+landed clean; all are tagged in their reports.
+
+**The re-fly earned its keep:** scenario_11 crashed with
+`NameError: name 'ConfigError' is not defined` — a latent bug in
+`pipeline.py` (`calibrate_gate` catches `ConfigError` without importing it;
+Python only resolves an except name when an exception is raised, so it lay
+dormant until a P6/P7 solver precondition actually raised one on s11). Fixed
+with a one-line import (`syngen/pipeline.py`), s11 re-landed. No scenario-
+specific change. This is exactly the class of regression a preservation
+re-fly exists to catch.

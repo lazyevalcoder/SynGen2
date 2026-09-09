@@ -6,7 +6,8 @@ named phases. I/O is injected so tests can run the whole flow offline.
 import json
 from pathlib import Path
 
-from syngen.config import load_criteria, load_json, validate_simulator_doc
+from syngen.config import (ConfigError, load_criteria, load_json,
+                           validate_simulator_doc)
 from syngen.generator.engine import generate_to_workbook
 from syngen.linter import has_blocking, lint, structure_findings
 from syngen.phases.amend import (
