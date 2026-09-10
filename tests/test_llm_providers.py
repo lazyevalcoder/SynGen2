@@ -5,6 +5,9 @@ Authorization header + model and must NOT send llama.cpp-only params; the
 llamacpp backend keeps its exact behavior; api_key_env resolves from env.
 """
 import json
+import urllib.error
+
+import pytest
 
 from syngen.llm.client import LLMClient, load_llm_config
 
@@ -86,3 +89,37 @@ def test_api_base_overrides_endpoint(monkeypatch):
                                "endpoint": "http://should-not-be-used"})
     client._call("s", "u", 10, 0.2, 1, "medium")
     assert seen["url"] == "https://x/v1/chat/completions"
+
+
+def test_transient_http_error_is_retried(monkeypatch):
+    calls = {"n": 0}
+
+    def flaky(req, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many", {},
+                                         None)
+        return _FakeResp({"choices": [{"message": {"content": "ok"},
+                                       "finish_reason": "stop"}],
+                          "model": "m", "usage": {}})
+
+    monkeypatch.setattr("urllib.request.urlopen", flaky)
+    client = LLMClient(config={"backend": "openai",
+                               "api_base": "https://x/v1",
+                               "http_backoff_s": 0, "max_http_retries": 2})
+    resp = client.chat("s", "u", max_attempts=1)
+    assert resp.content == "ok"
+    assert calls["n"] == 2
+
+
+def test_nontransient_http_error_propagates(monkeypatch):
+    def bad(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {},
+                                     None)
+
+    monkeypatch.setattr("urllib.request.urlopen", bad)
+    client = LLMClient(config={"backend": "openai",
+                               "api_base": "https://x/v1",
+                               "http_backoff_s": 0, "max_http_retries": 3})
+    with pytest.raises(urllib.error.HTTPError):
+        client.chat("s", "u", max_attempts=1)

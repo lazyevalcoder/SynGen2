@@ -5,6 +5,7 @@ Per-call task budgets/efforts come from syngen.llm.profiles (evidence-based).
 """
 import json
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 
@@ -39,6 +40,10 @@ DEFAULT_CONFIG = {
     "max_attempts": 3,
     "max_retry_tokens": 16384,
     "reasoning_effort": "medium",
+    # Hosted providers rate-limit (429) and have transient 5xx; retry with
+    # exponential backoff, honouring Retry-After. Applies to every call.
+    "max_http_retries": 3,
+    "http_backoff_s": 2.0,
 }
 
 
@@ -113,8 +118,8 @@ class LLMClient:
                             f"(budget={tokens}, effort={effort}, think={think}, "
                             f"think_budget={budget})")
             started = time.time()
-            last = self._call(system, user, tokens, temp, attempt, effort,
-                              think, budget)
+            last = self._call_resilient(system, user, tokens, temp, attempt,
+                                        effort, think, budget)
             last.attempts = attempt
             last.elapsed_s = time.time() - started
             self._accumulate_usage(last)
@@ -131,6 +136,46 @@ class LLMClient:
                 self.log_fn(f"[llm] empty content (attempt {attempt}), "
                             f"retrying with max_tokens={tokens}")
         return last
+
+    _TRANSIENT_HTTP = (408, 409, 429, 500, 502, 503, 504)
+
+    def _retry_after(self, err, default):
+        headers = getattr(err, "headers", None)
+        raw = headers.get("Retry-After") if headers else None
+        try:
+            return max(default, float(raw))
+        except (TypeError, ValueError):
+            return default
+
+    def _call_resilient(self, *args):
+        """Call with retry/backoff on transient HTTP errors (P10 step 3).
+
+        Hosted providers rate-limit (429) and hiccup (5xx); a single such
+        response must not kill a flight. Honours Retry-After. Non-transient
+        errors (401/400/...) propagate immediately - they are config bugs,
+        not noise.
+        """
+        retries = int(self.config.get("max_http_retries", 3) or 0)
+        backoff = float(self.config.get("http_backoff_s", 2.0) or 2.0)
+        for i in range(retries + 1):
+            try:
+                return self._call(*args)
+            except urllib.error.HTTPError as e:
+                if e.code not in self._TRANSIENT_HTTP or i >= retries:
+                    raise
+                wait = self._retry_after(e, backoff * (2 ** i))
+                if self.log_fn:
+                    self.log_fn(f"[llm] HTTP {e.code} - retry {i + 1}/"
+                                f"{retries} in {wait:.1f}s")
+                time.sleep(wait)
+            except urllib.error.URLError as e:
+                if i >= retries:
+                    raise
+                wait = backoff * (2 ** i)
+                if self.log_fn:
+                    self.log_fn(f"[llm] network error ({e}) - retry {i + 1}/"
+                                f"{retries} in {wait:.1f}s")
+                time.sleep(wait)
 
     def _endpoint(self):
         base = self.config.get("api_base")
