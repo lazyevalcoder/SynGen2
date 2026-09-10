@@ -16,6 +16,9 @@ output_simdraft_debug.txt
 experiments/fly_benchmark/scenario_*_report.json
 experiments/fly_benchmark/benchmark_report.json
 
+# Skills A/B raw outputs (regenerable)
+experiments/skills_ab/
+
 # OS / editor
 Thumbs.db
 .DS_Store
