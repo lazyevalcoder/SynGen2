@@ -162,3 +162,31 @@ segment-specific claims drafted onto `_all_`). **S21.1** (structure-gate
 column-order contract bug) remains latent — scenario 21 now dies earlier in
 preflight, so the order-only false-negative still hasn't been re-exercised;
 still worth fixing (it is the only class that kills a genuinely-landed flight).
+
+---
+
+## P8+P9.1 verification (2026-09-10): 25 and 21 still escalate, but honestly
+
+Ran on the P8 (`fix/realizability-p8`) + P9.1 authoring-guide
+(`feat/drafter-skills`) code. Both target scenarios still escalate; neither
+is a bad failure - each names a precise, real gap, and P9.1 visibly improved
+the judge's reasoning.
+
+| Scenario | Result | Where | What the judge/drafter did |
+|---|---|---|---|
+| 25 | escalated | preflight (rework 1) | Judge correctly diagnosed the unreachable growth claim (raking pins revenue to plan) and ordered the right *kind* of fix, but suggested `revenue_vs_plan` with `dimension: "ex_outliers"` - which is not a plan dimension. The engine expresses the core-vs-headline split via `exclude_outlier_deals: true`. **Fixed:** that fact is now in the P9.1 authoring guide so both drafter and judge know the reachable form. |
+| 21 | escalated | convergence (oscillating) | AC3 `pipeline_concentration` top-5 >= 65% and AC4 `revenue_concentration` top-5 >= 60% were not reached (margins -6.49 / -17.53); proposals traded criteria for 6 iterations. Judge escalated honestly (the story asserts concentration as the problem). |
+
+**Named next gap (P9.2 candidate):** `revenue_concentration` (won-deal
+concentration) has NO deterministic solver - only `pipeline_concentration`
+does (`_autocalibrate_concentration`). A won-deal concentration target
+therefore relies on the LLM proposer and can fail even though the outlier
+lever is unbounded. The bounded fix is a `_autocalibrate_revenue_concentration`
+that sizes the outlier share/multiplier against the estimator, exactly like
+the pipeline-concentration solver. Secondary: the convergence oscillation on
+two linked concentration criteria (AC3/AC4) suggests a joint-lever remedy.
+
+**P9.1 status:** implemented and CI-covered (curated doctrine + generated
+signature facts injected into `decompose.txt` and `rework_judge.txt`); full
+suite 402 green. It is the probabilistic half; P9.2 (deterministic clamp +
+the revenue-concentration solver) is the guarantee half.
