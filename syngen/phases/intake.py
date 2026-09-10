@@ -32,6 +32,13 @@ def _pack_taxonomy():
     return PackTaxonomy(pack)
 
 
+def authoring_guide():
+    """Drafter constraints (P9.1 "skills"): curated doctrine + facts
+    generated from the signature registry. Injected into the criteria
+    drafter and the rework judge so both aim at buildable criteria."""
+    return _pack_taxonomy().authoring_guide()
+
+
 def precheck_claims(client, story, log_fn=print):
     system = load_prompt("precheck")
     claims = chat_json(client, "precheck", system, story)
@@ -315,6 +322,7 @@ def draft_criteria(client, story, decisions_text="", criteria_path=None, log_fn=
         story=story,
         check_catalog=taxonomy.check_catalog(),
         check_names=taxonomy.check_names(),
+        authoring_guide=taxonomy.authoring_guide(),
     )
     doc = chat_json(client, "decompose", system, "Produce the criteria JSON now.")
 

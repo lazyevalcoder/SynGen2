@@ -268,12 +268,33 @@ def test_decompose_prompt_renders_generated_catalog_not_hardcoded_list():
     tax = _pack_taxonomy()
     text = load_prompt("decompose", user_decisions="none", story="s",
                        check_catalog=tax.check_catalog(),
-                       check_names=tax.check_names())
+                       check_names=tax.check_names(),
+                       authoring_guide=tax.authoring_guide())
     assert "{{check_catalog}}" not in text
     assert "{{check_names}}" not in text
+    assert "{{authoring_guide}}" not in text
     for check in ("revenue_vs_plan", "effective_capacity",
                   "activity_potential_misalignment", "data_sanity"):
         assert f"- {check}:" in text
+
+
+def test_authoring_guide_renders_curated_and_generated_facts():
+    from syngen.phases.intake import _pack_taxonomy
+
+    guide = _pack_taxonomy().authoring_guide()
+    assert "SCOPE ONLY REAL UNITS" in guide            # curated doctrine
+    assert "revenue_vs_plan.segment" in guide           # generated scoping
+    assert "forecast_vs_actual.target_pct" in guide     # generated direction
+    assert "raking pins realized revenue" in guide      # pinned quantity
+
+
+def test_rework_judge_prompt_renders_authoring_guide():
+    from syngen.phases.intake import authoring_guide
+    from syngen.prompts import load_prompt
+
+    text = load_prompt("rework_judge", authoring_guide=authoring_guide())
+    assert "{{authoring_guide}}" not in text
+    assert "SCOPE ONLY REAL UNITS" in text
 
 
 def test_intake_taxonomy_cache_returns_same_instance():

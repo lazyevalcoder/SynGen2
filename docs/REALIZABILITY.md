@@ -102,3 +102,29 @@ arithmetic ceiling and is gated. Remaining additions tracked here: an
 explicit infeasibility signal for the capacity solver, and routing any
 future deterministic "cannot solve" path through the same finding
 mechanism rather than a silent no-op.
+
+## P9.1 — Drafter authoring guide ("skills")
+
+The dominant remaining variance is the *drafter*: the LLM invents different
+criteria each run, some unreachable or mis-scoped, so "verify it lands" is a
+re-roll rather than a fix. P9.1 reduces that variance at the source.
+
+- **Curated doctrine** — `packs/revops/prompts/authoring_guide.txt`: scope
+  only real units (no pseudo-cohorts), match the claim's direction, never
+  draft a threshold that cannot fail, stay within what the engine can build,
+  one criterion per claim.
+- **Generated facts** — `PackTaxonomy.authoring_guide()` renders, from the
+  signature registry, the valid coordinate spaces per check and the
+  `directional_params` / `pinned_quantity` notes. Generated, so the rules
+  cannot drift from what the engine can actually build.
+- **Injection** — `{{authoring_guide}}` is added to `decompose.txt` (the
+  criteria drafter, via `intake.draft_criteria`) and `rework_judge.txt` (so
+  re-expressions aim at reachable forms, via `rework.judge_revision`).
+
+This is prompt-level and probabilistic: it reduces bad drafts but does not
+guarantee. The guarantee remains the deterministic layer (P9.2, next:
+a Gate-1 reachable-target clamp for provably-unreachable targets).
+
+Verification: full suite **402 green** (3 new tests in `tests/test_packs.py`
+assert the guide renders curated + generated facts and that both prompts
+substitute it with no leftover placeholder).

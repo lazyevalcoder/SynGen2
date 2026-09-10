@@ -69,3 +69,44 @@ class PackTaxonomy(ClaimTaxonomy):
                 if note and coord.get("space"):
                     lines.append(f"- {check}.{coord.get('param')}: {note}")
         return "\n".join(lines)
+
+    def authoring_guide(self):
+        """Drafter constraints (P9.1 "skills").
+
+        Curated doctrine (`packs/revops/prompts/authoring_guide.txt`) plus
+        generated facts rendered from the signature registry, so the rules
+        cannot drift from what the engine can actually build. Injected into
+        the criteria-drafting prompt and the rework judge.
+        """
+        from syngen.prompts import load_prompt
+        curated = load_prompt("authoring_guide").strip()
+        facts = self._generated_authoring_facts()
+        return curated + ("\n\n" + facts if facts else "")
+
+    def _generated_authoring_facts(self):
+        lines = ["GENERATED PARAMETER FACTS (from the check registry):"]
+        scope = []
+        for check, sig in self._signatures.items():
+            for coord in sig.get("coordinates", []):
+                space = coord.get("space")
+                if not space:
+                    continue
+                allowed = " (or '_all_')" if coord.get("allow_all") else ""
+                scope.append(f"- {check}.{coord.get('param')}: one of the "
+                             f"config's {space}{allowed}")
+        if scope:
+            lines.append("Scoping - only address units that exist:")
+            lines.extend(scope)
+        sem = []
+        for check, sig in self._signatures.items():
+            for key in ("directional_params", "pinned_quantity"):
+                note = sig.get(key)
+                if isinstance(note, dict):
+                    for pname, desc in note.items():
+                        sem.append(f"- {check}.{pname}: {desc}")
+                elif isinstance(note, str):
+                    sem.append(f"- {check}: {note}")
+        if sem:
+            lines.append("Direction and pinned quantities:")
+            lines.extend(sem)
+        return "\n".join(lines)

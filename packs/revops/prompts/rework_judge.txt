@@ -40,6 +40,8 @@ Decide:
 Only rework_criteria may name criteria ids. Be conservative: a clean
 escalate is honest and valuable when revisions would just burn budget.
 
+{{authoring_guide}}
+
 Respond with ONLY a JSON object:
 {
   "action": "rework_criteria" | "rework_config" | "escalate",

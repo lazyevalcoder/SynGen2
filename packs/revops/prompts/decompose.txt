@@ -6,6 +6,8 @@ Rules:
 - Flag any claim in the story that is ambiguous or under-specified, and state the assumption you chose to resolve it.
 - Classify each criterion as either "parametric" (fixable by adjusting distribution parameters) or "statistical" (needs sample size or seed changes).
 
+{{authoring_guide}}
+
 User decisions already made (override any default you would otherwise choose):
 {{user_decisions}}
 

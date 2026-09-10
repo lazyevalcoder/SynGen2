@@ -11,7 +11,8 @@ redraft failure never fabricates a landing, it just ends the flight.
 import json
 
 from syngen.phases.criteria_lint import lint_criteria_internal
-from syngen.phases.intake import draft_criteria, enforce_coverage
+from syngen.phases.intake import (authoring_guide, draft_criteria,
+                                  enforce_coverage)
 from syngen.phases.json_task import chat_json
 from syngen.prompts import load_prompt
 
@@ -67,7 +68,7 @@ def _normalize(verdict, doc):
 def judge_revision(client, story, evidence, doc, round_no, log_fn=print):
     """One judge call: read the escalation evidence, route the next attempt.
     Fails OPEN to escalate (an unparseable/crashed judge never loops)."""
-    system = load_prompt("rework_judge")
+    system = load_prompt("rework_judge", authoring_guide=authoring_guide())
     user = (
         f"STORY:\n{story}\n\n"
         f"CURRENT CRITERIA:\n{criteria_lines(doc)}\n\n"

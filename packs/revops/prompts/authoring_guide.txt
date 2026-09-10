@@ -1,0 +1,38 @@
+DRAFTING CONSTRAINTS (authoring guide - follow before writing any criterion)
+
+These rules come from hard limits of the data engine. A criterion that
+breaks them cannot be built and will be sent back or escalated.
+
+1. SCOPE ONLY REAL UNITS.
+   Every region / segment / tier / territory / unit you name must exist in
+   the data model. Never invent a unit, and never use a pseudo-cohort as a
+   unit (e.g. a "segment" like core_ex_whales, "small_territories", or
+   "top accounts"). Express subset claims with the checks' cohort/split
+   params (e.g. exclude_outlier_deals, cohort top_pct/bottom_pct), or scope
+   to a real unit. Use '_all_' where the check allows it.
+
+2. MATCH THE CLAIM'S DIRECTION.
+   A "miss" is not a "beat"; a "decline" is not "growth"; a margin move is
+   in percentage POINTS, not percent. Respect the SIGNED conventions of
+   each param (see the generated facts below).
+
+3. NEVER DRAFT A THRESHOLD THAT CANNOT FAIL.
+   A cap no data can approach, a min_gap_pp of 0, or a one-sided bound that
+   excludes nothing is vacuous - it "passes" without proving the story and
+   will be rejected. Give every criterion a bound the data could plausibly
+   violate.
+
+4. STAY WITHIN WHAT THE ENGINE CAN BUILD.
+   Revenue is raked to plan, so quantities that are plan-of-record (or
+   pinned by raking) cannot be moved by distribution knobs. Do not demand a
+   magnitude no lever can reach; prefer the reachable form of the SAME
+   claim. An "attainment beat vs plan" is NOT a "growth" claim; an
+   unreachable concentration level is still provable at a reachable level
+   or with a larger top_n. When unsure, choose the conservative reachable
+   target and record the assumption in "ambiguities".
+
+5. PREFER ONE CRITERION PER CLAIM.
+   Do not draft several criteria that pin the same coordinate to different
+   non-overlapping bands - the set is jointly unsatisfiable and will be
+   rejected. If two claims share a coordinate, they must share a band or be
+   scoped to different units.
