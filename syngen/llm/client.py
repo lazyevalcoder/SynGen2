@@ -48,6 +48,29 @@ class LLMClient:
         if config:
             self.config.update(config)
         self.log_fn = log_fn
+        # Per-client usage accumulator (P10 step 1): one client drives one
+        # flight, so these totals are the flight's LLM cost. Reasoning
+        # models may bill hidden thinking tokens the endpoint reports in
+        # completion_tokens; we take whatever the endpoint returns.
+        self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+                      "total_tokens": 0, "elapsed_s": 0.0}
+
+    def usage_totals(self):
+        """Copy of the accumulated usage for this client (per-flight)."""
+        return dict(self.usage)
+
+    def _accumulate_usage(self, resp):
+        u = resp.usage or {}
+        self.usage["calls"] += 1
+        self.usage["prompt_tokens"] += int(u.get("prompt_tokens") or 0)
+        self.usage["completion_tokens"] += int(u.get("completion_tokens") or 0)
+        total = u.get("total_tokens")
+        if total is None:
+            total = (int(u.get("prompt_tokens") or 0)
+                     + int(u.get("completion_tokens") or 0))
+        self.usage["total_tokens"] += int(total or 0)
+        self.usage["elapsed_s"] = round(
+            self.usage["elapsed_s"] + float(resp.elapsed_s or 0.0), 2)
 
     def chat(self, system, user, max_tokens=None, temperature=None,
              reasoning_effort=None, max_attempts=None, enable_thinking=None,
@@ -79,6 +102,7 @@ class LLMClient:
                               think, budget)
             last.attempts = attempt
             last.elapsed_s = time.time() - started
+            self._accumulate_usage(last)
             if self.log_fn:
                 self.log_fn(
                     f"[llm] attempt {attempt} done in {last.elapsed_s:.1f}s - "

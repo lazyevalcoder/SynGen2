@@ -308,12 +308,16 @@ def _log_notes(gaps, log_fn):
         log_fn(f"  [note] {format_gap(g)}")
 
 
-def draft_criteria(client, story, decisions_text="", criteria_path=None, log_fn=print):
+def draft_criteria(client, story, decisions_text="", criteria_path=None,
+                   log_fn=print, use_skills=True):
     """LLM drafts criteria JSON; contract validation rejects malformed output.
 
     The check catalog and name list are GENERATED from the pack's claim
     matrix (M6 P2) - the prompt no longer hand-maintains them, so a new
     check registered in the matrix is instantly draftable.
+
+    use_skills toggles the P9.1 authoring guide (the A/B switch): False
+    injects an empty guide so the draft is measured without it.
     """
     taxonomy = _pack_taxonomy()
     system = load_prompt(
@@ -322,7 +326,7 @@ def draft_criteria(client, story, decisions_text="", criteria_path=None, log_fn=
         story=story,
         check_catalog=taxonomy.check_catalog(),
         check_names=taxonomy.check_names(),
-        authoring_guide=taxonomy.authoring_guide(),
+        authoring_guide=(taxonomy.authoring_guide() if use_skills else ""),
     )
     doc = chat_json(client, "decompose", system, "Produce the criteria JSON now.")
 

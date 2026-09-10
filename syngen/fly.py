@@ -94,6 +94,8 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
         "llm_proposals": result.get("llm_proposals"),
         "thin_margins": result.get("thin_margins"),
         "rework": result.get("rework"),
+        "llm_usage": (client.usage_totals()
+                      if hasattr(client, "usage_totals") else {}),
         "telemetry": {
             "messages": io.messages,
             "gate_decisions": io.decisions,
@@ -114,6 +116,16 @@ def summarize_reports(reports):
     n = len(reports) or 1
     landed = [r for r in reports if r.get("status") == "converged"]
     escalated = [r for r in reports if r.get("status") == "escalated"]
+    usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+             "total_tokens": 0, "elapsed_s": 0.0}
+    for r in reports:
+        u = r.get("llm_usage") or {}
+        for k in usage:
+            usage[k] += u.get(k, 0) or 0
+    usage["elapsed_s"] = round(usage["elapsed_s"], 2)
+    if reports:
+        usage["avg_total_tokens_per_flight"] = round(
+            usage["total_tokens"] / len(reports), 1)
     return {
         "stories": len(reports),
         "landed": len(landed),
@@ -122,4 +134,5 @@ def summarize_reports(reports):
         "escalation_reasons": sorted({r.get("reason") or "?" for r in escalated}),
         "other": [r.get("status") for r in reports
                   if r.get("status") not in ("converged", "escalated")],
+        "llm_usage": usage,
     }
