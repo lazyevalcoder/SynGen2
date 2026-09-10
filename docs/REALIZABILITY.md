@@ -169,3 +169,27 @@ Suite 407 green; 5 new tests in `tests/test_probe_skills.py`.
         --limit 10 --llm-config llm_configs/deepseek.example.json
 
 Suite 411 green; 4 new tests in `tests/test_llm_providers.py`.
+
+## P9.1 skills A/B — first measurement (2026-09-10)
+
+Local Ornith-35B, `reasoning_budget_scale` 0.25 (fast). Probe = stages 1-2 +
+config/calibration/geometry; the tuning loop never runs. Two batches, 3
+scenarios each (n=6 probes per arm):
+
+| arm | Gate-1 pass | reachable pass | avg tokens/probe |
+|---|---|---|---|
+| skills | 6/6 (100%) | 4/6 | ~26.4k |
+| no_skills | 5/6 (83%) | 4/6 | ~22.2k |
+
+**Honest verdict: weak / inconclusive.** Skills may marginally improve
+Gate-1 survival (6/6 vs 5/6) but the sample is tiny and the drafter is
+stochastic; reachability is identical. Skills costs ~20% more tokens (the
+guide adds ~4.8 KB to the prompt). Keep it (cheap, harmless, addresses real
+failure classes) but do **not** treat it as the fix — the levers that matter
+are the deterministic gates (P8) and a reliable drafter model.
+
+Also recorded: local reasoning is controlled by `reasoning_budget_tokens`
+(llama.cpp ignores `reasoning_effort`). On `decompose`, budget 4000 = 90s /
+4,315 tok, 1000 = 42s, 400 = 29s, thinking off = 25s — all yielding 4-5
+criteria. The default 4000 was the slowest setting; `reasoning_budget_scale`
+makes this tunable without editing profiles.
