@@ -44,6 +44,9 @@ DEFAULT_CONFIG = {
     # exponential backoff, honouring Retry-After. Applies to every call.
     "max_http_retries": 3,
     "http_backoff_s": 2.0,
+    # Extra body fields passed through verbatim (e.g. OpenRouter's
+    # {"provider": {"sort": "throughput"}} or {"response_format": ...}).
+    "body_extras": {},
 }
 
 
@@ -214,6 +217,17 @@ class LLMClient:
                     "enable_thinking": enable_thinking}
             if reasoning_budget_tokens is not None:
                 payload["reasoning_budget_tokens"] = reasoning_budget_tokens
+        else:
+            # Hosted OpenAI-compatible providers (OpenRouter et al): control
+            # reasoning via the `reasoning` object. Mechanical JSON tasks
+            # (enable_thinking=False) run with effort "none"; thinking tasks
+            # use the configured effort (default "low"). Note: OpenRouter's
+            # schema has no reasoning.max_tokens - `effort` is the lever.
+            reff = "none" if enable_thinking is False else (effort or "low")
+            payload["reasoning"] = {"effort": reff}
+            extras = self.config.get("body_extras") or {}
+            if isinstance(extras, dict):
+                payload.update(extras)
         req = urllib.request.Request(
             self._endpoint(), data=json.dumps(payload).encode("utf-8"),
             headers=self._headers(), method="POST",

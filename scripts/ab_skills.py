@@ -23,6 +23,15 @@ from syngen.llm.client import LLMClient, load_llm_config  # noqa: E402
 from syngen.probe import probe_criteria  # noqa: E402
 
 
+def _make_logger(path):
+    """Per-call LLM heartbeat (P10): every attempt's start/finish/elapsed/
+    tokens, so a slow call is visible immediately instead of a blackout."""
+    def log(text):
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {text}\n")
+    return log
+
+
 def _classify(res):
     """Bucket deterministic failures into the classes the guide targets."""
     findings = (res.get("lint_hard") or []) + (res.get("geometry_findings") or [])
@@ -92,6 +101,7 @@ def main():
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     jsonl = out_dir / "ab_skills.jsonl"
+    logger = _make_logger(out_dir / "llm_calls.log")
 
     arms = [("skills", True), ("no_skills", False)]
     if args.arms != "both":
@@ -105,7 +115,8 @@ def main():
         story = story_file.read_text(encoding="utf-8")
         for run in range(args.runs):
             for arm, use_skills in arms:
-                client = LLMClient(load_llm_config(args.llm_config))
+                client = LLMClient(load_llm_config(args.llm_config),
+                                   log_fn=logger)
                 t0 = time.time()
                 res = probe_criteria(client, story, use_skills=use_skills,
                                      use_critic=not args.no_critic,

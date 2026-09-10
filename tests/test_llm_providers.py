@@ -91,6 +91,31 @@ def test_api_base_overrides_endpoint(monkeypatch):
     assert seen["url"] == "https://x/v1/chat/completions"
 
 
+def test_openai_reasoning_none_for_mechanical_tasks(monkeypatch):
+    seen = _capture(monkeypatch)
+    client = LLMClient(config={"backend": "openai", "api_base": "https://x/v1",
+                               "reasoning_effort": "low"})
+    client._call("s", "u", 100, 0.2, 1, "low", enable_thinking=False)
+    assert seen["payload"]["reasoning"] == {"effort": "none"}
+
+
+def test_openai_reasoning_uses_config_effort_for_thinking(monkeypatch):
+    seen = _capture(monkeypatch)
+    client = LLMClient(config={"backend": "openai", "api_base": "https://x/v1",
+                               "reasoning_effort": "low"})
+    client._call("s", "u", 100, 0.2, 1, "low", enable_thinking=True)
+    assert seen["payload"]["reasoning"] == {"effort": "low"}
+
+
+def test_body_extras_merged_into_payload(monkeypatch):
+    seen = _capture(monkeypatch)
+    client = LLMClient(config={
+        "backend": "openai", "api_base": "https://x/v1",
+        "body_extras": {"provider": {"sort": "throughput"}}})
+    client._call("s", "u", 10, 0.2, 1, "low")
+    assert seen["payload"]["provider"] == {"sort": "throughput"}
+
+
 def test_transient_http_error_is_retried(monkeypatch):
     calls = {"n": 0}
 
