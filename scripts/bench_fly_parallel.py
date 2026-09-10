@@ -21,8 +21,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8",
-                              errors="replace")
 
 from syngen.fly import run_fly, summarize_reports  # noqa: E402
 from syngen.llm.client import LLMClient, load_llm_config  # noqa: E402
@@ -43,6 +41,8 @@ def _fly_one(task):
 
 
 def main():
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8",
+                                  errors="replace")
     ap = argparse.ArgumentParser()
     ap.add_argument("--stories-dir", default="uat")
     ap.add_argument("--out", default="experiments/fly_benchmark")
