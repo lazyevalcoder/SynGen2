@@ -128,3 +128,25 @@ a Gate-1 reachable-target clamp for provably-unreachable targets).
 Verification: full suite **402 green** (3 new tests in `tests/test_packs.py`
 assert the guide renders curated + generated facts and that both prompts
 substitute it with no leftover placeholder).
+
+## P10 — Measurement & cost (steps 1-2)
+
+Before spending on external tokens, two small, local-first capabilities:
+
+- **Step 1 — token accounting.** `LLMClient` accumulates per-flight usage
+  (`calls`, `prompt_tokens`, `completion_tokens`, `total_tokens`,
+  `elapsed_s`); `run_fly` writes it into `fly_report.json` and
+  `summarize_reports` aggregates it into the fleet summary. The local
+  endpoint already returns usage, so a 10-scenario local run yields the
+  tokens-per-flight budget picture without external spend (tokenizer counts
+  differ from hosted models by ~10-30%).
+- **Step 2 — criteria probe + skills A/B.** `syngen/probe.py` runs stages
+  1-2 (+ optional config/calibration/geometry) and STOPS before the tuning
+  loop, reporting Gate-1 survival, reachability, and failure classes.
+  `scripts/ab_skills.py` runs the probe with/without the P9.1 guide, K runs
+  per story, and aggregates pass rates + token cost per arm. This measures
+  whether skills actually helps, cheaply, instead of guessing from n=1.
+
+    python scripts/ab_skills.py --limit 5 --runs 3 --with-config
+
+Suite 407 green; 5 new tests in `tests/test_probe_skills.py`.
