@@ -116,6 +116,16 @@ def test_body_extras_merged_into_payload(monkeypatch):
     assert seen["payload"]["provider"] == {"sort": "throughput"}
 
 
+def test_reasoning_budget_scale_applied(monkeypatch):
+    seen = _capture(monkeypatch)
+    client = LLMClient(config={"backend": "llamacpp",
+                               "reasoning_budget_scale": 0.25,
+                               "max_attempts": 1})
+    client.chat("s", "u", max_tokens=100, max_attempts=1,
+                enable_thinking=True, reasoning_budget_tokens=4000)
+    assert seen["payload"]["reasoning_budget_tokens"] == 1000
+
+
 def test_transient_http_error_is_retried(monkeypatch):
     calls = {"n": 0}
 

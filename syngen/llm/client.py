@@ -47,6 +47,9 @@ DEFAULT_CONFIG = {
     # Extra body fields passed through verbatim (e.g. OpenRouter's
     # {"provider": {"sort": "throughput"}} or {"response_format": ...}).
     "body_extras": {},
+    # Scale the per-task reasoning_budget_tokens (llama.cpp only): e.g. 0.25
+    # for a ~2-3x faster local run, 0 to disable thinking. None = untouched.
+    "reasoning_budget_scale": None,
 }
 
 
@@ -113,6 +116,9 @@ class LLMClient:
         effort = reasoning_effort or self.config["reasoning_effort"]
         think = self.config.get("enable_thinking") if enable_thinking is None else enable_thinking
         budget = self.config.get("reasoning_budget_tokens") if reasoning_budget_tokens is None else reasoning_budget_tokens
+        scale = self.config.get("reasoning_budget_scale")
+        if budget is not None and scale is not None:
+            budget = max(0, int(float(budget) * float(scale)))
         attempts_allowed = max_attempts if max_attempts else self.config["max_attempts"]
         last = None
         for attempt in range(1, attempts_allowed + 1):
