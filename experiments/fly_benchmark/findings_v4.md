@@ -121,3 +121,44 @@ dormant until a P6/P7 solver precondition actually raised one on s11). Fixed
 with a one-line import (`syngen/pipeline.py`), s11 re-landed. No scenario-
 specific change. This is exactly the class of regression a preservation
 re-fly exists to catch.
+
+---
+
+## P7 addendum 3 (2026-09-10): re-fly of the three remaining P6 deaths (21/22/25)
+
+The P6 holdout deaths 21/22/25 were flown *pre-P7* (escalation was terminal
+then), so they had never been run with the rework loop enabled. This closes
+that gap: same build (master, P6+P7), same stories, no new code. Result:
+**1/3 landed clean; the two that escalated each name a NEW surface, and
+neither was recovered by the rework loop** — for two distinct structural
+reasons (below).
+
+| Scenario | Result | Iters | Rework | Notes |
+|---|---|---|---|---|
+| 22 | **LANDED** | 1 | 0 (clean) | 5/5, no thin margins (AC1 106±2, AC2 97±2, AC3 top-20 92.3% ≥40, AC4 top-10 56.9% ≥55, AC5 sanity). The P6-era death (S22.1 `quota_vs_potential` NaN-dimension + S22.2 two-bound tier-share oscillation) **did not recur** — the drafter expressed the story in a buildable form this run. |
+| 21 | escalated | 0 (preflight) | 2/2, both `rework_criteria` | **S21.2 [SOLVER BUG — deterministic]:** `_autocalibrate_concentration` (`preflight.py:1104`) raises `deal_size_lognormal.sigma` to reach a top-N open-pipeline-share target but **does not clamp to the config domain `(0, 4.0]`** (`config.py:143`): its probe loop breaks with `hi > 4.0` and sets `found = hi` anyway, so `sigma` lands at 4.22–4.43 → invalid config → `[PF0] sigma must be in (0, 4.0]` → corrective re-draft repeats the identical over-raise → `HARD findings did not shrink` → early escalate. Repeats verbatim across all 3 attempts and both rework rounds. Two sub-defects: the intended "could not reach … escalating as-is" branch (`found is None`, line 1150) is **dead code** (the `or hi > 4.0` break always sets `found`), and the solver targets `need * 1.08`, which can escape the domain even when the plain target is reachable. The judge reasoned correctly (collapsed redundant concentration checks, caught the forecast-attainment ceiling) but has no engine-envelope knowledge, so every re-expression still needed sigma > 4.0. |
+| 25 | escalated | 0 (Gate 1) | none — loop not engaged | **S25.4 [CRITERIA CONSISTENCY, un-routed]:** drafter produced three `revenue_vs_plan` criteria at **101±2, 90±2, 95±3 on the same coordinate** (`segment=_all_`, `dimension=None`) — jointly unsatisfiable. The Gate-1 consistency lint caught it, one corrective re-draft ran (critic accepted), the lint still found the conflict → `criteria_consistency` escalate. The P7 rework loop **does not cover this escalation kind**, so `rework.rounds` is null and the death is terminal. Root: segment-specific claims ("core ran at ~90% of plan") were drafted unscoped onto the `_all_` coordinate. |
+
+**Revised holdout tally (21–25, current build):** 22, 23, 24 LANDED; 21, 25
+escalated. (23/24 per addendum 1, 22 here.) Two clean landings (22, 24) and
+one reworked (23); 22/24 land on a single iteration.
+
+**Why the loop didn't save 21/25 (the two distinct structural reasons):**
+1. **21 — deterministic solver emits an invalid artifact.** The rework loop
+   re-drafts criteria, but the *calibrator* re-runs the same broken solve each
+   time; no LLM judgment can fix a solver that produces out-of-domain config.
+   The fix belongs in the solver (clamp + emit a real feasibility ceiling),
+   not the judge.
+2. **25 — escalation kind outside the loop.** `criteria_consistency` fires at
+   Gate 1, before delivery, and isn't a `preflight_persist`/convergence/delivery
+   kind the judge routes on. The consistency lint is terminal after one
+   corrective re-draft.
+
+**New surfaces queued (P8):** S21.2 (solver domain clamp + feasibility-ceiling
+finding for concentration; generalize the F19.3/S24.2/S25.2 ceiling family to
+open-pipeline value concentration); S25.4 (route `criteria_consistency` into
+the bounded rework loop, and/or a deterministic coordinate-scoping lint for
+segment-specific claims drafted onto `_all_`). **S21.1** (structure-gate
+column-order contract bug) remains latent — scenario 21 now dies earlier in
+preflight, so the order-only false-negative still hasn't been re-exercised;
+still worth fixing (it is the only class that kills a genuinely-landed flight).

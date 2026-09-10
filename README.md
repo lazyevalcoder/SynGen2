@@ -15,6 +15,7 @@ for a claim-preserving re-draft instead of dying.
 | [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) | Plain-English tour of the journey (start here) |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestones, status, deferred work |
 | [`docs/DOMAIN_PACKS.md`](docs/DOMAIN_PACKS.md) | Engineering history P0–P7 (authoritative phase record) |
+| [`docs/REALIZABILITY.md`](docs/REALIZABILITY.md) | P8: acceptance is a guarantee — envelope, anti-vacuity, loop coverage |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design doctrine: phases over artifacts, deterministic floor |
 | [`docs/AGENT_ROLES.md`](docs/AGENT_ROLES.md) | "Is intelligence actually needed here?" — where LLM vs deterministic |
 | [`docs/ENTITY_SCHEMA.md`](docs/ENTITY_SCHEMA.md) | Data-model schema spec (mirrored by `packs/revops/entities/`) |

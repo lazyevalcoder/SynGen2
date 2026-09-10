@@ -79,6 +79,52 @@ def _target_band(criterion):
     return float(target), float(p.get(fields[1], 0.0))
 
 
+def _degenerate_findings(criteria_doc):
+    """P8 S25.3: thresholds that cannot fail (vacuous criteria).
+
+    A bound that excludes nothing lets a flight "pass" without proving the
+    story (cert s25 accepted a $1B average-price cap and a min_gap_pp=0
+    end-of-quarter check - both passed trivially every iteration). These are
+    config-independent: a degenerate bound is a drafting bug regardless of
+    the data model.
+    """
+    findings = []
+    for c in criteria_doc.get("criteria", []):
+        p = c.get("params", {})
+        check, cid = c.get("check"), c.get("id")
+        if check == "end_of_quarter_effect":
+            g = p.get("min_gap_pp")
+            if g is not None and float(g) <= 0:
+                findings.append(
+                    f"{cid}: end_of_quarter_effect min_gap_pp={g} requires no "
+                    "gap - any data passes (vacuous); set a positive minimum.")
+        if check in ("pipeline_concentration", "revenue_concentration"):
+            s = p.get("min_top_share_pct")
+            if s is not None and float(s) <= 0:
+                findings.append(
+                    f"{cid}: {check} min_top_share_pct={s} requires no "
+                    "concentration - any data passes (vacuous).")
+        if check == "avg_price_by_tier":
+            cap = p.get("max_avg_realized_usd")
+            if cap is not None and float(cap) >= 1e9:
+                findings.append(
+                    f"{cid}: avg_price_by_tier max_avg_realized_usd="
+                    f"{float(cap):,.0f} is effectively unbounded on a RevOps "
+                    "dataset (vacuous); set a cap the metric can approach.")
+        if check == "core_vs_headline_growth":
+            h = p.get("min_headline_growth_pct")
+            mc = p.get("max_core_growth_pct")
+            if mc is not None and float(mc) >= 100:
+                findings.append(
+                    f"{cid}: core_vs_headline_growth max_core_growth_pct={mc} "
+                    "allows any core growth (vacuous).")
+            if h is not None and float(h) <= -100:
+                findings.append(
+                    f"{cid}: core_vs_headline_growth "
+                    f"min_headline_growth_pct={h} requires nothing (vacuous).")
+    return findings
+
+
 def lint_criteria_internal(criteria_doc):
     """Config-independent consistency findings (Gate 1, WP2).
 
@@ -87,7 +133,7 @@ def lint_criteria_internal(criteria_doc):
     """
     groups = {}
     notes = []
-    hard = []
+    hard = list(_degenerate_findings(criteria_doc))
     known = set(_pack().checks)
     for c in criteria_doc.get("criteria", []):
         if c["check"] not in known:
@@ -174,11 +220,17 @@ def unit_spaces(cfg):
     return spaces
 
 
-def cross_lint(cfg, criteria_doc):
+def cross_lint(cfg, criteria_doc, feasibility=True):
     """Criteria x config geometry findings (WP3).
 
     Runs AFTER calibration/synthesis so synthesized blocks count. Returns
     HARD findings; empty = every coordinate lands inside the model.
+
+    `feasibility=False` limits the check to coordinate geometry (which does
+    not need synthesized blocks). P8 calls it in that mode BEFORE
+    calibration, so a criterion referencing a non-existent unit (a pseudo-
+    cohort like `segment: core_ex_whales`) is re-drafted as criteria rather
+    than dead-looping preflight's referential gate re-drafting the config.
     """
     spaces = unit_spaces(cfg)
     sigs = _pack().check_signatures.get("signatures", {})
@@ -215,6 +267,13 @@ def cross_lint(cfg, criteria_doc):
                         f"'{v}' is outside the data model (legal "
                         f"{space_name}: {sorted(space)[:8]})")
     findings.extend(_feasibility_findings(cfg, criteria_doc))
+    if feasibility:
+        # P8: growth feasibility does not depend on the quota/products
+        # blocks, so call it directly (those branches early-return).
+        # Concentration is NOT gated here: its lever (outlier multiplier) is
+        # unbounded, so a sigma-only "ceiling" would false-kill reachable
+        # targets (cert s21).
+        findings.extend(_growth_feasibility(cfg, criteria_doc))
     return findings
 
 
@@ -298,6 +357,31 @@ def _feasibility_findings(cfg, criteria_doc):
                 "tier (plan totals are plan-of-record). Lower the plan "
                 "curves, raise the cap, or raise this tier's volume share.")
     findings.extend(_tier_share_feasibility(cfg, criteria_doc, mult, shares))
+    return findings
+
+
+def _growth_feasibility(cfg, criteria_doc):
+    """P8 S25.1: headline growth reachability under raking.
+
+    Closed-won revenue is raked to plan x attainment, so headline growth is
+    pinned by the plan curves - a `min_headline_growth_pct` above that is
+    arithmetically unreachable (cert s25 drafted +101% on a flat plan).
+    """
+    from syngen.packs.revops.envelope import headline_growth_ceiling
+    ceiling = headline_growth_ceiling(cfg)
+    findings = []
+    for c in criteria_doc.get("criteria", []):
+        if c["check"] != "core_vs_headline_growth":
+            continue
+        need = c.get("params", {}).get("min_headline_growth_pct")
+        if need is None:
+            continue
+        if float(need) > ceiling + 1e-9:
+            findings.append(
+                f"{c['id']}: min_headline_growth_pct {float(need):g}% is "
+                f"unreachable - revenue is raked to plan, so headline growth "
+                f"tops out near {ceiling:.1f}%. Lower the target or drop the "
+                "criterion.")
     return findings
 
 

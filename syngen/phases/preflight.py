@@ -34,6 +34,18 @@ TIER_CHECKS = {"tier_share_shift", "discount_margin_link",
                "avg_price_by_tier", "blended_margin_trend"}
 QUARTER_LEVEL_CHECKS = {"avg_discount_quarter", "realized_vs_list"}
 
+
+def _num(value, default):
+    """Null-safe numeric default.
+
+    LLM drafts routinely emit `"param": null` for optional fields; a plain
+    `.get(key, default)` returns None in that case and `int(None)` crashes
+    the solver (P8 solver-discipline audit: cert s21 crashed in
+    `_autocalibrate_coverage` on `target_quarter_offset: null`). Treat an
+    explicit null as absent.
+    """
+    return default if value is None else value
+
 # M5 iter 5: criteria -> optional config blocks they structurally require.
 _BLOCK_REQUIREMENTS = {
     "effective_capacity": lambda c: bool(c.get("capacity")),
@@ -304,7 +316,7 @@ def calibrate(cfg, criteria_doc):
             if q in label_set and disc_curve:
                 qi = labels.index(q)
                 pred = disc_curve[qi]
-                want = float(params.get("target_pct", 0))
+                want = float(_num(params.get("target_pct"), 0))
                 off = abs(pred - want)
                 if off > 1.5:
                     add("PF2", "SOFT", cid,
@@ -333,8 +345,8 @@ def calibrate(cfg, criteria_doc):
                 "volume_multipliers: raking pins totals so average size "
                 "cannot move - expect this criterion to fight the plan")
         if check == "tier_share_shift" and has_products:
-            moves = float(params.get("from_share_pct", 0)) != \
-                float(params.get("to_share_pct", 0))
+            moves = float(_num(params.get("from_share_pct"), 0)) != \
+                float(_num(params.get("to_share_pct"), 0))
             all_static = all(not isinstance(p.get("share"), dict)
                              for p in cfg["products"]["catalog"])
             if moves and all_static:
@@ -461,7 +473,7 @@ def _autocalibrate_elasticity(cfg, criteria_doc, labels, fixes):
     # (same pattern as the core_vs_headline deal-count floor).
     opps["per_quarter"] = max(int(opps.get("per_quarter", 0)), 3000)
     for c in crits:
-        gap = float(c.get("params", {}).get("min_gap_pp", 5))
+        gap = float(_num(c.get("params", {}).get("min_gap_pp"), 5))
         block = dict(cfg.get("pricing_response") or {})
         elas = abs(float(block.get("elasticity", -3.0))) or 3.0
         mit = float(block.get("potential_mitigation", 0.85)) or 0.85
@@ -603,7 +615,7 @@ def _autocalibrate_planning(cfg, criteria_doc, fixes):
         p = c.get("params", {})
         if c["check"] == "revenue_vs_plan":
             seg = p.get("segment")
-            want = float(p.get("target_pct", 100.0)) / 100.0
+            want = float(_num(p.get("target_pct"), 100.0)) / 100.0
             if seg == "_all_":
                 all_target = want
             else:
@@ -676,7 +688,7 @@ def _autocalibrate_margin(cfg, criteria_doc, labels, fixes):
             continue
         params = c.get("params", {})
         want = float(params["target_change_pct"])
-        tol = float(params.get("tolerance_pp", 2.0))
+        tol = float(_num(params.get("tolerance_pp"), 2.0))
 
         def cost_mass(qi, k):
             shares = _tier_revenue_shares_at(cfg, qi)
@@ -857,7 +869,7 @@ def _coverage_constraints(cfg, criteria_doc):
         q = p.get("quarter")
         if q not in labels:
             continue
-        k = labels.index(q) + int(p.get("target_quarter_offset", 0))
+        k = labels.index(q) + int(_num(p.get("target_quarter_offset"), 0))
         if 0 <= k < len(labels):
             out[k] = max(out.get(k, 0.0), float(p["min_multiple"]))
     return out
@@ -878,8 +890,8 @@ def _pipeline_joint_solve(cfg, aging_c, cov, fixes):
     its prefix as possible, fresh last quarter tops up), then lower
     win_rate (unmeasured by any check), then shorten durations."""
     p = aging_c.get("params", {})
-    cap = float(p.get("max_stale_share_pct", 35)) / 100.0
-    thr = float(p.get("stale_threshold_days", 120))
+    cap = float(_num(p.get("max_stale_share_pct"), 35)) / 100.0
+    thr = float(_num(p.get("stale_threshold_days"), 120))
     cid = aging_c["id"]
     o = cfg["opportunities"]
     n = len(cfg["time_model"]["quarter_end_dates"])
@@ -1020,7 +1032,7 @@ def _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes):
         if c["check"] != "slippage_trend":
             continue
         p = c.get("params", {})
-        need = float(p.get("min_increase_pp", 5))
+        need = float(_num(p.get("min_increase_pp"), 5))
         rates = [float(v) for v in pipe["slippage_rate_by_quarter"]]
         n_qt = len(rates)
         if n_qt < 2:
@@ -1050,8 +1062,8 @@ def _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes):
         return
     c = aging_list[0]
     p = c.get("params", {})
-    cap = float(p.get("max_stale_share_pct", 35)) / 100.0
-    thr = float(p.get("stale_threshold_days", 120))
+    cap = float(_num(p.get("max_stale_share_pct"), 35)) / 100.0
+    thr = float(_num(p.get("stale_threshold_days"), 120))
     shares = [float(v) for v in pipe["share_open_by_quarter"]]
     if len(shares) < 2:
         return
@@ -1103,68 +1115,86 @@ def _autocalibrate_pipeline(cfg, criteria_doc, labels, fixes):
 
 def _autocalibrate_concentration(cfg, criteria_doc, fixes):
     """pipeline_concentration (top-N accounts' share of open-pipeline
-    VALUE): the engine draws deal sizes iid lognormal, so value
-    concentrates in few accounts only via the SIZE TAIL. Solve sigma by
-    seeded Monte-Carlo order statistics - deterministic in the config,
-    no LLM involved. Raking keeps closed-won revenue on plan, so a
-    fatter tail does not disturb plan/attainment criteria."""
+    VALUE): the engine concentrates value via the deal-size tail (sigma)
+    AND the unbounded outlier multiplier. Solve with both levers,
+    deterministically, no LLM involved.
+
+    P8 S21.2: sigma is hard-bounded at 4.0 (config.py), so this solver must
+    solve WITHIN that domain and then fall back to the outlier lever (which
+    has no upper bound) instead of writing an out-of-domain sigma and
+    dead-looping the corrective re-drafts. Raking keeps closed-won revenue
+    on plan, so a fatter tail does not disturb plan/attainment criteria.
+    """
+    from syngen.packs.revops.envelope import (
+        SIGMA_CAP, n_open_deals, pipeline_top_share)
     if not cfg.get("pipeline"):
+        return
+    if n_open_deals(cfg) < 10 or int(cfg["accounts"].get("count", 0) or 0) < 10:
         return
     o = cfg["opportunities"]
     dl = o["deal_size_lognormal"]
-    n_acc = int(cfg["accounts"]["count"])
-    labels = cfg["time_model"]["quarter_labels"]
-    mults = o.get("volume_multipliers") or [1.0] * len(labels)
-    shares = [float(v) for v in cfg["pipeline"]["share_open_by_quarter"]]
-    n_open = int(sum(o["per_quarter"] * mults[qi]
-                     * (shares[qi] if qi < len(shares) else 0.0)
-                     for qi in range(len(labels))))
-    if n_open < 10 or n_acc < 10:
-        return
-
-    def top_share(sigma, topn):
-        rng = np.random.default_rng([20260824, 11])
-        vals = rng.lognormal(0.0, float(sigma), n_open)
-        acc = rng.integers(0, n_acc, n_open)
-        tot = np.zeros(n_acc)
-        np.add.at(tot, acc, vals)
-        return float(np.sort(tot)[::-1][:int(topn)].sum() / tot.sum())
-
     for c in criteria_doc["criteria"]:
         if c["check"] != "pipeline_concentration":
             continue
         p = c.get("params", {})
-        need = float(p.get("min_top_share_pct", 50)) / 100.0
-        topn = int(p.get("top_n_accounts", 5))
+        need = float(_num(p.get("min_top_share_pct"), 50)) / 100.0
+        topn = int(_num(p.get("top_n_accounts"), 5))
+        aim = need * 1.02
         cur_sigma = float(dl["sigma"])
-        cur = top_share(cur_sigma, topn)
-        if cur >= need * 1.08:
-            continue  # comfortable margin already
-        hi = cur_sigma
-        found = None
-        for _ in range(14):
-            hi *= 1.3
-            if top_share(hi, topn) >= need * 1.08 or hi > 4.0:
-                found = hi
-                break
-        if found is None:
-            fixes.append(f"{c['id']}: could not reach {need * 100:.0f}% "
-                         "top-account concentration even with a fat "
-                         "deal-size tail - escalating as-is")
+        cur = pipeline_top_share(cfg, cur_sigma, topn)
+        if cur is not None and cur >= aim:
             continue
-        lo = cur_sigma
-        for _ in range(30):
-            mid = (lo + hi) / 2.0
-            if top_share(mid, topn) >= need * 1.08:
-                hi = mid
-            else:
-                lo = mid
-        dl["sigma"] = round(hi, 3)
-        got = top_share(dl["sigma"], topn)
-        fixes.append(f"{c['id']}: raised deal_size sigma "
-                     f"{cur_sigma:.2f}->{dl['sigma']:.2f} -> predicted "
-                     f"top-5 open-pipeline share {got * 100:.0f}% "
-                     f"(>= {need * 100:.0f}%)")
+
+        # Lever 1: raise the deal-size tail, within the sigma domain cap.
+        ceiling = pipeline_top_share(cfg, SIGMA_CAP, topn)
+        if ceiling is not None and ceiling >= aim:
+            lo, hi = cur_sigma, SIGMA_CAP
+            for _ in range(40):
+                mid = (lo + hi) / 2.0
+                got = pipeline_top_share(cfg, mid, topn)
+                if got is not None and got >= aim:
+                    hi = mid
+                else:
+                    lo = mid
+            dl["sigma"] = round(min(hi, SIGMA_CAP), 3)
+            got = pipeline_top_share(cfg, dl["sigma"], topn)
+            fixes.append(
+                f"{c['id']}: raised deal_size sigma {cur_sigma:.2f}->"
+                f"{dl['sigma']:.2f} -> predicted top-{topn} open-pipeline "
+                f"share {got * 100:.0f}% (>= {need * 100:.0f}%)")
+            continue
+
+        # Lever 2: the outlier multiplier is unbounded (config only requires
+        # > 1), so it can always reach the target when sigma alone cannot.
+        out = o.setdefault("outlier_deals", {})
+        if not out.get("share_by_quarter") and out.get("share") is None:
+            out["share_by_quarter"] = [0.05] * len(
+                cfg["time_model"]["quarter_labels"])
+        base_m = float(out.get("multiplier", 1.0) or 1.0)
+        m = max(2.0, base_m)
+        reached = None
+        for _ in range(60):
+            got = pipeline_top_share(cfg, float(dl["sigma"]), topn,
+                                     outlier_mult=m)
+            if got is not None and got >= aim:
+                reached = m
+                break
+            m *= 1.4
+            if m > 1e7:
+                break
+        if reached is None:
+            fixes.append(
+                f"{c['id']}: could not reach {need * 100:.0f}% top-{topn} "
+                "open-pipeline concentration even with a very large outlier "
+                "multiplier - re-express the criterion")
+            continue
+        out["multiplier"] = round(reached, 3)
+        got = pipeline_top_share(cfg, float(dl["sigma"]), topn,
+                                 outlier_mult=reached)
+        fixes.append(
+            f"{c['id']}: raised outlier multiplier {base_m:.2f}->"
+            f"{reached:.2f} -> predicted top-{topn} open-pipeline share "
+            f"{got * 100:.0f}% (>= {need * 100:.0f}%)")
 
 
 def _autocalibrate_coverage(cfg, criteria_doc, fixes):
@@ -1210,7 +1240,7 @@ def _autocalibrate_coverage(cfg, criteria_doc, fixes):
         need_default = m if need_default is None else min(need_default, m)
         if q not in labels:
             continue
-        k = labels.index(q) + int(p.get("target_quarter_offset", 0))
+        k = labels.index(q) + int(_num(p.get("target_quarter_offset"), 0))
         if not (0 <= k < len(v_cum)):
             continue
         caps[k] = min(caps.get(k, float("inf")), v_cum[k] / (m * 1.12))
@@ -1259,7 +1289,7 @@ def _autocalibrate_blocks(cfg, criteria_doc, labels, fixes):
             k in checks for k in ("unowned_account_share",
                                   "post_change_revenue_decline")):
         p = checks.get("unowned_account_share", {})
-        end = min(0.45, float(p.get("min_unowned_share_pct", 25)) / 100.0
+        end = min(0.45, float(_num(p.get("min_unowned_share_pct"), 25)) / 100.0
                   + 0.08)
         start = max(0.02, end / 4)
         curve = [round(start + (end - start) * qi / max(1, n_q - 1), 3)
@@ -1294,7 +1324,7 @@ def _autocalibrate_blocks(cfg, criteria_doc, labels, fixes):
             "forecast_vs_actual" in checks
             or "commit_no_engagement_share" in checks):
         p = checks.get("forecast_vs_actual", {})
-        ratio = round(float(p.get("target_pct", 109)) / 100.0, 3)
+        ratio = round(float(_num(p.get("target_pct"), 109)) / 100.0, 3)
         cfg["forecast"] = {
             "commit_ratio_by_quarter": [ratio] * n_q,
             "commit_share_of_won_by_quarter": [0.35] * n_q,
@@ -1348,8 +1378,8 @@ def _autocalibrate_blocks(cfg, criteria_doc, labels, fixes):
 
     if "core_vs_headline_growth" in checks:
         p = checks["core_vs_headline_growth"]
-        need_h = float(p.get("min_headline_growth_pct", 5))
-        cap_c = float(p.get("max_core_growth_pct", 0))
+        need_h = float(_num(p.get("min_headline_growth_pct"), 5))
+        cap_c = float(_num(p.get("max_core_growth_pct"), 0))
         o = cfg["opportunities"]
         # Engine-measured recipe (iter 5 calibration, 5-seed verified):
         # - CORE won-revenue tracks deal_size medians_by_quarter ~1:1
@@ -1410,8 +1440,8 @@ def _autocalibrate_capacity(cfg, criteria_doc, labels, fixes):
     units_map = cap_block.setdefault(key, {})
     for c in caps_needed:
         p = c.get("params", {})
-        target = float(p.get("target_pct", 100.0))
-        band = float(p.get("band_pp", 3.0))
+        target = float(_num(p.get("target_pct"), 100.0))
+        band = float(_num(p.get("band_pp"), 3.0))
         unit = p.get("unit")
         # P5 WP4 (F11.1/F18.1): a named unit MUST exist in the capacity
         # block. Never silently fall back to all-units and report success
@@ -1496,7 +1526,7 @@ def _autocalibrate_pass(cfg, criteria_doc, labels, dspec, eoq, boost, rw,
             region = params.get("region")
             vs = params.get("vs") or []
             quarters = params.get("quarters") or labels
-            need = float(params.get("min_premium_pp", 0)) + 1.0  # +margin
+            need = float(_num(params.get("min_premium_pp"), 0)) + 1.0  # +margin
             for q in quarters:
                 if q not in labels:
                     continue

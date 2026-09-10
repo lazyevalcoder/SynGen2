@@ -30,7 +30,9 @@ from syngen.phases.intake import (
     enforce_coverage,
     precheck_claims,
 )
-from syngen.phases.rework import judge_revision, make_evidence, redraft_criteria
+from syngen.phases.rework import (judge_revision, make_evidence,
+                                  recover_criteria_consistency,
+                                  redraft_criteria)
 from syngen.phases.spec import draft_simulator, persona_critique
 from syngen.session import Session
 from syngen.utils import set_at_path
@@ -476,6 +478,45 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
             "thin_margins": summary["thin_margins"]}
 
 
+def _geometry_corrective(session, client, story, doc, claims, decisions_text,
+                         sim_cfg, log, feasibility=True):
+    """P5 WP3 / P6 P1.3 / P8: one bounded corrective criteria re-draft for
+    coordinate-geometry findings. Returns (doc, escalated_result_or_None)."""
+    geo_findings = cross_lint(sim_cfg, doc, feasibility=feasibility)
+    if not geo_findings:
+        return doc, None
+    session.log("CRITERIA GEOMETRY LINT:\n" + render_lint(geo_findings))
+    log("Criteria coordinates fall outside the drafted data model - "
+        "one corrective re-draft.")
+    geo_brief = ("CRITERIA GEOMETRY FINDINGS - fix ALL of these. "
+                 "Reference only coordinates/units that exist in the "
+                 "drafted data model, or re-express subset claims as a "
+                 "spread/min-spread criterion or per-unit scoping "
+                 "(a cohort pseudo-unit like 'top territories' cannot "
+                 "be built):\n" + render_lint(geo_findings))
+    doc = draft_criteria(client, story, decisions_text + "\n\n" + geo_brief)
+    doc, cov_status2 = enforce_coverage(
+        client, story, doc, claims, decisions_text=decisions_text, log_fn=log)
+    lint_hard, _ = lint_criteria_internal(doc)
+    geo_findings = cross_lint(sim_cfg, doc, feasibility=feasibility)
+    if cov_status2 == "uncovered" or lint_hard or geo_findings:
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+        session.log("ESCALATED: criteria_geometry - criteria reference "
+                    "coordinates outside the data model even after a "
+                    "corrective re-draft.")
+        log("\nNEEDS YOUR ATTENTION: criteria reference coordinates "
+            "that do not exist in the drafted config, even after a "
+            "corrective re-draft (see session log). criteria.json "
+            "persisted for inspection.")
+        evidence = make_evidence("geometry_persist", "criteria_geometry",
+                                 doc, detail="; ".join(geo_findings)[:500])
+        return doc, {"status": "escalated", "reason": "criteria_geometry",
+                     "session": str(session.root), "evidence": evidence}
+    session.log("CRITERIA GEOMETRY: corrective re-draft accepted.")
+    session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+    return doc, None
+
+
 def _delivery_attempt(session, client, io, story, doc, claims,
                       decisions_text, spec_notes, log, max_iterations,
                       max_llm_proposals, use_critic, guidance=""):
@@ -525,6 +566,16 @@ def _delivery_attempt(session, client, io, story, doc, claims,
     if sim_cfg is None:
         return {"status": "manual_edit", "session": str(session.root)}, doc, None
 
+    # --- Criteria x config COORDINATE geometry (P8): run BEFORE calibration
+    # so a criterion referencing a non-existent unit (e.g. a pseudo-cohort
+    # like `segment: core_ex_whales`) is re-drafted as CRITERIA instead of
+    # dead-looping preflight's referential gate on config re-drafts.
+    doc, esc = _geometry_corrective(
+        session, client, story, doc, claims, decisions_text, sim_cfg, log,
+        feasibility=False)
+    if esc is not None:
+        return esc, doc, esc.get("evidence")
+
     # --- Pre-flight calibration gate (F17) ---
     sim_cfg, status = calibrate_gate(client, io, story, crit_summary,
                                      sim_notes, doc, sim_cfg, session, log)
@@ -536,44 +587,13 @@ def _delivery_attempt(session, client, io, story, doc, claims,
         return {"status": "escalated", "reason": "preflight_calibration",
                 "session": str(session.root), "evidence": evidence}, doc, evidence
 
-    # --- Criteria x config geometry lint (P5 WP3): coordinates must land
-    # inside the drafted/synthesized data model before the loop starts.
-    # P6 P1.3: one bounded corrective criteria re-draft before escalating.
-    geo_findings = cross_lint(sim_cfg, doc)
-    if geo_findings:
-        session.log("CRITERIA GEOMETRY LINT:\n" + render_lint(geo_findings))
-        log("Criteria coordinates fall outside the drafted data model - "
-            "one corrective re-draft.")
-        geo_brief = ("CRITERIA GEOMETRY FINDINGS - fix ALL of these. "
-                     "Reference only coordinates/units that exist in the "
-                     "drafted data model, or re-express subset claims as a "
-                     "spread/min-spread criterion or per-unit scoping "
-                     "(a cohort pseudo-unit like 'top territories' cannot "
-                     "be built):\n" + render_lint(geo_findings))
-        doc = draft_criteria(client, story, decisions_text + "\n\n"
-                             + geo_brief)
-        doc, cov_status2 = enforce_coverage(
-            client, story, doc, claims, decisions_text=decisions_text,
-            log_fn=log)
-        lint_hard, _ = lint_criteria_internal(doc)
-        geo_findings = cross_lint(sim_cfg, doc)
-        if cov_status2 == "uncovered" or lint_hard or geo_findings:
-            session.write_artifact("criteria.json", json.dumps(doc, indent=2))
-            session.log("ESCALATED: criteria_geometry - criteria reference "
-                        "coordinates outside the data model even after a "
-                        "corrective re-draft.")
-            log("\nNEEDS YOUR ATTENTION: criteria reference coordinates "
-                "that do not exist in the drafted config, even after a "
-                "corrective re-draft (see session log). criteria.json "
-                "persisted for inspection.")
-            evidence = make_evidence("geometry_persist", "criteria_geometry",
-                                     doc,
-                                     detail="; ".join(geo_findings)[:500])
-            return {"status": "escalated", "reason": "criteria_geometry",
-                    "session": str(session.root),
-                    "evidence": evidence}, doc, evidence
-        session.log("CRITERIA GEOMETRY: corrective re-draft accepted.")
-        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+    # --- Criteria x config geometry + feasibility (P5 WP3): coordinates must
+    # land inside the drafted/synthesized data model before the loop starts.
+    doc, esc = _geometry_corrective(
+        session, client, story, doc, claims, decisions_text, sim_cfg, log,
+        feasibility=True)
+    if esc is not None:
+        return esc, doc, esc.get("evidence")
 
     result = _converge_and_deliver(session, client, io, doc,
                                    session.root / "simulator.json", log,
@@ -746,7 +766,32 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
             client, story, doc, claims, decisions_text=decisions_text,
             log_fn=log)
         lint_hard, _ = lint_criteria_internal(doc)
-        if cov_status2 == "uncovered" or lint_hard:
+        if cov_status2 == "uncovered":
+            session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+            session.log("ESCALATED: criteria_consistency - conflicting "
+                        "criteria persisted past a corrective re-draft.")
+            log("\nNEEDS YOUR ATTENTION: criteria are jointly "
+                "unsatisfiable even after a corrective re-draft. See "
+                "criteria.json.")
+            return {"status": "escalated", "reason": "criteria_consistency",
+                    "session": str(session.root)}
+        # P8 S25.4: the lint used to be terminal after one re-draft, so a
+        # conflicting set died at Gate 1 before the delivery-stage rework
+        # loop could see it. Route it through the same bounded judge loop.
+        if lint_hard and max_rework_rounds > 0:
+            log("Criterion consistency still violated - routing through the "
+                "bounded rework judge (P8).")
+            doc, ok, g1_directives = recover_criteria_consistency(
+                client, story, doc, claims, decisions_text, lint_hard,
+                max_rework_rounds, log_fn=log)
+            session.log("GATE-1 REWORK: " + json.dumps(g1_directives, indent=1))
+            if ok:
+                session.log("CRITERION CONSISTENCY: recovered by rework judge "
+                            f"after {len(g1_directives)} round(s).")
+                session.write_artifact("criteria.json",
+                                       json.dumps(doc, indent=2))
+                lint_hard = []
+        if lint_hard:
             session.write_artifact("criteria.json", json.dumps(doc, indent=2))
             session.log("ESCALATED: criteria_consistency - conflicting "
                         "criteria persisted past a corrective re-draft.")

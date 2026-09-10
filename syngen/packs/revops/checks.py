@@ -758,6 +758,20 @@ def check_quota_vs_potential(opp, accounts, params):
     target_ratio = float(params["target_ratio_pct"])
     band = float(params["band_pp"])
 
+    # P8 S22.1: a plan unit with no account potential is a data-model
+    # mismatch (dimension <-> plan-unit <-> column incoherence), not a
+    # knob-reachable miss. Mark it STRUCTURAL so the tuning loop does not
+    # burn its whole budget chasing an infinite margin (cert s22).
+    nan_units = [k for k, v in ratios.items() if v != v]
+    if nan_units:
+        r = _result(False, f"{len(nan_units)} unit(s) with no potential",
+                    f"{target_ratio:g}% +/-{band:g}pp",
+                    f"plan unit(s) {sorted(nan_units)} are absent from the "
+                    f"accounts dimension '{dim}' - the criterion's dimension "
+                    "and the plan geometry disagree", -1.0)
+        r["structural"] = True
+        return r
+
     def _dev(v):
         return abs(v - target_ratio) if v == v else float("inf")
 

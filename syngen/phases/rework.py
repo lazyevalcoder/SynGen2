@@ -124,3 +124,40 @@ def redraft_criteria(client, story, doc, claims, decisions_text, guidance,
 def computable_claim_lines(claims):
     return [c.get("claim") for c in (claims or {}).get("claims", [])
             if c.get("classification") == "COMPUTABLE"]
+
+
+def recover_criteria_consistency(client, story, doc, claims, decisions_text,
+                                 findings, max_rounds, log_fn=print):
+    """Gate-1 consistency recovery (P8 S25.4).
+
+    The consistency lint is terminal after ONE corrective re-draft, so a
+    conflicting set the drafter keeps producing dies at Gate 1 - before the
+    delivery stage's rework loop can ever see it. Route it through the same
+    bounded, claim-preserving judge loop. Returns (doc, ok, directives).
+    """
+    directives = []
+    cur = doc
+    cur_findings = list(findings)
+    for rnd in range(max_rounds):
+        evidence = make_evidence(
+            "criteria_consistency",
+            "conflicting criteria persisted past a corrective re-draft", cur,
+            detail="; ".join(cur_findings)[:800])
+        verdict = judge_revision(client, story, evidence, cur, rnd + 1,
+                                 log_fn=log_fn)
+        directives.append({
+            "round": rnd + 1, "kind": "criteria_consistency",
+            "action": verdict["action"], "scope": verdict["scope"],
+            "reason": verdict["reason"], "guidance": verdict["guidance"]})
+        if verdict["action"] != "rework_criteria":
+            break
+        new_doc, ok = redraft_criteria(client, story, cur, claims,
+                                       decisions_text, verdict["guidance"],
+                                       log_fn=log_fn)
+        if not ok:
+            break
+        cur = new_doc
+        cur_findings, _ = lint_criteria_internal(cur)
+        if not cur_findings:
+            return cur, True, directives
+    return cur, False, directives

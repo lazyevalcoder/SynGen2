@@ -5,6 +5,8 @@
 > **V1 completion bar:** v1 is not "done" at M5 â€” it is done when all 25 narratives in `docs/archive/docs/archive/V1_SCENARIO_REQUIREMENTS.md` (archived; the stories live in `uat/`) land end-to-end. M4/M5 below are the vehicle; the scenario doc is the requirements list and sequencing guide (its workstreams WS1â€“WS8 slot into M4/M5 as sized).
 
 > **As of 2026-09-09:** P6 (realizability gate + missing surfaces) and P7 (flexible stage-rework loop) are merged to master (see `DOMAIN_PACKS.md` P6/P7 rows). The landing-set preservation re-fly ran 5/5 LANDED (05/09/11/13/14; one latent `ConfigError` import bug caught and fixed on scenario_11). Repo cleanup: pre-build planning/retro docs moved to `docs/archive/`, prototype experiments to `experiments/archive/`, per-flight raw report dumps untracked â€” the distilled record is `experiments/fly_benchmark/findings_v4.md`.
+>
+> **As of 2026-09-10:** P8 (realizability guarantee) is implemented on branch `fix/realizability-p8` — acceptance is a guarantee, not a hope: an outlier-faithful engine envelope (`syngen/packs/revops/envelope.py`) with a true headline-growth ceiling, the concentration solver solves within its domain and uses the unbounded outlier lever instead of writing invalid configs, vacuous thresholds are rejected at Gate 1, NaN coordinates are structural, Gate-1 consistency conflicts route through the rework judge, coordinate-geometry now runs before calibration (so pseudo-units are re-drafted as criteria, not dead-looped), and the structure gate ignores column order. Suite 399 green. Design: `REALIZABILITY.md`. The full 25-story certification is the weekend run; targeted re-fly of scenarios 21/25 verifies the branch.
 
 ---
 

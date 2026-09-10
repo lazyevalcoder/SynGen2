@@ -262,9 +262,15 @@ def structure_findings(xl_file, cfg=None):
             continue
         if columns is not None:
             actual = list(pd.read_excel(xl_file, sheet_name=sheet).columns)
-            if actual != columns:
-                missing = [c for c in columns if c not in actual]
-                extra = [c for c in actual if c not in columns]
+            # P8 S21.1: column ORDER is not part of the contract - only
+            # presence. An order-only mismatch is a false negative that can
+            # kill a genuinely landed flight (cert scenario_21: 4/4 criteria
+            # passed, gate failed on [is_outlier, in_commit] vs
+            # [in_commit, is_outlier]). Compare as sets; still fail on any
+            # real missing/extra column.
+            missing = [c for c in columns if c not in actual]
+            extra = [c for c in actual if c not in columns]
+            if missing or extra:
                 findings.append(("S1", "FAIL",
                                  f"sheet '{sheet}' column mismatch; "
                                  f"missing={missing} unexpected={extra}"))
