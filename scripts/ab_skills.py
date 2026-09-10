@@ -81,6 +81,8 @@ def main():
                     help="also draft a config and run calibration + geometry "
                          "(catches unreachable/pseudo-unit classes)")
     ap.add_argument("--no-critic", action="store_true")
+    ap.add_argument("--arms", choices=("both", "skills", "no_skills"),
+                    default="both", help="run one arm or both")
     ap.add_argument("--llm-config", default=None)
     args = ap.parse_args()
 
@@ -89,6 +91,11 @@ def main():
         stories = stories[:args.limit]
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+    jsonl = out_dir / "ab_skills.jsonl"
+
+    arms = [("skills", True), ("no_skills", False)]
+    if args.arms != "both":
+        arms = [(a, a == "skills") for a in (args.arms,)]
 
     rows = {"skills": [], "no_skills": []}
     for folder in stories:
@@ -97,7 +104,7 @@ def main():
             continue
         story = story_file.read_text(encoding="utf-8")
         for run in range(args.runs):
-            for arm, use_skills in (("skills", True), ("no_skills", False)):
+            for arm, use_skills in arms:
                 client = LLMClient(load_llm_config(args.llm_config))
                 t0 = time.time()
                 res = probe_criteria(client, story, use_skills=use_skills,
@@ -106,13 +113,17 @@ def main():
                 res.update({"scenario": folder.name, "run": run + 1, "arm": arm,
                             "elapsed_s": round(time.time() - t0, 1)})
                 rows[arm].append(res)
+                # incremental, so a long run is observable and a kill loses
+                # at most the in-flight probe
+                with open(jsonl, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(res) + "\n")
                 extra = (" reachable="
                          + ("PASS" if res.get("reachable_pass") else "FAIL")
                          if "reachable_pass" in res else "")
                 print(f"{folder.name} run{run + 1} [{arm}]: "
                       f"gate1={'PASS' if res['gate1_pass'] else 'FAIL'}{extra} "
                       f"tokens={res['llm_usage'].get('total_tokens', 0)} "
-                      f"({res['elapsed_s']}s)")
+                      f"({res['elapsed_s']}s)", flush=True)
 
     summary = {arm: _arm_summary(rs) for arm, rs in rows.items()}
     (out_dir / "ab_skills.json").write_text(
