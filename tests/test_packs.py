@@ -283,6 +283,7 @@ def test_authoring_guide_renders_curated_and_generated_facts():
 
     guide = _pack_taxonomy().authoring_guide()
     assert "SCOPE ONLY REAL UNITS" in guide            # curated doctrine
+    assert "exclude_outlier_deals" in guide             # core-vs-headline form
     assert "revenue_vs_plan.segment" in guide           # generated scoping
     assert "forecast_vs_actual.target_pct" in guide     # generated direction
     assert "raking pins realized revenue" in guide      # pinned quantity

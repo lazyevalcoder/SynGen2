@@ -10,6 +10,12 @@ breaks them cannot be built and will be sent back or escalated.
    "top accounts"). Express subset claims with the checks' cohort/split
    params (e.g. exclude_outlier_deals, cohort top_pct/bottom_pct), or scope
    to a real unit. Use '_all_' where the check allows it.
+   To express a "core vs headline" split (the core business missed plan
+   while whales masked it), use revenue_vs_plan with
+   exclude_outlier_deals=true and segment '_all_' (and, if needed,
+   dimension for the plan sub-block). Do NOT pass dimension='ex_outliers' -
+   'ex_outliers' is not a plan dimension; the engine splits headline vs
+   core via exclude_outlier_deals.
 
 2. MATCH THE CLAIM'S DIRECTION.
    A "miss" is not a "beat"; a "decline" is not "growth"; a margin move is
