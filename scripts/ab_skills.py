@@ -34,6 +34,8 @@ def _make_logger(path):
 
 def _classify(res):
     """Bucket deterministic failures into the classes the guide targets."""
+    if res.get("error"):
+        return ["probe_error"]
     findings = (res.get("lint_hard") or []) + (res.get("geometry_findings") or [])
     low = " ".join(findings).lower()
     classes = []
@@ -118,9 +120,14 @@ def main():
                 client = LLMClient(load_llm_config(args.llm_config),
                                    log_fn=logger)
                 t0 = time.time()
-                res = probe_criteria(client, story, use_skills=use_skills,
-                                     use_critic=not args.no_critic,
-                                     with_config=args.with_config)
+                try:
+                    res = probe_criteria(client, story, use_skills=use_skills,
+                                         use_critic=not args.no_critic,
+                                         with_config=args.with_config)
+                except Exception as e:  # noqa: BLE001 - never kill the run
+                    res = {"gate1_pass": False,
+                           "error": f"{type(e).__name__}: {e}",
+                           "llm_usage": client.usage_totals()}
                 res.update({"scenario": folder.name, "run": run + 1, "arm": arm,
                             "elapsed_s": round(time.time() - t0, 1)})
                 rows[arm].append(res)
