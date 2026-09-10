@@ -45,7 +45,7 @@ DEFAULT_CONFIG = {
 def load_llm_config(path=None):
     if path is None:
         return dict(DEFAULT_CONFIG)
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         cfg = json.load(f)
     merged = dict(DEFAULT_CONFIG)
     merged.update(cfg)
