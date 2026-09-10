@@ -47,8 +47,10 @@ DEFAULT_CONFIG = {
     # Extra body fields passed through verbatim (e.g. OpenRouter's
     # {"provider": {"sort": "throughput"}} or {"response_format": ...}).
     "body_extras": {},
-    # Scale the per-task reasoning_budget_tokens (llama.cpp only): e.g. 0.25
-    # for a ~2-3x faster local run, 0 to disable thinking. None = untouched.
+    # Scale the per-task reasoning_budget_tokens (llama.cpp only). NOTE: that
+    # request field is not documented for /v1/chat/completions, so this scale
+    # is likely a no-op on current llama.cpp - use the server flag
+    # `--reasoning-budget N` for a real cap. None = untouched.
     "reasoning_budget_scale": None,
 }
 
@@ -215,8 +217,12 @@ class LLMClient:
         if self.config.get("model"):
             payload["model"] = self.config["model"]
         if backend == "llamacpp":
-            # llama.cpp extensions (ignored by hosted OpenAI-compatible APIs;
-            # some reject unknown fields, so only send them locally).
+            # Documented per-request fields: reasoning_effort ("none" disables
+            # reasoning; other levels go to the jinja template) and
+            # chat_template_kwargs (enable_thinking). reasoning_budget_tokens
+            # is NOT documented for /v1/chat/completions - the thinking token
+            # budget is a SERVER flag (llama-server --reasoning-budget N); we
+            # still send it for builds that accept it, but do not rely on it.
             payload["reasoning_effort"] = effort
             if enable_thinking is not None:
                 payload["chat_template_kwargs"] = {

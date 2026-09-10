@@ -188,8 +188,17 @@ guide adds ~4.8 KB to the prompt). Keep it (cheap, harmless, addresses real
 failure classes) but do **not** treat it as the fix — the levers that matter
 are the deterministic gates (P8) and a reliable drafter model.
 
-Also recorded: local reasoning is controlled by `reasoning_budget_tokens`
-(llama.cpp ignores `reasoning_effort`). On `decompose`, budget 4000 = 90s /
-4,315 tok, 1000 = 42s, 400 = 29s, thinking off = 25s — all yielding 4-5
-criteria. The default 4000 was the slowest setting; `reasoning_budget_scale`
-makes this tunable without editing profiles.
+**Correction (llama.cpp request schema).** `reasoning_budget_tokens` is NOT a
+documented `/v1/chat/completions` field — the thinking token budget is a
+**server startup flag** (`llama-server --reasoning-budget N`, env
+`LLAMA_ARG_THINK_BUDGET`). The documented per-request reasoning fields are
+`chat_template_kwargs` (e.g. `{"enable_thinking": false}`) and
+`reasoning_effort` ("none" disables; otherwise passed to the jinja template);
+`response_format` is also supported (`json_object` / `json_schema`). So
+`reasoning_budget_tokens` and our `reasoning_budget_scale` are likely no-ops
+on current llama.cpp — the earlier "budget 4000 = 90s vs 400 = 29s" numbers
+are probably stochastic reasoning-length variance, not the budget. The only
+verified local lever is `enable_thinking`; reliable thinking control is
+`enable_thinking` (per-request) plus a server-side `--reasoning-budget` cap.
+Plan: start `llama-server --reasoning-budget 4500` and drive effort
+per-request via `reasoning_effort`.
