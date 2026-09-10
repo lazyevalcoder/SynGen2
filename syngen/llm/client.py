@@ -21,8 +21,18 @@ class LLMResponse:
 
 
 DEFAULT_CONFIG = {
+    # Local llama.cpp by default (unchanged behavior).
     "endpoint": "http://127.0.0.1:8080/v1/chat/completions",
+    # Hosted providers (P10 step 3): set api_base (e.g.
+    # "https://api.deepseek.com/v1") and it overrides endpoint; set
+    # api_key or api_key_env for Authorization; set model. backend
+    # "openai" omits llama.cpp-only params.
+    "api_base": None,
+    "api_key": None,
+    "api_key_env": None,
     "model": None,
+    "headers": {},
+    "backend": "llamacpp",   # "llamacpp" | "openai"
     "temperature": 0.2,
     "max_tokens": 8192,
     "timeout_s": 1200,
@@ -39,6 +49,11 @@ def load_llm_config(path=None):
         cfg = json.load(f)
     merged = dict(DEFAULT_CONFIG)
     merged.update(cfg)
+    # Resolve the API key from the environment so secrets never live in a
+    # file. An explicit api_key in the config still wins.
+    if not merged.get("api_key") and merged.get("api_key_env"):
+        import os
+        merged["api_key"] = os.environ.get(merged["api_key_env"]) or None
     return merged
 
 
@@ -117,8 +132,24 @@ class LLMClient:
                             f"retrying with max_tokens={tokens}")
         return last
 
+    def _endpoint(self):
+        base = self.config.get("api_base")
+        if base:
+            return base.rstrip("/") + "/chat/completions"
+        return self.config["endpoint"]
+
+    def _headers(self):
+        headers = {"Content-Type": "application/json"}
+        if self.config.get("api_key"):
+            headers["Authorization"] = f"Bearer {self.config['api_key']}"
+        extra = self.config.get("headers") or {}
+        if isinstance(extra, dict):
+            headers.update({str(k): str(v) for k, v in extra.items()})
+        return headers
+
     def _call(self, system, user, max_tokens, temperature, attempt, effort,
               enable_thinking=None, reasoning_budget_tokens=None):
+        backend = self.config.get("backend", "llamacpp")
         payload = {
             "messages": [
                 {"role": "system", "content": system},
@@ -126,17 +157,21 @@ class LLMClient:
             ],
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "reasoning_effort": effort,
         }
-        if enable_thinking is not None:
-            # llama.cpp honors this for thinking-capable model templates.
-            payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
-        if reasoning_budget_tokens is not None:
-            # verified working on b10472: caps thinking tokens per request
-            payload["reasoning_budget_tokens"] = reasoning_budget_tokens
+        if self.config.get("model"):
+            payload["model"] = self.config["model"]
+        if backend == "llamacpp":
+            # llama.cpp extensions (ignored by hosted OpenAI-compatible APIs;
+            # some reject unknown fields, so only send them locally).
+            payload["reasoning_effort"] = effort
+            if enable_thinking is not None:
+                payload["chat_template_kwargs"] = {
+                    "enable_thinking": enable_thinking}
+            if reasoning_budget_tokens is not None:
+                payload["reasoning_budget_tokens"] = reasoning_budget_tokens
         req = urllib.request.Request(
-            self.config["endpoint"], data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}, method="POST",
+            self._endpoint(), data=json.dumps(payload).encode("utf-8"),
+            headers=self._headers(), method="POST",
         )
         with urllib.request.urlopen(req, timeout=self.config["timeout_s"]) as resp:
             body = json.loads(resp.read().decode("utf-8"))

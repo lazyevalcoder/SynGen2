@@ -1,0 +1,9 @@
+{
+  "backend": "openai",
+  "api_base": "https://api.deepseek.com/v1",
+  "api_key_env": "DEEPSEEK_API_KEY",
+  "model": "deepseek-chat",
+  "temperature": 0.2,
+  "max_tokens": 8192,
+  "timeout_s": 300
+}

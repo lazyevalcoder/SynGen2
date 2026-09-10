@@ -9,6 +9,7 @@ status is either a landing (with iteration/proposal counts) or an honest
 escalation (classified reason) - never a silent partial result.
 """
 import json
+import re
 from pathlib import Path
 
 from syngen.pipeline import run_new_story
@@ -46,6 +47,20 @@ def _newest_session(sessions_dir):
     return max(dirs, key=lambda d: d.stat().st_mtime) if dirs else None
 
 
+def _session_for_slug(sessions_dir, slug):
+    """The session folder for a specific slug (P10: race-safe under parallel
+    runs - distinct scenarios use distinct slugs, unlike newest-mtime)."""
+    base = Path(sessions_dir)
+    if not base.is_dir() or not slug:
+        return None
+    want = re.sub(r"[^a-z0-9]+", "-", slug.lower()).strip("-")[:40] or "story"
+    pat = re.compile(rf"_{re.escape(want)}(_\d+)?$")
+    matches = [d for d in base.iterdir()
+               if d.is_dir() and (d / "session_log.md").exists()
+               and pat.search(d.name)]
+    return max(matches, key=lambda d: d.stat().st_mtime) if matches else None
+
+
 def run_fly(story, client, sessions_dir="sessions", slug=None,
             max_iterations=10, max_llm_proposals=8, use_critic=True,
             max_rework_rounds=2):
@@ -74,7 +89,8 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
         # F8.2: the Session is created before any LLM traffic, so even a
         # first-turn crash leaves a folder - infer it instead of losing
         # the session reference (benchmark: scenario_03 report had none).
-        inferred = _newest_session(sessions_dir)
+        inferred = (_session_for_slug(sessions_dir, slug or "fly")
+                    or _newest_session(sessions_dir))
         result = {"status": "error", "reason": f"{type(e).__name__}: {e}",
                   "session": str(inferred) if inferred else None}
         if inferred:

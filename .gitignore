@@ -20,6 +20,11 @@ experiments/fly_benchmark/benchmark_report.json
 Thumbs.db
 .DS_Store
 
+# LLM provider configs: real ones hold no secrets (keys come from env vars),
+# but ignore them anyway; keep the *.example.json templates tracked.
+llm_configs/*.json
+!llm_configs/*.example.json
+
 uat/
 
 JUNK_NOT_PROJECT_RELATED/

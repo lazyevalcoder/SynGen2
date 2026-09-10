@@ -150,3 +150,22 @@ Before spending on external tokens, two small, local-first capabilities:
     python scripts/ab_skills.py --limit 5 --runs 3 --with-config
 
 Suite 407 green; 5 new tests in `tests/test_probe_skills.py`.
+
+## P10 step 3 — hosted providers + parallel runs
+
+- **Provider support** (`syngen/llm/client.py`): set `api_base` (builds
+  `/chat/completions`), `api_key` or `api_key_env` (Bearer auth; keys from
+  the environment, never a file), `model`, and optional `headers`. `backend`
+  `"openai"` omits llama.cpp-only params (`chat_template_kwargs`,
+  `reasoning_budget_tokens`, `reasoning_effort`); `"llamacpp"` (default)
+  keeps today's exact behavior. Example configs: `llm_configs/deepseek.example.json`,
+  `llm_configs/openrouter.example.json` (real configs gitignored).
+- **Parallel runner** (`scripts/bench_fly_parallel.py`): one process per
+  scenario, isolated session folders, per-scenario reports, then aggregate.
+  `run_fly`'s crash-path session lookup is now slug-matched, not newest-mtime,
+  so concurrent runs can't misattribute a crash.
+
+    DEEPSEEK_API_KEY=... python scripts/bench_fly_parallel.py --jobs 10 \
+        --limit 10 --llm-config llm_configs/deepseek.example.json
+
+Suite 411 green; 4 new tests in `tests/test_llm_providers.py`.
