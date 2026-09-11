@@ -284,3 +284,29 @@ gets a referential PF0 from `_autocalibrate_capacity` (`preflight.py:1495`).
 **Fixed:** normalize `"_all_"`/`"*"` -> None (company-wide) in both
 `_autocalibrate_capacity` and `check_effective_capacity`. Test:
 `test_effective_capacity_all_sentinel_is_company_wide`.
+
+### S10.4 [P8 FEASIBILITY GAP + REWORK QUALITY] effective_capacity above-ceiling target not caught; rework introduced an invalid dimension
+
+Re-flying 10 after S10.1-S10.3 reached a DIFFERENT failure, so the first three
+bugs are fixed. Now:
+
+1. **AC2 `effective_capacity target_pct=105` is unreachable.** With the
+   synthesized capacity block (`headcount_actual == headcount_plan`), effective
+   capacity is pinned at <=100% by raking, so no lever reaches 105. The
+   deterministic preflight did **not** flag this as infeasible - it fell through
+   to the convergence loop, which spent 6 iterations and escalated at a -225pp
+   margin (`2/4 criteria passed`). P8 has feasibility ceilings for headline/core
+   growth and concentration, but none for an `effective_capacity` target above
+   what the ramp solver can reach. **Gap.**
+2. **A rework round was lost to an invalid dimension.** The judge's round-1
+   `rework_criteria` re-expressed AC2 with `dimension='ex_outliers'` - not a
+   plan dimension - and preflight rejected it: `[HARD/PF1] criterion dimension
+   'ex_outliers' but plan uses 'segment' units`. The judge named the correct
+   lever (`exclude_outlier_deals=true`) only in round 2, after the 2-round
+   budget was spent. **Rework quality / authoring-guide gap (P9.2 candidate).**
+
+Net: 10 no longer dies on a deterministic bug; it dies on a genuine
+reachability ceiling that preflight failed to flag early, compounded by a
+rework round burned on an invalid dimension. Named next: an `effective_capacity`
+feasibility ceiling (P8) + the `ex_outliers`/`exclude_outlier_deals` fact in the
+authoring guide.
