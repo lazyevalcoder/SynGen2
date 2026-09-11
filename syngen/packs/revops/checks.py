@@ -886,6 +886,9 @@ def check_effective_capacity(opp, accounts, params):
         r["structural"] = True
         return r
     unit = params.get("unit")
+    if unit in ("_all_", "*"):
+        # S10.3: company-wide sentinel - same as an absent unit (all rows).
+        unit = None
     if unit:
         known_units = sorted(cap["plan_unit"].unique())
         cap = cap[cap["plan_unit"] == unit]

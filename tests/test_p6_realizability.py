@@ -196,6 +196,22 @@ def test_capacity_synthesis_stays_flat_without_growth_claim():
             "level checks keep the flat plan (no additions flow)"
 
 
+def test_effective_capacity_all_sentinel_is_company_wide():
+    """S10.3: `unit: "_all_"` is the pack's company-wide sentinel, not a
+    nonexistent unit. The capacity solver must normalize it (no referential
+    PF0) and solve across every synthesized unit."""
+    from syngen.phases.preflight import autocalibrate
+    cfg = _cfg_no_capacity()
+    doc = {"criteria": [crit("AC4", "effective_capacity",
+                             unit="_all_", target_pct=95, band_pp=3)]}
+    autocalibrate(cfg, doc)          # must not raise ConfigError
+    cap = cfg.get("capacity", {})
+    assert cap, "capacity block must be synthesized"
+    solved = [spec for spec in next(iter(cap.values())).values()
+              if spec.get("ramping_reps_by_quarter")]
+    assert solved, "the company-wide solve must reach the synthesized units"
+
+
 def test_headcount_growth_remedy_concentrates_additions(tmp_path):
     from syngen.phases.converge import _remedy_headcount_growth
     cfg = base_cfg()

@@ -243,3 +243,18 @@ def test_nonstructural_preflight_failure_still_judged(monkeypatch):
     assert result["status"] == "escalated"
     assert result["reason"] == "preflight_calibration [judge: no revision helps]"
     assert result["rework"]["rounds"] == 1
+
+
+def test_structural_classification_only_for_schema_invalid():
+    """S10.2 refinement: only 'config invalid' PF0s are structural. A
+    referential PF0 (a criterion naming an absent unit) is a criteria/config
+    mismatch the judge can route, so it is NOT structural."""
+    from syngen.pipeline import _is_structural_preflight
+    assert _is_structural_preflight(
+        [{"rule": "PF0", "msg": "config invalid: sigma must be in (0, 4.0]"}])
+    assert not _is_structural_preflight(
+        [{"rule": "PF0", "msg": "AC4: effective_capacity unit 'x' does not "
+                                "exist in the capacity plan"}])
+    assert not _is_structural_preflight(
+        [{"rule": "PF1", "msg": "quota block missing"}])
+    assert not _is_structural_preflight([])

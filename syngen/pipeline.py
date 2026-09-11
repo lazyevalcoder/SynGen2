@@ -517,6 +517,19 @@ def _geometry_corrective(session, client, story, doc, claims, decisions_text,
     return doc, None
 
 
+def _is_structural_preflight(hard):
+    """S10.2: a STRUCTURAL preflight failure is one where EVERY hard finding
+    is a schema-invalid config (PF0 whose msg is 'config invalid: ...').
+
+    Referential PF0s (e.g. a criterion naming a unit absent from the capacity
+    block) are criteria/config mismatches the rework judge can route, so they
+    are deliberately NOT structural."""
+    return bool(hard) and all(
+        f.get("rule") == "PF0"
+        and str(f.get("msg", "")).startswith("config invalid")
+        for f in hard)
+
+
 def _delivery_attempt(session, client, io, story, doc, claims,
                       decisions_text, spec_notes, log, max_iterations,
                       max_llm_proposals, use_critic, guidance=""):
@@ -586,7 +599,7 @@ def _delivery_attempt(session, client, io, story, doc, claims,
         # of letting the LLM judge misattribute it to a criteria ceiling.
         # Carry the REAL findings so the report names the cause.
         from syngen.phases.preflight import render_findings
-        structural = bool(hard) and all(f.get("rule") == "PF0" for f in hard)
+        structural = _is_structural_preflight(hard)
         detail = (render_findings(hard) if hard else
                   "deterministic calibration could not make the config "
                   "satisfy the criteria")

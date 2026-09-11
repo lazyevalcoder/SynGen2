@@ -1489,6 +1489,12 @@ def _autocalibrate_capacity(cfg, criteria_doc, labels, fixes):
         target = float(_num(p.get("target_pct"), 100.0))
         band = float(_num(p.get("band_pp"), 3.0))
         unit = p.get("unit")
+        # S10.3: "_all_" (and "*") is the pack's company-wide sentinel, but
+        # effective_capacity uses "absent unit = all rows". Normalize the
+        # sentinel to None so a drafter that writes unit="_all_" gets the
+        # company-wide solve instead of a referential PF0.
+        if unit in ("_all_", "*"):
+            unit = None
         # P5 WP4 (F11.1/F18.1): a named unit MUST exist in the capacity
         # block. Never silently fall back to all-units and report success
         # under the criterion's (nonexistent) unit name.

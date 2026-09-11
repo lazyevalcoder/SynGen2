@@ -263,8 +263,24 @@ open loop already documented in `findings_stage_diagnosis.md` - the rework
 loop is open for structural failures.
 
 **Fixed (this change):** the preflight gate now carries the real HARD findings
-into the escalation evidence, classifies an all-PF0 failure as
-`preflight_structural`, and `_delivery_rework` skips the LLM judge for that
-kind (it would misattribute it to a criteria ceiling) - escalating directly
-with the structural cause. Non-structural failures still route to the judge.
-Two regression tests added in `tests/test_rework_loop.py`.
+into the escalation evidence and `_delivery_rework` skips the LLM judge for a
+STRUCTURAL failure (every hard finding is a `config invalid` PF0), escalating
+directly with the real cause. Referential PF0s (e.g. a criterion naming an
+absent unit) are deliberately NOT structural - they remain judge-routable.
+Regression tests in `tests/test_rework_loop.py`.
+
+### S10.3 [SENTINEL MISMATCH] effective_capacity rejects the `_all_` sentinel
+
+Re-flying 10 after S10.1/S10.2 surfaced a second, independent preflight death:
+
+    [HARD/PF0] *: AC4: effective_capacity unit '_all_' does not exist in the
+    capacity plan (legal units: ['APAC_East', ..., 'West'])
+
+`_all_` is the pack's company-wide sentinel (used by revenue_vs_plan etc.),
+but `effective_capacity` uses "absent unit = all rows" and treats `unit` as a
+literal filter (`checks.py:888`). So a drafter that writes `unit: "_all_"`
+gets a referential PF0 from `_autocalibrate_capacity` (`preflight.py:1495`).
+
+**Fixed:** normalize `"_all_"`/`"*"` -> None (company-wide) in both
+`_autocalibrate_capacity` and `check_effective_capacity`. Test:
+`test_effective_capacity_all_sentinel_is_company_wide`.
