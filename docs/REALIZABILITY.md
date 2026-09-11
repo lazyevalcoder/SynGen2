@@ -188,17 +188,25 @@ guide adds ~4.8 KB to the prompt). Keep it (cheap, harmless, addresses real
 failure classes) but do **not** treat it as the fix — the levers that matter
 are the deterministic gates (P8) and a reliable drafter model.
 
-**Correction (llama.cpp request schema).** `reasoning_budget_tokens` is NOT a
-documented `/v1/chat/completions` field — the thinking token budget is a
-**server startup flag** (`llama-server --reasoning-budget N`, env
-`LLAMA_ARG_THINK_BUDGET`). The documented per-request reasoning fields are
-`chat_template_kwargs` (e.g. `{"enable_thinking": false}`) and
-`reasoning_effort` ("none" disables; otherwise passed to the jinja template);
-`response_format` is also supported (`json_object` / `json_schema`). So
-`reasoning_budget_tokens` and our `reasoning_budget_scale` are likely no-ops
-on current llama.cpp — the earlier "budget 4000 = 90s vs 400 = 29s" numbers
-are probably stochastic reasoning-length variance, not the budget. The only
-verified local lever is `enable_thinking`; reliable thinking control is
-`enable_thinking` (per-request) plus a server-side `--reasoning-budget` cap.
-Plan: start `llama-server --reasoning-budget 4500` and drive effort
-per-request via `reasoning_effort`.
+**Verified (probe 2026-09-11, `scripts/probe_reasoning.py`, Ornith-35B).** An
+earlier note here claiming `reasoning_budget_tokens` was a no-op was wrong — a
+repeatable sweep shows it is HONORED:
+
+| condition | reasoning chars | elapsed | finish |
+|---|---|---|---|
+| baseline | 3.9k (3.5-4.7k) | 21s | length |
+| effort=none/low/high | 4.1-4.3k (inside baseline) | 21s | length |
+| budget=100 | 0.5k | 16s | stop |
+| budget=250 | 1.2k | 16s | stop |
+| budget=500 | 2.3k | 21s | stop/length |
+| budget=1000/2000 | 4.2-4.6k (does not bind) | 21s | length |
+| think=off | 0 | 12s | stop |
+| json_object | (fenced JSON) | 1.4s | stop |
+
+Findings: `reasoning_budget_tokens` caps thinking ~linearly (~4-5 chars/token;
+`0` = UNLIMITED, not off); `enable_thinking` is the way to turn thinking OFF;
+`reasoning_effort` is IGNORED (even `"none"` keeps thinking); `response_format:
+json_object` was NOT enforced (the model still emitted fenced JSON, which
+`extract_json` already strips). So keep the per-task budgets and
+`reasoning_budget_scale`; a server `--reasoning-budget 4500` is an optional
+global backstop.

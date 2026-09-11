@@ -47,10 +47,10 @@ DEFAULT_CONFIG = {
     # Extra body fields passed through verbatim (e.g. OpenRouter's
     # {"provider": {"sort": "throughput"}} or {"response_format": ...}).
     "body_extras": {},
-    # Scale the per-task reasoning_budget_tokens (llama.cpp only). NOTE: that
-    # request field is not documented for /v1/chat/completions, so this scale
-    # is likely a no-op on current llama.cpp - use the server flag
-    # `--reasoning-budget N` for a real cap. None = untouched.
+    # Scale the per-task reasoning_budget_tokens (llama.cpp only), e.g. 0.25
+    # for a faster local run. Verified honored (probe 2026-09-11): budget N
+    # caps thinking at ~N tokens; budget=0 means UNLIMITED (use
+    # enable_thinking=False to disable thinking). None = untouched.
     "reasoning_budget_scale": None,
 }
 
@@ -105,11 +105,13 @@ class LLMClient:
              reasoning_budget_tokens=None):
         """Send a chat completion.
 
-        Reasoning controls on llama.cpp (measured on b10472 + Ornith-35B):
-        - reasoning_effort: IGNORED by llama.cpp (OpenAI-only param; kept for
-          future OpenAI-compatible endpoints).
-        - enable_thinking=False via chat_template_kwargs: verified working.
-        - reasoning_budget_tokens=N: verified working - caps thinking tokens.
+        Reasoning controls on llama.cpp (probe 2026-09-11, Ornith-35B):
+        - reasoning_effort: IGNORED by llama.cpp (even "none" keeps thinking);
+          kept only for OpenAI-compatible endpoints.
+        - enable_thinking=False via chat_template_kwargs: verified working
+          (the way to turn thinking OFF).
+        - reasoning_budget_tokens=N: verified working - caps thinking at ~N
+          tokens (~4-5 chars/token). N=0 means UNLIMITED, not off.
         Empty content triggers retry with doubled budget, capped at
         config['max_retry_tokens'].
         """
@@ -217,12 +219,11 @@ class LLMClient:
         if self.config.get("model"):
             payload["model"] = self.config["model"]
         if backend == "llamacpp":
-            # Documented per-request fields: reasoning_effort ("none" disables
-            # reasoning; other levels go to the jinja template) and
-            # chat_template_kwargs (enable_thinking). reasoning_budget_tokens
-            # is NOT documented for /v1/chat/completions - the thinking token
-            # budget is a SERVER flag (llama-server --reasoning-budget N); we
-            # still send it for builds that accept it, but do not rely on it.
+            # llama.cpp extensions (hosted OpenAI-compatible APIs ignore or
+            # reject unknown fields, so only send them locally).
+            # Probe 2026-09-11: reasoning_effort is IGNORED by this build
+            # (even "none" does not disable thinking); chat_template_kwargs
+            # enable_thinking and reasoning_budget_tokens are HONORED.
             payload["reasoning_effort"] = effort
             if enable_thinking is not None:
                 payload["chat_template_kwargs"] = {
@@ -237,9 +238,11 @@ class LLMClient:
             # schema has no reasoning.max_tokens - `effort` is the lever.
             reff = "none" if enable_thinking is False else (effort or "low")
             payload["reasoning"] = {"effort": reff}
-            extras = self.config.get("body_extras") or {}
-            if isinstance(extras, dict):
-                payload.update(extras)
+        # Extra body fields passed through verbatim for BOTH backends, applied
+        # last so they can override defaults (e.g. {"response_format": ...}).
+        extras = self.config.get("body_extras") or {}
+        if isinstance(extras, dict):
+            payload.update(extras)
         req = urllib.request.Request(
             self._endpoint(), data=json.dumps(payload).encode("utf-8"),
             headers=self._headers(), method="POST",

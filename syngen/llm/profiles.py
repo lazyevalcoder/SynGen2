@@ -1,16 +1,15 @@
 """Evidence-based per-task token budgets and reasoning controls.
 
-Parameter support on the llama.cpp server (`/v1/chat/completions`):
-- enable_thinking via chat_template_kwargs: VERIFIED working (per-request).
-- reasoning_effort: a DOCUMENTED per-request field - "none" disables
-  reasoning, other levels are passed to the jinja template. (An older note
-  here claimed llama.cpp ignores it; that was wrong.)
-- reasoning_budget_tokens: NOT a documented request field. The thinking
-  token budget is a SERVER flag (llama-server --reasoning-budget N, env
-  LLAMA_ARG_THINK_BUDGET). The per-task reasoning_budget_tokens below are
-  therefore advisory only on current llama.cpp - rely on enable_thinking and
-  the server-side cap.
-- response_format (json_object / json_schema): supported per-request.
+Parameter support on llama.cpp (probe 2026-09-11, Ornith-1.5-35B):
+- enable_thinking via chat_template_kwargs: VERIFIED working (per-request);
+  the way to turn thinking OFF.
+- reasoning_budget_tokens=N: VERIFIED working - caps thinking at ~N tokens
+  (~4-5 chars/token: 100->~0.5k chars, 250->~1.2k, 500->~2.3k). N=0 means
+  UNLIMITED, not off. Ignored by hosted OpenAI-compatible APIs.
+- reasoning_effort: IGNORED by llama.cpp (even "none" keeps thinking); kept
+  only for OpenAI-compatible endpoints.
+- response_format (json_object): NOT enforced by this build - the model still
+  emitted fenced JSON, which extract_json already strips.
 
 max_tokens is a CEILING not a target - but ceilings below the model's natural
 verbosity truncate JSON mid-array and produce parse failures, so give
