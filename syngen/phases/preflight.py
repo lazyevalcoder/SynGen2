@@ -524,6 +524,47 @@ def _ensure_deal_count(cfg, criteria_doc):
     return ""
 
 
+def _normalize_capacity_headcounts(cfg):
+    """S10.1 guard: keep capacity headcount fields config-valid.
+
+    `headcount_actual`/`ramping_reps_by_quarter` are counts: config.py
+    requires non-negative integers, and ramping may not exceed actual.
+    Synthesis/remedy must never emit fractional heads - this coerces them
+    and clamps ramping, so a future synthesis bug surfaces as a logged
+    normalization instead of a mysterious `[PF0] config invalid`. Returns
+    True if anything changed."""
+    cap = cfg.get("capacity") or {}
+    changed = False
+
+    def _ints(vals):
+        return [max(0, int(round(v)))
+                if isinstance(v, (int, float)) and not isinstance(v, bool)
+                else v for v in vals]
+
+    for key in ("by_territory", "by_region"):
+        for spec in (cap.get(key) or {}).values():
+            if not isinstance(spec, dict):
+                continue
+            actual = spec.get("headcount_actual")
+            if isinstance(actual, list):
+                norm = _ints(actual)
+                if norm != actual:
+                    spec["headcount_actual"] = norm
+                    actual = norm
+                    changed = True
+            ramping = spec.get("ramping_reps_by_quarter")
+            if isinstance(ramping, list):
+                norm = _ints(ramping)
+                if isinstance(actual, list) and len(actual) == len(norm):
+                    norm = [min(r, a)
+                            if isinstance(r, int) and isinstance(a, int)
+                            else r for r, a in zip(norm, actual)]
+                if norm != ramping:
+                    spec["ramping_reps_by_quarter"] = norm
+                    changed = True
+    return changed
+
+
 def autocalibrate(cfg, criteria_doc):
     """Deterministically patch pinned levels and tier-mix shares.
     Returns a list of human-readable fixes applied (empty = nothing done)."""
@@ -562,6 +603,9 @@ def autocalibrate(cfg, criteria_doc):
                             tier_term=tier_term, bases_sum_at=bases_sum_at)
     # renormalize product shares after edits
     _renormalize_product_shares_cfg(cfg)
+    if _normalize_capacity_headcounts(cfg):
+        fixes.append("capacity: normalized headcount fields to non-negative "
+                     "integers (S10.1 guard)")
     return fixes
 
 
@@ -1365,8 +1409,10 @@ def _autocalibrate_blocks(cfg, criteria_doc, labels, fixes):
             for u in units:
                 spec = {"headcount_plan": [6] * n_q}
                 if "headcount_growth_placement" in checks:
-                    spec["headcount_actual"] = \
-                        [round(6.0 + qi * 1.5, 2) for qi in range(n_q)]
+                    # headcount_actual is a COUNT: config.py requires
+                    # non-negative integers (S10.1). Integer increments keep
+                    # the flow rising without emitting fractional heads.
+                    spec["headcount_actual"] = [6 + 2 * qi for qi in range(n_q)]
                     spec["ramping_reps_by_quarter"] = [1] * n_q
                 blocks[u] = spec
             cfg["capacity"] = {dim: blocks}

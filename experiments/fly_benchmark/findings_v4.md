@@ -190,3 +190,81 @@ two linked concentration criteria (AC3/AC4) suggests a joint-lever remedy.
 signature facts injected into `decompose.txt` and `rework_judge.txt`); full
 suite 402 green. It is the probabilistic half; P9.2 (deterministic clamp +
 the revenue-concentration solver) is the guarantee half.
+
+---
+
+## Addendum 4 - scenarios 7-12 re-fly (2026-09-11): 5/6 landed
+
+Local Ornith-35B (llama.cpp, `--reasoning-budget 4500`), one worker,
+`experiments/fly_benchmark/run_7-12/` (raw reports gitignored). This cohort
+was flown on master after the P8 realizability guarantee + the P9.1 guide.
+
+| Scenario | Result | Iters | Rework | Notes |
+|---|---|---|---|---|
+| 07 | **LANDED** | 6 | 1 round (`rework_criteria`, AC2) | Judge caught AC2's unreachable 8pp low-ICP share rise and re-expressed it to the reachable magnitude; then converged. |
+| 08 | **LANDED** | 7 | 0 (clean) | |
+| 09 | **LANDED** | 1 | 0 (clean) | |
+| 10 | escalated | - (preflight) | 1 round (`rework_criteria`, AC4) | See S10.1/S10.2 below. |
+| 11 | **LANDED** | 1 | 0 (clean) | |
+| 12 | **LANDED** | 8 | 0 (clean) | |
+
+Fleet: 5/6 (83.3%), 116 LLM calls, 509,879 tokens, 3317s LLM time. First
+cohort where the rework loop actually *saved* a flight (07) rather than only
+diagnosing one.
+
+### S10.1 [DETERMINISTIC BUG] capacity synthesis emits fractional headcount_actual
+
+The capacity-block synthesizer (`preflight.py:1368-1369`) builds a rising
+headcount flow for `headcount_growth_placement` with:
+
+    spec["headcount_actual"] = [round(6.0 + qi * 1.5, 2) for qi in range(n_q)]
+
+For n_q=4 that is `[6.0, 7.5, 9.0, 10.5]`. `config.validate` requires
+`headcount_actual` values to be **non-negative integers** (`config.py:482-486`),
+so the config is HARD-invalid:
+
+    [HARD/PF0] *: config invalid: capacity.by_territory['West'].headcount_actual
+    values must be non-negative integers
+
+The synthesizer re-runs after every corrective draft, so each re-draft is
+overwritten with the same fractional values -> "no improvement across
+corrective drafts" -> terminal preflight escalation. Scenario 10 only hit
+this because the drafter omitted a capacity block, so the deterministic
+synthesizer (not the LLM) wrote `headcount_actual`.
+
+**Why CI missed it:** `tests/test_p6_realizability.py:166` only asserts the
+flow is rising (`actual[-1] > actual[0]`); it never validates the synthesized
+config, so fractional values pass.
+
+**Bounded fix (implemented):** integer increments,
+`[6 + 2 * qi for qi in range(n_q)]` -> `[6, 8, 10, 12]`; the same integral
+fix in `converge.py` `_remedy_headcount_growth`; a `_normalize_capacity_headcounts`
+guard in `autocalibrate` that coerces fractional counts and clamps ramping; and
+both tests now assert integer validity via `validate_simulator_doc`.
+
+### S10.2 [ROUTING GAP] the judge misdiagnoses a structural PF0 as a criteria ceiling
+
+The escalation surfaced as `preflight_calibration`; the rework judge read it
+as "AC4's above-ceiling effective-capacity target is unreachable" and routed
+`rework_criteria` at AC4. The real HARD finding was the config-invalid PF0
+above - nothing to do with AC4. Criteria rework cannot fix a deterministic
+solver emitting invalid config, so the round was spent and the flight
+escalated.
+
+Same class as S21.2 (the judge has no engine-envelope/solver knowledge):
+when preflight fails on a **structural** PF0 (`config invalid`), it should be
+repaired deterministically or surfaced as a solver/config finding - not
+routed to criteria rework. The judge's AC4 analysis was itself *correct*
+(AC4's `target_pct: 105` does invert the story's "below headline growth"
+direction); it is simply not what killed this flight.
+
+**Net:** 10's death is deterministic and cheap (S10.1); S10.2 is the same
+open loop already documented in `findings_stage_diagnosis.md` - the rework
+loop is open for structural failures.
+
+**Fixed (this change):** the preflight gate now carries the real HARD findings
+into the escalation evidence, classifies an all-PF0 failure as
+`preflight_structural`, and `_delivery_rework` skips the LLM judge for that
+kind (it would misattribute it to a criteria ceiling) - escalating directly
+with the structural cause. Non-structural failures still route to the judge.
+Two regression tests added in `tests/test_rework_loop.py`.

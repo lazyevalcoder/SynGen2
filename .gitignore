@@ -15,6 +15,7 @@ output_simdraft_debug.txt
 # experiments/fly_benchmark/findings_v4.md + findings_stage_diagnosis.md)
 experiments/fly_benchmark/scenario_*_report.json
 experiments/fly_benchmark/benchmark_report.json
+experiments/fly_benchmark/run_*/
 
 # Skills A/B raw outputs (regenerable)
 experiments/skills_ab/

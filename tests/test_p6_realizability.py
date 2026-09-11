@@ -164,6 +164,7 @@ def _cfg_no_capacity():
 
 
 def test_capacity_synthesis_rises_headcount_when_growth_required():
+    from syngen.config import validate_simulator_doc
     from syngen.phases.preflight import autocalibrate
     cfg = _cfg_no_capacity()
     doc = {"criteria": [crit("AC3", "headcount_growth_placement",
@@ -174,6 +175,11 @@ def test_capacity_synthesis_rises_headcount_when_growth_required():
     for spec in next(iter(cap.values())).values():
         actual = spec["headcount_actual"]
         assert actual[-1] > actual[0], "headcount flow must be rising"
+        # S10.1: headcount is a COUNT - synthesized values must be non-negative
+        # ints, and the whole config must pass the contract. Regression: the
+        # synthesizer emitted [6.0, 7.5, 9.0, 10.5] -> [PF0] config invalid.
+        assert all(isinstance(v, int) and v >= 0 for v in actual), actual
+    validate_simulator_doc(cfg)
 
 
 def test_capacity_synthesis_stays_flat_without_growth_claim():
@@ -211,7 +217,11 @@ def test_headcount_growth_remedy_concentrates_additions(tmp_path):
         cfg, doc, results, path, lambda t: None, _S())
     assert fixes, "remedy must apply when the criterion fails"
     for spec in cfg["capacity"]["by_territory"].values():
-        assert spec["headcount_actual"][-1] > spec["headcount_actual"][0]
+        actual = spec["headcount_actual"]
+        assert actual[-1] > actual[0]
+        # S10.1: the remedy must also emit integral headcounts (it previously
+        # rounded to 2 decimals -> [PF0] config invalid on the next generate).
+        assert all(isinstance(v, int) and v >= 0 for v in actual), actual
 
 
 # --- P2.6: elasticity differential solver -----------------------------------

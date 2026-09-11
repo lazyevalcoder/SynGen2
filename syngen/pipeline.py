@@ -236,7 +236,7 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
 
     findings, fixes = evaluate(sim_cfg)
     if not findings:
-        return sim_cfg, ("autocalibrated" if fixes else "clean")
+        return sim_cfg, ("autocalibrated" if fixes else "clean"), []
     log("Pre-flight calibration findings:\n" + render_findings(findings))
     session.log("## Pre-flight calibration\n```\n"
                 + render_findings(findings) + "\n```")
@@ -257,18 +257,18 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
             log("Pre-flight calibration passed.")
             session.log("PREFLIGHT passed "
                         f"({drafts_done} corrective re-drafts).")
-            return sim_cfg, ("redrafted" if drafts_done else "soft_warnings")
+            return sim_cfg, ("redrafted" if drafts_done else "soft_warnings"), []
         if prev_hard_count is not None and len(hard) >= prev_hard_count:
             log(f"HARD findings did not shrink ({len(hard)} >= "
                 f"{prev_hard_count}) - escalating early.")
             session.log("PREFLIGHT FAILED: no improvement across "
                         "corrective drafts: " + json.dumps(hard))
-            return None, "hard_findings_persist"
+            return None, "hard_findings_persist", hard
         if drafts_done >= max_redrafts:
             log("Corrective re-draft budget exhausted.")
             session.log("PREFLIGHT FAILED after re-draft budget: "
                         + json.dumps(hard))
-            return None, "hard_findings_persist"
+            return None, "hard_findings_persist", hard
         log(f"{len(hard)} HARD finding(s) - corrective re-draft...")
         fix_notes = (spec_notes + "\n\nCORRECTIVE FINDINGS from pre-flight "
                      "calibration - fix ALL of these in the new draft:\n"
@@ -280,7 +280,7 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
         session.write_artifact("criteria.json", json.dumps(doc, indent=2))
         sim_cfg = gate_lint(io, session, sim_cfg, log)
         if sim_cfg is None:
-            return None, "manual_edit"
+            return None, "manual_edit", hard
         prev_hard_count = len(hard)
         drafts_done += 1
         findings, _ = evaluate(sim_cfg)
@@ -577,14 +577,25 @@ def _delivery_attempt(session, client, io, story, doc, claims,
         return esc, doc, esc.get("evidence")
 
     # --- Pre-flight calibration gate (F17) ---
-    sim_cfg, status = calibrate_gate(client, io, story, crit_summary,
-                                     sim_notes, doc, sim_cfg, session, log)
+    sim_cfg, status, hard = calibrate_gate(client, io, story, crit_summary,
+                                           sim_notes, doc, sim_cfg, session, log)
     if sim_cfg is None:
-        evidence = make_evidence("preflight_persist",
-                                 f"preflight calibration: {status}", doc,
-                                 detail="deterministic calibration could not "
-                                        "make the config satisfy the criteria")
-        return {"status": "escalated", "reason": "preflight_calibration",
+        # S10.2: a STRUCTURAL failure (rule PF0 = the config itself is invalid)
+        # is not a criteria problem. Deterministic repair already ran inside
+        # the gate; if the config is still invalid, route it honestly instead
+        # of letting the LLM judge misattribute it to a criteria ceiling.
+        # Carry the REAL findings so the report names the cause.
+        from syngen.phases.preflight import render_findings
+        structural = bool(hard) and all(f.get("rule") == "PF0" for f in hard)
+        detail = (render_findings(hard) if hard else
+                  "deterministic calibration could not make the config "
+                  "satisfy the criteria")
+        kind = "preflight_structural" if structural else "preflight_persist"
+        reason = ("preflight_structural" if structural
+                  else "preflight_calibration")
+        evidence = make_evidence(kind, f"preflight calibration: {status}", doc,
+                                 detail=detail)
+        return {"status": "escalated", "reason": reason,
                 "session": str(session.root), "evidence": evidence}, doc, evidence
 
     # --- Criteria x config geometry + feasibility (P5 WP3): coordinates must
@@ -626,6 +637,18 @@ def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
             session.log("REWORK budget exhausted "
                         f"({max_rework_rounds}); final escalation: "
                         f"{result.get('reason')}")
+            result["rework"] = {"rounds": rnd, "directives": directives}
+            return result
+        if evidence is not None and \
+                evidence.get("kind") == "preflight_structural":
+            # S10.2: the config itself is invalid and deterministic repair
+            # could not fix it. The LLM judge has no engine knowledge and
+            # would misattribute this to a criteria ceiling - skip it and
+            # escalate with the real (structural) cause.
+            log("Structural preflight failure (config invalid) - criteria "
+                "rework cannot fix it; escalating without a judge round.")
+            session.log("REWORK skipped: structural preflight failure "
+                        "(config invalid), not a criteria problem.")
             result["rework"] = {"rounds": rnd, "directives": directives}
             return result
         if evidence is None:

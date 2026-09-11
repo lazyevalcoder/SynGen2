@@ -180,3 +180,66 @@ def test_rework_budget_exhausted_is_final(tmp_path, monkeypatch):
     assert result["status"] == "escalated"
     assert result["reason"] == "criteria_geometry"
     assert result["rework"]["rounds"] == 0
+
+
+# --- S10.2: structural config failures bypass the LLM judge ----------------
+
+
+class _SilentSession:
+    def log(self, *_a, **_k):
+        pass
+
+
+def _fake_attempt(kind, reason):
+    def _attempt(*_a, **_k):
+        evidence = {"kind": kind, "reason": reason, "detail": "PF0 config "
+                    "invalid: headcount_actual must be non-negative integers",
+                    "criteria": [], "margins": {}}
+        return ({"status": "escalated", "reason": reason, "session": "s"},
+                {"criteria": []}, evidence)
+    return _attempt
+
+
+def test_structural_preflight_failure_skips_judge(monkeypatch):
+    """S10.2: a structural (config-invalid) escalation must NOT be handed to
+    the LLM judge - the judge has no engine knowledge and misattributes it to
+    a criteria ceiling. It escalates directly with the real cause."""
+    from syngen import pipeline
+
+    monkeypatch.setattr(pipeline, "_delivery_attempt",
+                        _fake_attempt("preflight_structural",
+                                      "preflight_structural"))
+
+    class Boom(FakeLLM):
+        def chat(self, *_a, **_k):
+            raise AssertionError("judge must not run for structural failures")
+
+    result = pipeline._delivery_rework(
+        session=_SilentSession(), client=Boom([]), io=None, story="story",
+        doc={"criteria": []}, claims={}, decisions_text="", spec_notes="",
+        log=lambda *_a, **_k: None, max_iterations=10, max_llm_proposals=8,
+        use_critic=False, max_rework_rounds=2)
+    assert result["status"] == "escalated"
+    assert result["reason"] == "preflight_structural"
+    assert result["rework"]["rounds"] == 0
+    assert result["rework"]["directives"] == []
+
+
+def test_nonstructural_preflight_failure_still_judged(monkeypatch):
+    """Complement to the above: a non-structural preflight failure (PF1 etc.)
+    is still routed to the judge as before."""
+    from syngen import pipeline
+
+    monkeypatch.setattr(pipeline, "_delivery_attempt",
+                        _fake_attempt("preflight_persist",
+                                      "preflight_calibration"))
+    client = FakeLLM([llm_json(_judge_verdict("escalate", [], "",
+                                              reason="no revision helps"))])
+    result = pipeline._delivery_rework(
+        session=_SilentSession(), client=client, io=None, story="story",
+        doc={"criteria": []}, claims={}, decisions_text="", spec_notes="",
+        log=lambda *_a, **_k: None, max_iterations=10, max_llm_proposals=8,
+        use_critic=False, max_rework_rounds=2)
+    assert result["status"] == "escalated"
+    assert result["reason"] == "preflight_calibration [judge: no revision helps]"
+    assert result["rework"]["rounds"] == 1

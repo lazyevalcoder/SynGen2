@@ -386,11 +386,16 @@ def _remedy_headcount_growth(cfg, criteria_doc, results, workbook_path,
         for u, add in alloc.items():
             if u not in by or u not in q1.index:
                 continue
-            base = float(q1.loc[u, "headcount_actual"])
-            spec = by[u]
-            spec["headcount_actual"] = [
-                round(base + add * qi / max(1, n_q - 1), 2)
-                for qi in range(n_q)]
+            base = int(round(float(q1.loc[u, "headcount_actual"])))
+            # headcount_actual is a COUNT: config.py requires non-negative
+            # integers (S10.1). Round each quarter; if additions are intended
+            # but rounding flattened the flow, bump the last quarter so the
+            # placement stays measurable.
+            seq = [int(round(base + add * qi / max(1, n_q - 1)))
+                   for qi in range(n_q)]
+            if add > 0 and seq[-1] <= seq[0]:
+                seq[-1] = seq[0] + 1
+            by[u]["headcount_actual"] = seq
         fixes.append(
             f"{cid}: concentrated {need * 100:.0f}% of headcount additions "
             f"into strong units [{', '.join(sorted(strong))}] "
