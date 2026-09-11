@@ -90,20 +90,33 @@ def main():
     ap.add_argument("--runs", type=int, default=2)
     ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--timeout", type=float, default=600.0)
+    ap.add_argument("--prompt", default=THINK_PROMPT,
+                    help="prompt for the thinking conditions (use a "
+                         "reasoning-heavy prompt to test a server "
+                         "--reasoning-budget cap)")
     ap.add_argument("--budgets", default="",
                     help="comma list of reasoning_budget_tokens to sweep "
                          "(replaces the default conditions)")
+    ap.add_argument("--only", default="",
+                    help="comma list of condition labels to run")
     args = ap.parse_args()
 
-    conditions = CONDITIONS
+    conditions = []
+    for label, prompt, extra in CONDITIONS:
+        if prompt is THINK_PROMPT:
+            prompt = args.prompt
+        conditions.append((label, prompt, extra))
     if args.budgets.strip():
         conditions = []
         for part in args.budgets.split(","):
             part = part.strip()
             if not part:
                 continue
-            conditions.append((f"budget={part}", THINK_PROMPT,
+            conditions.append((f"budget={part}", args.prompt,
                                {"reasoning_budget_tokens": int(part)}))
+    if args.only.strip():
+        wanted = {p.strip() for p in args.only.split(",") if p.strip()}
+        conditions = [c for c in conditions if c[0] in wanted]
 
     print(f"endpoint: {args.endpoint}  runs/cond: {args.runs}  "
           f"max_tokens: {args.max_tokens}\n")
@@ -161,8 +174,8 @@ def main():
           "disable, not budget=0).")
     print(" - json_object was NOT enforced (model still emitted fenced "
           "```json; extract_json strips fences anyway).")
-    print(" - with a server --reasoning-budget N, no run should exceed ~N "
-          "thinking tokens.")
+    print(" - with a server --reasoning-budget N, thinking is bounded only if "
+          "N is BELOW the model's natural thinking (~3k tokens here).")
     return 0
 
 

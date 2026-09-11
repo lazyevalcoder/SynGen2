@@ -208,5 +208,14 @@ Findings: `reasoning_budget_tokens` caps thinking ~linearly (~4-5 chars/token;
 `reasoning_effort` is IGNORED (even `"none"` keeps thinking); `response_format:
 json_object` was NOT enforced (the model still emitted fenced JSON, which
 `extract_json` already strips). So keep the per-task budgets and
-`reasoning_budget_scale`; a server `--reasoning-budget 4500` is an optional
-global backstop.
+`reasoning_budget_scale`.
+
+**Server `--reasoning-budget 4500` (2026-09-11).** Confirmed set on the live
+server (`--reasoning-budget 4500 --reasoning on --jinja`); `/props` also
+reports `supports_reasoning_effort: false`, i.e. the chat template ignores
+`reasoning_effort` outright. It does **not** bind: even reasoning-heavy
+prompts (multi-theorem proof, explicit "think for a very long time")
+self-limit at ~2.8-3.4k thinking tokens (~13k chars), well under 4500. So it
+is a non-binding backstop - per-request `reasoning_budget_tokens` remains the
+effective lever. Lower the server flag (e.g. 1000-2000) if you want it to
+genuinely cap thinking for speed.
