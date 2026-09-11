@@ -310,3 +310,28 @@ reachability ceiling that preflight failed to flag early, compounded by a
 rework round burned on an invalid dimension. Named next: an `effective_capacity`
 feasibility ceiling (P8) + the `ex_outliers`/`exclude_outlier_deals` fact in the
 authoring guide.
+
+### Flight cost (scenarios 7-12, local Ornith-35B, 1 worker)
+
+| Scenario | Result | Iters | Wall | Calls | Input tok | Output tok | Total tok | Out:In |
+|---|---|---|---|---|---|---|---|---|
+| 07 | LANDED | 6 | 899.5s | 30 | 109,051 | 35,917 | 144,968 | 0.33 |
+| 08 | LANDED | 7 | 530.7s | 18 | 62,203 | 20,743 | 82,946 | 0.33 |
+| 09 | LANDED | 1 | 345.9s | 13 | 35,371 | 13,308 | 48,679 | 0.38 |
+| 11 | LANDED | 1 | 366.3s | 13 | 36,443 | 15,240 | 51,683 | 0.42 |
+| 12 | LANDED | 8 | 539.8s | 19 | 65,973 | 19,987 | 85,960 | 0.30 |
+| 10 | escalated | - | 710.9s | 23 | 65,390 | 30,253 | 95,643 | 0.46 |
+
+Landed aggregate (5): wall 44m42s (avg 8m56s), 93 calls, input 309,041 /
+output 105,195 / total 414,236 (avg 82,847 per landing). Fleet (6): 116 calls,
+input 374,431 / output 135,448 / total 509,879. A landing costs ~9 min and
+~83k tokens; input is ~75% of the total. The two 1-iteration landings (09, 11)
+are the floor (~6 min / ~50k).
+
+### Fix policy (2026-09-11)
+
+Do NOT ship a fix per single failing scenario - each change risks regressing
+scenarios that currently land. Instead, batch: wait until >= 4 flights fail,
+then look for a COMMON DENOMINATOR across those failures and fix that root
+cause once, with tests. A lone failure is recorded here as an observation
+(like S10.4) and left alone until it recurs or joins a pattern.
