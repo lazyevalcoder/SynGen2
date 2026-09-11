@@ -42,3 +42,15 @@ breaks them cannot be built and will be sent back or escalated.
    non-overlapping bands - the set is jointly unsatisfiable and will be
    rejected. If two claims share a coordinate, they must share a band or be
    scoped to different units.
+
+6. RANGE-BOUND POINT-ESTIMATE CLAIMS (quality, not just correctness).
+   When the story states a magnitude ("healthy at 3.5x", "concentrated in a
+   few deals", "declined ~6 points"), encode that magnitude as a RANGE
+   (target +/- band, or a min AND a max) - not a bare lower bound. A
+   one-sided ">= X" can pass by overshooting wildly (e.g. coverage "healthy
+   at 3.5x" passing at 65x): it lands but does not match the story, and a
+   real reviewer would reject the dataset. Checks that support an upper
+   bound: coverage_ratio (max_multiple), pipeline_concentration and
+   revenue_concentration (max_top_share_pct), slippage_trend
+   (max_increase_pp). Set the bound the story's magnitude implies.
+

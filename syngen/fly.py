@@ -109,6 +109,7 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
         "iterations": result.get("iterations"),
         "llm_proposals": result.get("llm_proposals"),
         "thin_margins": result.get("thin_margins"),
+        "loose_margins": result.get("loose_margins"),
         "rework": result.get("rework"),
         "llm_usage": (client.usage_totals()
                       if hasattr(client, "usage_totals") else {}),

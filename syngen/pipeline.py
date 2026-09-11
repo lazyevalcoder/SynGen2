@@ -470,12 +470,17 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
     log(f"  config:    simulator.json (tweak knobs anytime, regenerate)")
     if summary.get("thin_margins"):
         log(f"  note: thin margins on {', '.join(summary['thin_margins'])}")
+    loose_margins = [r["id"] for r in results if r.get("loose")]
+    if loose_margins:
+        log(f"  note: LOOSE margins on {', '.join(loose_margins)} - landed "
+            "but the data may overshoot the story (see validation_report.md)")
     if not io.confirm("Inspect and accept delivery?", default=True):
         return {"status": "delivered_unaccepted", "session": str(session.root)}
     return {"status": "converged", "session": str(session.root),
             "iterations": summary["iterations"],
             "llm_proposals": summary["llm_proposals"],
-            "thin_margins": summary["thin_margins"]}
+            "thin_margins": summary["thin_margins"],
+            "loose_margins": loose_margins}
 
 
 def _geometry_corrective(session, client, story, doc, claims, decisions_text,

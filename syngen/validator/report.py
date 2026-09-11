@@ -6,6 +6,12 @@ import pandas as pd
 from syngen.config import load_criteria
 from syngen.validator.checks import CHECKS
 
+# Quality audit: a PASS by more than this is a red flag that the data
+# overshoots the story (e.g. coverage "healthy at 3.5x" landing at 65x).
+# Two-sided (target +/- band) checks can never exceed their band, so this
+# only ever flags one-sided (>=/<=) criteria that ran away.
+LOOSE_MARGIN = 20.0
+
 
 def load_workbook(path):
     path = Path(path)
@@ -87,6 +93,9 @@ def run_validation(workbook_path, criteria_path):
             }
             if r.get("structural"):
                 entry["structural"] = True
+            entry["loose"] = (entry["verdict"] == "PASS"
+                              and entry["margin"] is not None
+                              and float(entry["margin"]) > LOOSE_MARGIN)
             results.append(entry)
         except Exception as e:
             results.append({
@@ -107,7 +116,9 @@ def to_report_dict(results, all_pass, workbook, iteration=None):
         "overall": {"passed": passed, "total": len(results),
                     "exit_code": 0 if all_pass else 1},
         "results": [
-            {k: r[k] for k in ("id", "verdict", "actual", "target", "margin", "detail")}
+            {"id": r["id"], "verdict": r["verdict"], "actual": r["actual"],
+             "target": r["target"], "margin": r["margin"],
+             "detail": r["detail"], "loose": r.get("loose", False)}
             for r in results
         ],
     }
@@ -121,8 +132,9 @@ def render_table(results, all_pass):
     lines.append("-" * len(header))
     for r in results:
         margin = "-" if r["margin"] is None else f"{r['margin']:+.2f}"
+        flag = "  [LOOSE]" if r.get("loose") else ""
         lines.append(
-            f"{r['id']:<5} {r['verdict']:<8} {r['actual']:<24} {r['target']:<30} {margin:<9} {r['name']}"
+            f"{r['id']:<5} {r['verdict']:<8} {r['actual']:<24} {r['target']:<30} {margin:<9} {r['name']}{flag}"
         )
         if r["verdict"] != "PASS":
             lines.append(f"{'':5} -> {r['detail']}")
@@ -130,4 +142,10 @@ def render_table(results, all_pass):
     passed = sum(1 for r in results if r["verdict"] == "PASS")
     verdict = "STORY LANDED" if all_pass else "STORY NOT LANDED"
     lines.append(f"{passed}/{len(results)} criteria passed - {verdict}")
+    loose = [r["id"] for r in results if r.get("loose")]
+    if loose:
+        lines.append(
+            f"WARNING: loose margins on {', '.join(loose)} - passed by more "
+            f"than {LOOSE_MARGIN:g}pp/multiple; the data may overshoot the "
+            "story (landed but not faithful)")
     return "\n".join(lines)

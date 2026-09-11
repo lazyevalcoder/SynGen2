@@ -114,3 +114,24 @@ Batch 19-25 was interrupted: 19, 20, 21 completed (20, 21 landed; 19 stalled);
 **22 hung in an unbounded draft-retry recursion** (`spec.py:48`,
 `quota.by_motion['New_Logo']` vs `'New Logo'`) and was killed; 23-25 never ran.
 So this audit covers landed flights from 7-12 and 19-21 only.
+
+---
+
+## 8. Implemented (2026-09-11)
+
+Detection + optional bounding shipped (additive; no change to existing
+criteria that do not opt in):
+
+- **Loose-margin flag.** `syngen/validator/report.py` marks any PASS with
+  `margin > 20` as `loose`, renders `[LOOSE]` next to the row, and prints a
+  warning. Surfaced in `fly_report.json` (`loose_margins`) and the delivery
+  log. Re-validating scenario 21 now flags AC1/AC2/AC4 and warns.
+- **Range-bound targets (opt-in upper bounds).** Added `max_multiple`
+  (`coverage_ratio`), `max_top_share_pct` (`pipeline_concentration`,
+  `revenue_concentration`), `max_increase_pp` (`slippage_trend`). When
+  present the check becomes two-sided and fails on overshoot.
+- **Authoring guide rule 6** tells the drafter to range-bound point-estimate
+  claims and names the new params.
+
+Tests: `tests/test_iter3.py` (upper-bound cases + loose rendering). Suite 422
+green.

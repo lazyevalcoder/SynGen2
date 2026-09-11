@@ -373,6 +373,12 @@ def check_revenue_concentration(opp, accounts, params):
     top = rev.nlargest(n_top).sum() / rev.sum() * 100
     detail = (f"top {n_top} of {len(won)} won deals = {top:.1f}% of "
               f"{last} realized revenue")
+    max_share = params.get("max_top_share_pct")
+    if max_share is not None:
+        max_share = float(max_share)
+        return _result(needed <= top <= max_share, f"{top:.1f}% top-{n_top}",
+                       f"{needed:g}-{max_share:g}%", detail,
+                       min(top - needed, max_share - top))
     return _result(top >= needed, f"{top:.1f}% top-{n_top}",
                    f">= {needed}%", detail, top - needed)
 
@@ -613,6 +619,13 @@ def check_slippage_trend(opp, accounts, params):
     need = float(params["min_increase_pp"])
     detail = "; ".join(f"{k}: {rates[k]:.0f}%" for k in labels) + \
         f"; delta {delta:+.1f}pp"
+    max_inc = params.get("max_increase_pp")
+    if max_inc is not None:
+        max_inc = float(max_inc)
+        return _result(need <= delta <= max_inc,
+                       f"{delta:+.1f}pp slip-rate change",
+                       f"+{need:g}..+{max_inc:g}pp", detail,
+                       min(delta - need, max_inc - delta))
     return _result(delta >= need, f"{delta:+.1f}pp slip-rate change",
                    f">= +{need:g}pp", detail, delta - need)
 
@@ -655,6 +668,15 @@ def check_coverage_ratio(opp, accounts, params):
     ratio = value / target if target else float("nan")
     detail = (f"${value:,.0f} open vs ${target:,.0f} target in "
               f"{quarter} = {ratio:.2f}x")
+    max_mult = params.get("max_multiple")
+    if max_mult is not None:
+        # Range-bound (quality audit): a point-estimate claim ("healthy at
+        # 3.5x") must not pass by overshooting to 65x. With max_multiple the
+        # check is two-sided.
+        max_mult = float(max_mult)
+        return _result(need <= ratio <= max_mult, f"{ratio:.2f}x coverage",
+                       f"{need:g}-{max_mult:g}x", detail,
+                       min(ratio - need, max_mult - ratio))
     return _result(ratio >= need, f"{ratio:.2f}x coverage",
                    f">= {need:g}x", detail, ratio - need)
 
@@ -676,6 +698,13 @@ def check_pipeline_concentration(opp, accounts, params):
     share = top / total * 100 if total else 0.0
     detail = (f"top {n_top} accounts hold {share:.1f}% of open pipeline "
               f"value")
+    max_share = params.get("max_top_share_pct")
+    if max_share is not None:
+        max_share = float(max_share)
+        return _result(needed <= share <= max_share,
+                       f"{share:.1f}% top-{n_top}",
+                       f"{needed:g}-{max_share:g}%", detail,
+                       min(share - needed, max_share - share))
     return _result(share >= needed, f"{share:.1f}% top-{n_top}",
                    f">= {needed}%", detail, share - needed)
 

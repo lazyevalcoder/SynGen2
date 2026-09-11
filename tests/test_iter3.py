@@ -187,6 +187,10 @@ def test_slippage_trend_both_directions():
     r = checks.check_slippage_trend(plain, None,
                                     {**P, "min_increase_pp": 5})
     assert r.get("structural")
+    # range-bound: the rise is >= 20pp, so a 10pp cap must FAIL
+    capped = checks.check_slippage_trend(rising, None, {
+        **P, "min_increase_pp": 0, "max_increase_pp": 10})
+    assert not capped["ok"], capped
 
 
 def test_coverage_ratio_structural_and_pass():
@@ -201,6 +205,13 @@ def test_coverage_ratio_structural_and_pass():
     steep = checks.check_coverage_ratio(opp, None, {**params,
                                                     "min_multiple": 50})
     assert not steep["ok"]
+    # range-bound: the fixture is ~4.8x, so a 4x cap must FAIL (quality audit)
+    capped = checks.check_coverage_ratio(
+        opp, None, {**params, "min_multiple": 2.0, "max_multiple": 4.0})
+    assert not capped["ok"], capped
+    within = checks.check_coverage_ratio(
+        opp, None, {**params, "min_multiple": 2.0, "max_multiple": 6.0})
+    assert within["ok"], within
     no_quota = checks.check_coverage_ratio(
         opp, None, {"quarter_ends": QENDS, "quarter": "FY26-Q2",
                     "min_multiple": 1.0})
@@ -216,6 +227,11 @@ def test_pipeline_concentration():
     anti = checks.check_pipeline_concentration(opp, None, {
         **P, "top_n_accounts": 2, "min_top_share_pct": 60})
     assert not anti["ok"]
+    # range-bound: fixture top-2 ~25% overshoots a 20% cap
+    capped = checks.check_pipeline_concentration(opp, None, {
+        **P, "top_n_accounts": 2, "min_top_share_pct": 20,
+        "max_top_share_pct": 20})
+    assert not capped["ok"], capped
 
 
 def test_validation_pipeline_block_errors():
@@ -230,3 +246,20 @@ def test_validation_pipeline_block_errors():
         base_cfg(pipeline={"stage_names": ["D", "P"],
                            "share_open_by_quarter": [0.2] * 4,
                            "stage_weights": [1.0]})
+
+
+def test_render_table_flags_loose_margin():
+    """Quality audit: a PASS by a large margin is marked [LOOSE] and warned
+    about, so a landing that overshoots the story is visible."""
+    from syngen.validator.report import render_table
+    results = [
+        {"id": "AC1", "verdict": "PASS", "actual": "65.01x coverage",
+         "target": ">= 3.5x", "margin": 61.51, "detail": "",
+         "name": "coverage", "loose": True},
+        {"id": "AC2", "verdict": "PASS", "actual": "4.00x coverage",
+         "target": ">= 3.5x", "margin": 0.5, "detail": "",
+         "name": "coverage2", "loose": False},
+    ]
+    md = render_table(results, True)
+    assert md.count("[LOOSE]") == 1
+    assert "WARNING: loose margins on AC1" in md
