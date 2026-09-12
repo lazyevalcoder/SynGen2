@@ -15,6 +15,8 @@
 > **As of 2026-09-12 (P12):** stage-based execution is implemented on the same branch: a flight is 7 resumable stages with a `flight_state.json` progress file, `run <session> --stage-3/--only/--from/--all`, resume-at-next, and bounded auto-rewind to the stage a failure is attributed to. A stage histogram in the fleet report makes "failures are in stages 2/3" measurable. 480 tests green; no scenario runs yet. Design: `STAGE_EXECUTION.md`.
 >
 > **As of 2026-09-12 (P13):** the 13-16 stage-3 experiment showed rules were given but not enforced (15 shipped blocked `quota_vs_potential`; 16 shipped a config missing `pricing_response` yet "completed"). P13 adds three deterministic walls: a **menu gate** on criteria (blocked/unknown/duplicate), a **stage-3 buildability gate** (required blocks/features; re-draft or fail honestly), and **reachable ranges** (win-rate noise floor; `elasticity_differential` requires `pricing_response`). 492 tests green; no scenario runs yet. Design: `ENFORCEMENT.md`.
+>
+> **As of 2026-09-12 (P14):** measuring the split prompts showed the full `menu_text()` (~10.2k chars) had become the new manual. Stage 2a now uses a compact `menu.pick_list()` (3.6k), dropping the form-selection prompt 11.0k → 4.4k; detail moved to the fill step. 494 tests green; no scenario runs yet. See `ENFORCEMENT.md`.
 
 ---
 

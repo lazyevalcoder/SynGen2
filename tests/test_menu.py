@@ -40,3 +40,26 @@ def test_every_check_has_a_menu_entry():
     assert len(entries) == 33
     assert all("required_blocks" in e for e in entries)
     assert all("blocked" in e for e in entries)
+
+
+def test_pick_list_is_compact_and_covers_buildable_checks():
+    from syngen.menu import pick_list
+    text = pick_list()
+    # the full menu_text is ~10k; the pick list must be far smaller
+    assert len(text) < 5000
+    assert len(text) < len(menu_text())
+    assert "quota_vs_potential" in text          # shown, marked
+    assert "BLOCKED" in text
+    assert "win_rate_flat" in text
+    for check in buildable_checks():
+        assert f"- {check}" in text
+    # fill-time detail must NOT be here
+    assert "config needs:" not in text
+    assert "raking pins" not in text
+
+
+def test_pick_list_truncates_long_vocab():
+    from syngen.menu import pick_list
+    text = pick_list(max_desc=40)
+    long_lines = [ln for ln in text.splitlines() if len(ln) > 120]
+    assert not long_lines

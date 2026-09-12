@@ -29,11 +29,11 @@ def computable_claims(claims):
 
 def select_claim_forms(client, story, claims, decisions_text="", log_fn=print):
     """2a: one small call mapping claims -> buildable checks."""
-    from syngen.menu import menu_text
+    from syngen.menu import pick_list
     computable = computable_claims(claims)
     if not computable:
         return {"forms": []}
-    system = load_prompt("claim_forms", menu=menu_text(),
+    system = load_prompt("claim_forms", menu=pick_list(),
                          user_decisions=decisions_text or "none", story=story)
     user = ("COMPUTABLE CLAIMS:\n"
             + "\n".join(f"- {c}" for c in computable)

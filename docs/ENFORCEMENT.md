@@ -78,7 +78,7 @@ stage 2); 16 gets `pricing_response` or fails **at stage 3** with
 
 ## Files
 - `syngen/menu.py` - buildable list/catalog, `menu_findings`,
-  `engine_limits_for`.
+  `engine_limits_for`, `pick_list`.
 - `syngen/phases/buildability.py` - `verify_config`, `BuildabilityError`.
 - `syngen/phases/intake.py` - buildable coverage audit, `_menu_gate`.
 - `syngen/phases/stage2.py` - param-output constraint + exact dedupe.
@@ -88,3 +88,20 @@ stage 2); 16 gets `pricing_response` or fails **at stage 3** with
   `revenue_concentration_share`, `deal_size_ratio`.
 - `syngen/capability.py` - `win_rate_flat`, `elasticity_differential`.
 - `packs/revops/prompts/criterion_params.txt` - `{{engine_limits}}`.
+
+## Slim menu (P14)
+The full `menu_text()` is ~10.2k chars and dominated stage 2a (11.0k) - the
+menu became the new manual. Stage 2a now uses `menu.pick_list()`: one short
+line per check (name + <=80-char description, blocked marked), with required
+blocks, directional signs and engine limits left to the fill step
+(`check_facts` + `engine_limits_for`). Measured on scenario 16:
+
+| Prompt | Before | After |
+|---|---|---|
+| `menu_text` / `pick_list` | 10,221 | 3,607 |
+| stage 2a `claim_forms` | 11,034 | **4,420** |
+| stage 2b `criterion_params` | 2,661 | 2,661 |
+
+Stage-2 total: ~13.7k -> ~7.1k. Enforcement is unchanged (`pick_list` still
+shows blocked checks marked; `menu_findings` is the wall). The full
+`menu_text()` is kept for the rework judge/fallback.

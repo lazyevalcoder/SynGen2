@@ -162,6 +162,25 @@ def engine_limits_for(checks):
     return "\n".join(lines)
 
 
+def pick_list(max_desc=80):
+    """Compact one-line-per-check list for the form-selection step (P14).
+
+    Names + a short description only. Required blocks, directional signs and
+    engine limits live in the fill step (`check_facts` / `engine_limits_for`)
+    where they are actually needed, so this prompt stays small - the full
+    `menu_text` was ~10k chars and dominated stage 2a."""
+    lines = ["BUILDABLE CHECKS (choose exactly one per claim):"]
+    for e in menu_entries():
+        check = e["check"]
+        mark = " [BLOCKED - do not use]" if e["blocked"] else ""
+        vocab = _vocab(check)
+        if len(vocab) > max_desc:
+            vocab = vocab[:max_desc - 1].rstrip() + "..."
+        desc = f" - {vocab}" if vocab else ""
+        lines.append(f"- {check}{mark}{desc}")
+    return "\n".join(lines)
+
+
 
 def menu_text(include_blocked=True):
     """Compact prompt context: the buildable forms, their config needs, and
