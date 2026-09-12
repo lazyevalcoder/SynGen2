@@ -9,6 +9,10 @@ Schema (do not invent fields). Exactly ONE of by_segment / by_territory / by_mot
   }
 }
 
+The accounts block already defines these units - use these EXACT names and
+invent NO others:
+{{core_units}}
+
 Guidance - USE THIS, do not re-derive:
 - by_segment (or by_territory when criteria use dimension territory, or by_motion {"New Logo": [...], "Expansion": [...]} for expansion-vs-new-logo stories): the PLAN - what each unit was targeted to earn per quarter.
 - attainment_by_segment is OPTIONAL: how actuals land RELATIVE to plan (default 1.0). Enterprise missed plan by ~5% -> 0.95; Mid-Market beat by ~4% -> 1.04. The engine rakes deal sizes so closed-won revenue lands exactly at attainment x plan.

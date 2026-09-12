@@ -38,7 +38,8 @@ def _facts(checks):
         return "(unavailable)"
 
 
-def _render(name, story, criteria_summary, checks, spec_notes):
+def _render(name, story, criteria_summary, checks, spec_notes,
+            core_units="(not drafted yet)"):
     from syngen.menu import required_blocks, required_features
     return load_prompt(
         f"blocks/{name}",
@@ -48,7 +49,21 @@ def _render(name, story, criteria_summary, checks, spec_notes):
         check_facts=_facts(checks),
         required_blocks=", ".join(sorted(required_blocks(checks))) or "none",
         required_features=", ".join(sorted(required_features(checks))) or "none",
+        core_units=core_units,
     )
+
+
+def _core_units(core):
+    """The unit names the core (accounts) actually chose, so block prompts
+    (quota/capacity) reference real names instead of inventing them. Fixes the
+    cross-block territory mismatch that killed scenario 15 (both models)."""
+    acc = (core or {}).get("accounts") or {}
+    parts = []
+    for dim in ("territories", "regions", "segments"):
+        val = acc.get(dim)
+        if isinstance(val, dict) and val:
+            parts.append(f"- accounts.{dim}: {sorted(val)}")
+    return "\n".join(parts) or "(none drafted)"
 
 
 def draft_core(client, story, criteria_summary, checks, spec_notes="",
@@ -67,9 +82,11 @@ def draft_core(client, story, criteria_summary, checks, spec_notes="",
 
 
 def draft_block(client, block, story, criteria_summary, checks,
-                spec_notes="", log_fn=print, corrective=""):
+                spec_notes="", log_fn=print, corrective="",
+                core_units="(not drafted yet)"):
     """Draft one optional block; None means the block was omitted/failed."""
-    system = _render(block, story, criteria_summary, checks, spec_notes)
+    system = _render(block, story, criteria_summary, checks, spec_notes,
+                     core_units=core_units)
     if corrective:
         system += ("\n\nCORRECTIVE FINDINGS - your previous block was missing "
                    "or unusable; fix ALL of these:\n" + corrective)
@@ -80,7 +97,7 @@ def draft_block(client, block, story, criteria_summary, checks,
 
 
 def _repair_missing(client, story, criteria_summary, checks, spec_notes,
-                    candidate, missing, log_fn):
+                    candidate, missing, log_fn, core_units="(not drafted yet)"):
     """Targeted re-draft of whatever the buildability gate found missing."""
     from syngen.phases.buildability import missing_blocks
     names = missing_blocks(missing)
@@ -89,10 +106,12 @@ def _repair_missing(client, story, criteria_summary, checks, spec_notes,
         core = draft_core(client, story, criteria_summary, checks, spec_notes,
                           log_fn, corrective="; ".join(missing))
         candidate.update(core)
+        core_units = _core_units(candidate)
     for block in names:
         if block in OPTIONAL_BLOCKS:
             part = draft_block(client, block, story, criteria_summary, checks,
-                               spec_notes, log_fn, corrective="; ".join(missing))
+                               spec_notes, log_fn, corrective="; ".join(missing),
+                               core_units=core_units)
             if part:
                 candidate[block] = part
     return candidate
@@ -120,7 +139,9 @@ def split_simulator(client, story, criteria_summary, checks, spec_notes="",
     checks that every criterion's required blocks/features are present; a
     missing piece is re-drafted (bounded) or the stage fails honestly."""
     from syngen.menu import required_blocks
-    from syngen.phases.buildability import BuildabilityError, verify_config
+    from syngen.phases.buildability import (BuildabilityError,
+                                            cross_block_findings,
+                                            verify_config)
     blocks = sorted(required_blocks(checks))
     log_fn(f"Stage 3 split: drafting core + {len(blocks)} optional block(s): "
            f"{blocks or ['none']}")
@@ -131,26 +152,28 @@ def split_simulator(client, story, criteria_summary, checks, spec_notes="",
     for attempt in range(max_redrafts + 1):
         core = draft_core(client, story, criteria_summary, checks, spec_notes,
                           log_fn, corrective=corrective)
+        core_units = _core_units(core)
         candidate = {**base, **core}
         for block in OPTIONAL_BLOCKS:
             if block not in blocks:
                 continue
             part = draft_block(client, block, story, criteria_summary, checks,
-                               spec_notes, log_fn)
+                               spec_notes, log_fn, core_units=core_units)
             if part:
                 candidate[block] = part
             else:
                 log_fn(f"Stage 3 split: block '{block}' came back empty.")
         _normalize(candidate)
 
-        missing = verify_config(candidate, checks)
+        missing = verify_config(candidate, checks) + cross_block_findings(candidate)
         if missing:
-            log_fn(f"Stage 3 buildability: {len(missing)} missing item(s) - "
-                   "targeted re-draft.")
+            log_fn(f"Stage 3 buildability: {len(missing)} missing/mismatched "
+                   "item(s) - targeted re-draft.")
             _repair_missing(client, story, criteria_summary, checks, spec_notes,
-                            candidate, missing, log_fn)
+                            candidate, missing, log_fn, core_units=core_units)
             _normalize(candidate)
-            missing = verify_config(candidate, checks)
+            missing = (verify_config(candidate, checks)
+                       + cross_block_findings(candidate))
         if missing:
             raise BuildabilityError(
                 "stage-3 buildability failed: " + "; ".join(missing))

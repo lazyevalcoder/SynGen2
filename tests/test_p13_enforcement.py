@@ -135,3 +135,58 @@ def test_capability_notes_elasticity_needs_pricing_response():
     doc = {"criteria": [crit("AC1", "elasticity_differential", min_gap_pp=15)]}
     f = assess_criteria(doc)[0]
     assert "pricing_response" in f["note"]
+
+
+# --- P16 cross-block unit consistency --------------------------------------
+
+def test_cross_block_flags_quota_territory_mismatch():
+    from syngen.phases.buildability import cross_block_findings
+    cfg = {"accounts": {"territories": {"AMER-East": ["AMER"],
+                                        "EMEA-North": ["EMEA"]}},
+           "quota": {"by_territory": {"APAC-Commercial": [1, 2, 3, 4]}}}
+    findings = cross_block_findings(cfg)
+    assert any("quota" in f and "APAC-Commercial" in f for f in findings)
+
+
+def test_cross_block_ok_when_units_match():
+    from syngen.phases.buildability import cross_block_findings
+    cfg = {"accounts": {"territories": {"AMER-East": ["AMER"]}},
+           "quota": {"by_territory": {"AMER-East": [1, 2, 3, 4]}}}
+    assert cross_block_findings(cfg) == []
+
+
+def test_cross_block_flags_capacity_region_mismatch():
+    from syngen.phases.buildability import cross_block_findings
+    cfg = {"accounts": {"regions": {"AMER": 0.5, "EMEA": 0.5}},
+           "capacity": {"by_region": {"LATAM": {"headcount_plan": [1, 1, 1, 1]}}}}
+    findings = cross_block_findings(cfg)
+    assert any("capacity" in f and "LATAM" in f for f in findings)
+
+
+def test_split_simulator_repairs_quota_units_with_core_names():
+    """P16: the quota block invents territory names; the gate re-drafts it
+    with the core's real names and the assembly then validates."""
+    from syngen.phases.stage3 import split_simulator
+    core = {"accounts": {"count": 100,
+                         "regions": {"AMER": 1.0},
+                         "segments": {"Enterprise": 1.0},
+                         "industries": ["Software"],
+                         "territories": {"AMER-East": ["AMER"],
+                                         "AMER-West": ["AMER"]}},
+            "opportunities": BROKEN_SIM["opportunities"]}
+    bad_quota = {"quota": {"by_territory": {"APAC-Commercial": [1, 2, 3, 4]}}}
+    good_quota = {"quota": {"by_territory": {"AMER-East": [1, 2, 3, 4],
+                                             "AMER-West": [1, 2, 3, 4]}}}
+    # core, bad quota, (repair) good quota
+    client = FakeLLM([_resp(core), _resp(bad_quota), _resp(good_quota)])
+    cfg = split_simulator(client, "story", "criteria", ["revenue_vs_plan"])
+    assert set(cfg["quota"]["by_territory"]) == {"AMER-East", "AMER-West"}
+
+
+def test_map_effort_maps_medium_to_high():
+    from syngen.llm.client import _map_effort
+    assert _map_effort("minimal") == "low"
+    assert _map_effort("medium") == "high"
+    assert _map_effort("high") == "high"
+    assert _map_effort("max") == "max"
+    assert _map_effort(None) == "high"

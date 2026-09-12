@@ -14,6 +14,10 @@ Schema (do not invent fields). Exactly ONE of by_territory / by_region, keyed by
   }
 }
 
+The accounts block already defines these units - use these EXACT names and
+invent NO others:
+{{core_units}}
+
 Guidance - USE THIS:
 - headcount_plan is what the annual plan assumed (fully productive heads); headcount_actual is who was really on staff - omit to make actual = plan.
 - ramping_reps_by_quarter counts reps still ramping each quarter; ramp_productivity_pct is a ramping rep's output vs steady state (e.g. 45).

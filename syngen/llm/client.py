@@ -79,6 +79,19 @@ def load_llm_config(path=None):
     return merged
 
 
+def _map_effort(effort):
+    """Map a requested reasoning effort to a provider-supported level.
+
+    DeepSeek docs: minimal/low -> low, medium/high -> high,
+    xhigh/max/ultra -> max. Unknown values default to high."""
+    e = str(effort or "high").lower()
+    if e in ("minimal", "low"):
+        return "low"
+    if e in ("max", "ultra", "xhigh"):
+        return "max"
+    return "high"
+
+
 class LLMClient:
     def __init__(self, config=None, log_fn=None):
         self.config = dict(DEFAULT_CONFIG)
@@ -245,18 +258,19 @@ class LLMClient:
             if reasoning_budget_tokens is not None:
                 payload["reasoning_budget_tokens"] = reasoning_budget_tokens
         else:
-            # Hosted OpenAI-compatible providers (OpenRouter et al): control
-            # reasoning via the `reasoning` object. Mechanical JSON tasks
-            # (enable_thinking=False) run with effort "none"; thinking tasks
-            # use the configured effort (default "low"). Note: OpenRouter's
-            # schema has no reasoning.max_tokens - `effort` is the lever.
-            reff = "none" if enable_thinking is False else (effort or "low")
-            payload["reasoning"] = {"effort": reff}
-            # Provider-specific disable/enable fragment (P15): DeepSeek
-            # ignores reasoning.effort but honors thinking.type=disabled.
-            frag = (self.config.get("thinking_disable_body")
-                    if enable_thinking is False
-                    else self.config.get("thinking_enable_body"))
+            # Hosted OpenAI-compatible providers. Two effort dialects:
+            # - OpenRouter: {"reasoning": {"effort": ...}}
+            # - DeepSeek/OpenAI: top-level "reasoning_effort" (low/high/max;
+            #   the docs map "medium" -> high) + a {"thinking": {"type": ...}}
+            #   toggle. We send both; each provider ignores the other's field.
+            if enable_thinking is False:
+                payload["reasoning"] = {"effort": "none"}
+                frag = self.config.get("thinking_disable_body")
+            else:
+                eff = _map_effort(effort)
+                payload["reasoning"] = {"effort": eff}
+                payload["reasoning_effort"] = eff
+                frag = self.config.get("thinking_enable_body")
             if isinstance(frag, dict):
                 payload.update(frag)
         # Extra body fields passed through verbatim for BOTH backends, applied

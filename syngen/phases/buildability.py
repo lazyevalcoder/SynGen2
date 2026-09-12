@@ -43,4 +43,59 @@ def missing_blocks(findings):
             out.append(m.split("'")[1])
         elif "missing required feature '" in m:
             out.append(m.split("'")[1].split(".")[0])
+        elif "block '" in m:
+            out.append(m.split("block '", 1)[1].split("'", 1)[0])
     return out
+
+
+def cross_block_findings(cfg):
+    """P16: block unit names must exist in the core's dimensions.
+
+    `quota.by_territory` keys must be `accounts.territories`;
+    `by_segment` -> `accounts.segments`; `capacity` units likewise. Catches
+    the scenario-15 mismatch where the quota block invented territory names
+    the core never defined (both local and DeepSeek failed on it)."""
+    findings = []
+    acc = cfg.get("accounts") or {}
+    dims = {
+        "territory": set((acc.get("territories") or {}).keys()),
+        "segment": set((acc.get("segments") or {}).keys()),
+        "region": set((acc.get("regions") or {}).keys()),
+    }
+    quota = cfg.get("quota") or {}
+    for dim, key in (("by_territory", "territory"),
+                     ("by_segment", "segment"),
+                     ("by_region", "region")):
+        units = quota.get(dim)
+        if not isinstance(units, dict) or not units:
+            continue
+        known = dims.get(key, set())
+        if not known:
+            continue
+        bad = [u for u in units if u not in known]
+        if bad:
+            findings.append(
+                f"block 'quota' references unknown {key} units {sorted(bad)}; "
+                f"use exactly: {sorted(known)}")
+    units = quota.get("by_motion")
+    if isinstance(units, dict) and units:
+        known = {"New Logo", "Expansion"}
+        bad = [u for u in units if u not in known]
+        if bad:
+            findings.append(
+                f"block 'quota' references unknown motion units {sorted(bad)}; "
+                f"use exactly: {sorted(known)}")
+    cap = cfg.get("capacity") or {}
+    for dim, key in (("by_territory", "territory"), ("by_region", "region")):
+        units = cap.get(dim)
+        if not isinstance(units, dict) or not units:
+            continue
+        known = dims.get(key, set())
+        if not known:
+            continue
+        bad = [u for u in units if u not in known]
+        if bad:
+            findings.append(
+                f"block 'capacity' references unknown {key} units "
+                f"{sorted(bad)}; use exactly: {sorted(known)}")
+    return findings

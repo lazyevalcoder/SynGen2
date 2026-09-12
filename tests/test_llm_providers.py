@@ -57,7 +57,8 @@ def test_openai_backend_headers_model_and_no_llamacpp_params(monkeypatch):
     assert seen["payload"]["model"] == "deepseek-chat"
     assert "chat_template_kwargs" not in seen["payload"]
     assert "reasoning_budget_tokens" not in seen["payload"]
-    assert "reasoning_effort" not in seen["payload"]
+    # DeepSeek/OpenAI dialect: top-level reasoning_effort (medium -> high)
+    assert seen["payload"]["reasoning_effort"] == "high"
 
 
 def test_llamacpp_backend_keeps_extensions(monkeypatch):
