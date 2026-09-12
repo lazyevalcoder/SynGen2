@@ -370,3 +370,9 @@ The honest read of the whole design — six mechanisms for one failure class, a
 ~19k-char drafter prompt with ~2% signal, and the recommended simplification
 (constrain the drafter to a **menu of buildable claim forms**, one
 authoritative gate, fewer roles) — is in `docs/DESIGN_ASSESSMENT.md`.
+
+**Running one stage at a time (P12).** A flight is now 7 resumable stages:
+`python -m syngen run <session> --stage-3` runs through the criteria and config
+stages and stops, `status` shows what completed and what is next, and a failure
+attributed to an earlier stage auto-rewinds there (bounded). See
+`docs/STAGE_EXECUTION.md`.

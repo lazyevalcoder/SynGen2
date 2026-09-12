@@ -53,6 +53,14 @@ def cmd_new(args):
 
     client = LLMClient(llm_cfg)
     io = ConsoleIO() if not args.batch else _BatchIO()
+    stage = getattr(args, "stage", None)
+    if stage is not None or getattr(args, "all_stages", False):
+        from syngen.runner import create_session_and_run
+        result = create_session_and_run(
+            story, client, io, slug=args.slug, upto=stage,
+            all=bool(getattr(args, "all_stages", False)),
+            flags=_stage_flags(args) or None)
+        return _finish_stage(result)
     result = run_new_story(client, story, io, slug=args.slug,
                            use_personas=args.personas,
                            stage23=getattr(args, "stage23", "classic"))
@@ -71,6 +79,53 @@ def cmd_resume(args):
     return _finish(result)
 
 
+def _stage_flags(args):
+    flags = {}
+    for key in ("stage23", "rework_strategy"):
+        val = getattr(args, key, None)
+        if val:
+            flags[key] = val
+    if getattr(args, "use_capability", False):
+        flags["use_capability"] = True
+    return flags
+
+
+def _finish_stage(result):
+    print(f"\nResult: {result.get('status')}  "
+          f"(next stage: {result.get('next_stage')})")
+    if result.get("reason"):
+        print(f"Reason: {result['reason']}")
+    return 0 if result.get("status") in ("converged", "in_progress") else 1
+
+
+def cmd_run(args):
+    """Stage-based execution: resume, run a prefix, or rewind a session."""
+    from syngen.llm.client import LLMClient, load_llm_config
+    from syngen.pipeline import ConsoleIO
+    from syngen.runner import run_stages
+    from syngen.session import Session
+
+    session = Session.open(args.session)
+    client = LLMClient(load_llm_config(args.llm_config))
+    io = ConsoleIO() if not args.batch else _BatchIO()
+    result = run_stages(session, client, io,
+                        upto=args.stage, only=args.only,
+                        from_stage=args.from_stage, all=args.all,
+                        flags=_stage_flags(args) or None)
+    return _finish_stage(result)
+
+
+def cmd_status(args):
+    from syngen.runner import status_rows
+    from syngen.session import Session
+
+    session = Session.open(args.session)
+    print(f"Session: {session.root}")
+    for n, name, st, mark in status_rows(session):
+        print(f"  {n}  {name:<10} {st:<10} {mark}")
+    return 0
+
+
 def cmd_fly(args):
     """Solo-flight harness: full pipeline, zero interaction, telemetry."""
     from syngen.fly import run_fly
@@ -82,10 +137,11 @@ def cmd_fly(args):
         return 2
     client = LLMClient(load_llm_config(args.llm_config))
     report = run_fly(story, client, slug=args.slug,
-                     stage23=getattr(args, "stage23", "classic"))
+                     stage23=getattr(args, "stage23", "classic"),
+                     upto=getattr(args, "stage", None))
     print(json.dumps({k: v for k, v in report.items()
                       if k != "telemetry"}, indent=2, default=str))
-    return 0 if report["status"] == "converged" else 1
+    return 0 if report["status"] in ("converged", "in_progress") else 1
 
 
 def cmd_sessions(args):
@@ -126,6 +182,19 @@ class _BatchIO:
         return ""
 
 
+def _normalize_argv(argv):
+    """Accept `--stage-3` as sugar for `--stage 3`."""
+    import re
+    out = []
+    for a in (argv if argv is not None else sys.argv[1:]):
+        m = re.fullmatch(r"--stage-(\d+)", a)
+        if m:
+            out.extend(["--stage", m.group(1)])
+        else:
+            out.append(a)
+    return out
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="syngen", description="Story-driven synthetic datasets")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -153,6 +222,12 @@ def main(argv=None):
                    choices=("classic", "split"),
                    help="stage 2/3 drafting: classic one-prompt or split "
                         "block-by-block (P11)")
+    n.add_argument("--stage", type=int, default=None,
+                   help="run the stage runner up to and including stage N")
+    n.add_argument("--all-stages", action="store_true",
+                   help="run every stage through the stage runner")
+    n.add_argument("--use-capability", action="store_true",
+                   help="enable the capability workbench (stage runner)")
 
     r = sub.add_parser("resume", help="return to an existing session: "
                                       "regenerate or apply a story tweak")
@@ -179,8 +254,30 @@ def main(argv=None):
                    choices=("classic", "split"),
                    help="stage 2/3 drafting: classic one-prompt or split "
                         "block-by-block (P11)")
+    f.add_argument("--stage", type=int, default=None,
+                   help="run the stage runner up to and including stage N")
 
-    args = parser.parse_args(argv)
+    rn = sub.add_parser("run", help="stage-based execution: resume, run a "
+                                    "prefix, or rewind a session")
+    rn.add_argument("session", help="path to the session folder")
+    rn.add_argument("--all", action="store_true",
+                    help="run all remaining stages")
+    rn.add_argument("--stage", type=int, default=None,
+                    help="run up to and including stage N (--stage-3)")
+    rn.add_argument("--only", type=int, default=None,
+                    help="run exactly stage N")
+    rn.add_argument("--from", dest="from_stage", type=int, default=None,
+                    help="rewind to stage N and run forward")
+    rn.add_argument("--llm-config", default=None, help="path to llm.config.json")
+    rn.add_argument("--batch", action="store_true",
+                    help="accept all defaults without interaction")
+    rn.add_argument("--stage23", default=None, choices=("classic", "split"))
+    rn.add_argument("--use-capability", action="store_true")
+
+    st = sub.add_parser("status", help="show stage progress for a session")
+    st.add_argument("session", help="path to the session folder")
+
+    args = parser.parse_args(_normalize_argv(argv))
     if args.command == "generate":
         return cmd_generate(args)
     if args.command == "validate":
@@ -193,6 +290,10 @@ def main(argv=None):
         return cmd_sessions(args)
     if args.command == "fly":
         return cmd_fly(args)
+    if args.command == "run":
+        return cmd_run(args)
+    if args.command == "status":
+        return cmd_status(args)
     return 2
 
 

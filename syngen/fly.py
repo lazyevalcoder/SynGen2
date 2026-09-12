@@ -64,7 +64,7 @@ def _session_for_slug(sessions_dir, slug):
 def run_fly(story, client, sessions_dir="sessions", slug=None,
             max_iterations=10, max_llm_proposals=8, use_critic=True,
             max_rework_rounds=2, rework_strategy="classic",
-            use_capability=False, stage23="classic"):
+            use_capability=False, stage23="classic", upto=None):
     """Fly one story end-to-end without human input. Returns the report.
 
     The report ALWAYS contains: status ('converged' | 'escalated' |
@@ -79,15 +79,27 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
     """
     io = _FlyIO()
     try:
-        result = run_new_story(client, story, io, sessions_dir=sessions_dir,
-                               slug=slug or "fly",
-                               max_iterations=max_iterations,
-                               max_llm_proposals=max_llm_proposals,
-                               use_critic=use_critic,
-                               max_rework_rounds=max_rework_rounds,
-                               rework_strategy=rework_strategy,
-                               use_capability=use_capability,
-                               stage23=stage23)
+        if upto is not None:
+            from syngen.runner import create_session_and_run
+            result = create_session_and_run(
+                story, client, io, sessions_dir=sessions_dir,
+                slug=slug or "fly", upto=upto,
+                flags={"stage23": stage23, "use_capability": use_capability,
+                       "use_critic": use_critic,
+                       "max_iterations": max_iterations,
+                       "max_llm_proposals": max_llm_proposals,
+                       "max_rework_rounds": max_rework_rounds,
+                       "rework_strategy": rework_strategy})
+        else:
+            result = run_new_story(client, story, io, sessions_dir=sessions_dir,
+                                   slug=slug or "fly",
+                                   max_iterations=max_iterations,
+                                   max_llm_proposals=max_llm_proposals,
+                                   use_critic=use_critic,
+                                   max_rework_rounds=max_rework_rounds,
+                                   rework_strategy=rework_strategy,
+                                   use_capability=use_capability,
+                                   stage23=stage23)
     except Exception as e:  # noqa: BLE001 - the harness must ALWAYS emit a
         # report; a crash mid-flight is itself a finding for maintenance
         # F8.2: the Session is created before any LLM traffic, so even a
@@ -116,6 +128,8 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
         "loose_margins": result.get("loose_margins"),
         "rework": result.get("rework"),
         "stage23": stage23,
+        "next_stage": result.get("next_stage"),
+        "stages": result.get("stages"),
         "llm_usage": (client.usage_totals()
                       if hasattr(client, "usage_totals") else {}),
         "telemetry": {
@@ -131,6 +145,24 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
         except OSError:
             pass
     return report
+
+
+def stage_histogram(reports):
+    """Which stage each stage-runner flight reached, and where it failed.
+
+    This is the measurement that turns "all the failures are in stages 2/3"
+    from an impression into a number (P12)."""
+    reached, failed = {}, {}
+    for r in reports:
+        stages = r.get("stages")
+        if not stages:
+            continue
+        completed = [s[0] for s in stages if s[2] == "completed"]
+        top = max(completed) if completed else 0
+        reached[top] = reached.get(top, 0) + 1
+        if r.get("status") == "escalated" and r.get("next_stage"):
+            failed[r["next_stage"]] = failed.get(r["next_stage"], 0) + 1
+    return {"stage_reached": reached, "escalations_by_stage": failed}
 
 
 def summarize_reports(reports):
@@ -157,4 +189,5 @@ def summarize_reports(reports):
         "other": [r.get("status") for r in reports
                   if r.get("status") not in ("converged", "escalated")],
         "llm_usage": usage,
+        "stage_histogram": stage_histogram(reports),
     }
