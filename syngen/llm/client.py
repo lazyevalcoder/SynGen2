@@ -49,6 +49,13 @@ DEFAULT_CONFIG = {
     # Extra body fields passed through verbatim (e.g. OpenRouter's
     # {"provider": {"sort": "throughput"}} or {"response_format": ...}).
     "body_extras": {},
+    # Provider-specific reasoning control for the OpenAI-compatible backend.
+    # Merged into the request body when enable_thinking is False / True.
+    # DeepSeek ignores reasoning.effort but honors:
+    #   "thinking_disable_body": {"thinking": {"type": "disabled"}}
+    # (llama.cpp uses chat_template_kwargs; OpenRouter uses reasoning.effort.)
+    "thinking_disable_body": {},
+    "thinking_enable_body": {},
     # Scale the per-task reasoning_budget_tokens (llama.cpp only), e.g. 0.25
     # for a faster local run. Verified honored (probe 2026-09-11): budget N
     # caps thinking at ~N tokens; budget=0 means UNLIMITED (use
@@ -245,6 +252,13 @@ class LLMClient:
             # schema has no reasoning.max_tokens - `effort` is the lever.
             reff = "none" if enable_thinking is False else (effort or "low")
             payload["reasoning"] = {"effort": reff}
+            # Provider-specific disable/enable fragment (P15): DeepSeek
+            # ignores reasoning.effort but honors thinking.type=disabled.
+            frag = (self.config.get("thinking_disable_body")
+                    if enable_thinking is False
+                    else self.config.get("thinking_enable_body"))
+            if isinstance(frag, dict):
+                payload.update(frag)
         # Extra body fields passed through verbatim for BOTH backends, applied
         # last so they can override defaults (e.g. {"response_format": ...}).
         extras = self.config.get("body_extras") or {}

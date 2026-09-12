@@ -274,8 +274,16 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
         fix_notes = (spec_notes + "\n\nCORRECTIVE FINDINGS from pre-flight "
                      "calibration - fix ALL of these in the new draft:\n"
                      + render_findings(hard))
-        sim_cfg = draft_simulator(client, story, crit_summary, fix_notes,
-                                  checks=checks, split=split)
+        try:
+            sim_cfg = draft_simulator(client, story, crit_summary, fix_notes,
+                                      checks=checks, split=split)
+        except ConfigError as e:
+            # P15: a corrective re-draft that cannot produce a valid config
+            # must escalate, not crash the CLI (scenario 14 with DeepSeek).
+            log(f"Corrective config re-draft failed ({e}) - escalating.")
+            session.log("PREFLIGHT FAILED: corrective re-draft raised: "
+                        + str(e))
+            return None, "hard_findings_persist", hard
         doc.setdefault("definitions", {})["quarter_end_dates"] = dict(
             zip(sim_cfg["time_model"]["quarter_labels"],
                 sim_cfg["time_model"]["quarter_end_dates"]))
@@ -325,16 +333,20 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
     log = io.inform
     session.save_story(story)
     log(f"Session: {session.root}")
-    return _run_pipeline(session, client, io, story, log,
-                         fresh_criteria=True,
-                         max_iterations=max_iterations,
-                         max_llm_proposals=max_llm_proposals,
-                         use_personas=use_personas,
-                         use_critic=use_critic,
-                         max_rework_rounds=max_rework_rounds,
-                         rework_strategy=rework_strategy,
-                         use_capability=use_capability,
-                         stage23=stage23)
+    result = _run_pipeline(session, client, io, story, log,
+                           fresh_criteria=True,
+                           max_iterations=max_iterations,
+                           max_llm_proposals=max_llm_proposals,
+                           use_personas=use_personas,
+                           use_critic=use_critic,
+                           max_rework_rounds=max_rework_rounds,
+                           rework_strategy=rework_strategy,
+                           use_capability=use_capability,
+                           stage23=stage23)
+    from syngen.usage import render_usage, write_usage
+    result["llm_usage"] = write_usage(session, client)
+    log(render_usage(result["llm_usage"]))
+    return result
 
 
 def run_resume(session_root, client, io, new_story=None,

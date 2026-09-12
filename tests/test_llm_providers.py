@@ -99,6 +99,37 @@ def test_openai_reasoning_none_for_mechanical_tasks(monkeypatch):
     assert seen["payload"]["reasoning"] == {"effort": "none"}
 
 
+def test_thinking_disable_body_merged_when_thinking_off(monkeypatch):
+    """P15: DeepSeek ignores reasoning.effort, so a provider fragment
+    disables thinking for mechanical tasks."""
+    seen = _capture(monkeypatch)
+    client = LLMClient(config={
+        "backend": "openai", "api_base": "https://x/v1",
+        "thinking_disable_body": {"thinking": {"type": "disabled"}}})
+    client._call("s", "u", 100, 0.2, 1, "medium", enable_thinking=False)
+    assert seen["payload"]["thinking"] == {"type": "disabled"}
+    assert seen["payload"]["reasoning"] == {"effort": "none"}
+
+
+def test_thinking_disable_body_not_sent_when_thinking_on(monkeypatch):
+    seen = _capture(monkeypatch)
+    client = LLMClient(config={
+        "backend": "openai", "api_base": "https://x/v1",
+        "thinking_disable_body": {"thinking": {"type": "disabled"}}})
+    client._call("s", "u", 100, 0.2, 1, "medium", enable_thinking=True)
+    assert "thinking" not in seen["payload"]
+
+
+def test_thinking_enable_body_merged_when_thinking_on(monkeypatch):
+    seen = _capture(monkeypatch)
+    client = LLMClient(config={
+        "backend": "openai", "api_base": "https://x/v1",
+        "thinking_enable_body": {"thinking": {"type": "enabled",
+                                              "budget_tokens": 1024}}})
+    client._call("s", "u", 100, 0.2, 1, "medium", enable_thinking=True)
+    assert seen["payload"]["thinking"]["budget_tokens"] == 1024
+
+
 def test_openai_reasoning_uses_config_effort_for_thinking(monkeypatch):
     seen = _capture(monkeypatch)
     client = LLMClient(config={"backend": "openai", "api_base": "https://x/v1",

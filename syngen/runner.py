@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from syngen.stages import STAGE_NAMES, STAGES, StageContext
+from syngen.usage import render_usage, write_usage
 
 STATE_FILE = "flight_state.json"
 STATE_SCHEMA = 1
@@ -201,6 +202,12 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
         story = session.latest_story()
     log = io.inform
 
+    def _finish(result):
+        u = write_usage(session, client)
+        result["llm_usage"] = u
+        log(render_usage(u))
+        return result
+
     # --- decide the window ---
     if only is not None:
         start = stop = int(only)
@@ -217,8 +224,9 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
     if start > 7:
         state.data["status"] = "converged"
         state.save()
-        return {"status": "converged", "session": str(session.root),
-                "next_stage": 8, "rework": {"rounds": 0, "directives": []}}
+        return _finish({"status": "converged", "session": str(session.root),
+                        "next_stage": 8,
+                        "rework": {"rounds": 0, "directives": []}})
 
     directives = []
     rewind_rounds = 0
@@ -233,7 +241,15 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
         ctx = StageContext(session=session, client=client, io=io, story=story,
                            log=log, flags=f,
                            guidance=state.data.get("guidance", ""))
-        result = fn(ctx)
+        try:
+            result = fn(ctx)
+        except Exception as e:  # noqa: BLE001 - a stage crash must escalate,
+            # not lose the flight (and must still capture usage, P15)
+            from syngen.stages import StageResult
+            log(f"Stage {n} ({name}) raised {type(e).__name__}: {e}")
+            session.log(f"STAGE {n} ERROR: {type(e).__name__}: {e}")
+            result = StageResult(n, "escalated", reason="stage_error",
+                                 detail=f"{type(e).__name__}: {e}")
         last = result
         if result.status == "completed":
             state.data.pop("guidance", None)
@@ -272,7 +288,7 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
 
         state.data["status"] = result.status
         state.save()
-        return {
+        return _finish({
             "status": "converged" if result.status == "completed" else
                       ("aborted" if result.status == "aborted" else "escalated"),
             "reason": result.reason,
@@ -280,18 +296,18 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
             "next_stage": state.next_stage(),
             "stages": [list(r) for r in state.table()],
             "rework": {"rounds": rewind_rounds, "directives": directives},
-        }
+        })
 
     state.data["status"] = "converged" if state.next_stage() > 7 else "in_progress"
     state.data["current_stage"] = None
     state.save()
-    return {
+    return _finish({
         "status": state.data["status"],
         "session": str(session.root),
         "next_stage": state.next_stage(),
         "stages": [list(r) for r in state.table()],
         "rework": {"rounds": rewind_rounds, "directives": directives},
-    }
+    })
 
 
 def status_rows(session):

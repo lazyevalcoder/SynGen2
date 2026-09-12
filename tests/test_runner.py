@@ -210,3 +210,15 @@ def test_stage_histogram_counts_failures():
     # converged reached stage 3; the escalated one completed only through 2
     assert h["stage_reached"] == {2: 1, 3: 1}
     assert h["escalations_by_stage"] == {3: 1}
+
+
+def test_usage_written_to_session(run_in_tmp):
+    """P15: the runner persists per-flight LLM usage (calls/tokens)."""
+    result = create_session_and_run("story", _full_script(), SilentIO(),
+                                    sessions_dir="sessions", slug="usage",
+                                    upto=3)
+    session = Session.open(_only_session())
+    assert (session.root / "usage.json").exists()
+    u = json.loads((session.root / "usage.json").read_text(encoding="utf-8"))
+    assert u["calls"] >= 1
+    assert result["llm_usage"]["calls"] >= 1
