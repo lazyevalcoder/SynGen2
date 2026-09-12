@@ -117,3 +117,6 @@ covers the `schema_key_mismatch` / `missing_surface` classes without an LLM.
 1. Full-fly A/B on 3-5 scenarios with `rework_strategy="defect_response"`.
 2. Re-fly 22/25 to confirm the quota normalizer clears the config deaths.
 3. Only then consider flipping the default.
+
+**See also:** `docs/DESIGN_ASSESSMENT.md` — the honest read of the whole
+design (the two systemic gaps, and the recommended simplification).

@@ -54,13 +54,33 @@ pass — it **cannot run infinitely**.
   the capability assessor's reachability scope (the existing geometry lint
   handles it).
 
+## Full-fly A/B (2026-09-12)
+Ran 15/16/17 + 22 with `--use-capability` (classic rework):
+
+| Scenario | Result | Iters | Wall | Tokens |
+|---|---|---|---|---|
+| 22 | **LANDED** | 4 | 905s | 139,421 |
+| 15 | escalated (`criteria_geometry`) | - | 1169s | 181,242 |
+| 16 | escalated (iteration cap) | - | 1866s | 269,493 |
+| 17 | escalated (proposal cap; AC5 -41.74) | - | 2085s | 345,668 |
+
+22 landed (it had failed twice before). 15/16/17 exposed the two gaps below.
+
+## Known gaps (see `docs/DESIGN_ASSESSMENT.md`)
+- **Coverage:** the envelope only knows ~7 checks. 16's failing checks
+  (`elasticity_differential`, `post_change_revenue_decline`, `win_rate_flat`,
+  `activity_potential_misalignment`) and 17's (`revenue_concentration`,
+  `end_of_quarter_effect`, `deal_size_trend`) are uncovered -> no number -> the
+  workbench stays silent, and silence is read as "buildable".
+- **Enforcement:** blocked checks have no `nearest`, so the system can only
+  advise (sheet + workbench + judge) and then escalate. Scenario 15 ignored
+  all three.
+
 ## Honest limits
 - Closed-form checks only; unknown checks get qualitative facts, no number.
-- Replay of the workbench step only — a buildable set hasn't been proven to
-  land the whole flight.
-- The gap is only as good as the envelope math (which now has shared helpers,
-  `envelope.tier_share_ceiling` / `avg_price_by_tier`, so the lint and the
-  tool agree by construction).
+- The gap is only as good as the envelope math (shared helpers
+  `envelope.tier_share_ceiling` / `avg_price_by_tier` keep the lint and the
+  tool in agreement, but coverage is partial).
 
 ## Files
 - `syngen/capability.py` — sheet, assess, snap.
@@ -74,6 +94,8 @@ pass — it **cannot run infinitely**.
 - `tests/test_capability.py` — 7 tests.
 
 ## Next
-1. Full-fly A/B on the hard cases (22, 15, 17) with `--use-capability`.
-2. Cover more checks with closed forms as they recur.
+1. Make blocked checks mechanically non-choosable, or auto-swap them with a
+   **named** replacement.
+2. Expand the envelope to the recurring failures: `revenue_concentration`,
+   `deal_size_trend`, `elasticity_differential`.
 3. Then consider flipping the default.

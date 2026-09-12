@@ -350,3 +350,23 @@ report (`rework.rounds`) keeps those landings honest.
 *Continue reading: `docs/DOMAIN_PACKS.md` for the engineering history,
 `docs/JOURNEY_PLAN.md` for the observability design, and
 `experiments/fly_benchmark/findings_v4.md` for the flight record.*
+
+---
+
+## 7. Where the failures really are (2026-09-12)
+
+Most deaths *surface* in Stage 5, but they are *made* in Stages 2–3, where the
+LLM drafter writes criteria and dials that the engine cannot build. Two
+systemic gaps remain:
+
+- **Coverage gap** — the capability envelope has closed-form reachability for
+  only ~7 checks; every other check gets no number, so the stage-2/3 workbench
+  stays silent and silence is read as "buildable."
+- **Enforcement gap** — blocked checks (`quota_vs_potential`) are advice-only:
+  the capability sheet, the workbench, and the judge all name the problem, and
+  the drafter can still choose the blocked check.
+
+The honest read of the whole design — six mechanisms for one failure class, a
+~19k-char drafter prompt with ~2% signal, and the recommended simplification
+(constrain the drafter to a **menu of buildable claim forms**, one
+authoritative gate, fewer roles) — is in `docs/DESIGN_ASSESSMENT.md`.

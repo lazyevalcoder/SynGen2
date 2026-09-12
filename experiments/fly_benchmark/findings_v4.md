@@ -430,3 +430,33 @@ preflight feasibility ceilings / blocked-path detection for:
 - one-sided bounds on overshoot-prone checks (require or auto-bound them),
 so the drafter is corrected BEFORE the loop, not after 10 iterations. Also
 consider raising `max_rework_rounds` (13 needed 2; 14/16/17 exhausted 2).
+
+---
+
+## Addendum 7 - capability workbench full-fly A/B (2026-09-12): 22 lands
+
+Ran scenarios 15, 16, 17, 22 with `use_capability=True` (classic rework) on
+the `exp/capability` branch. Raw: `run_capability_ab/`, `run_cap_15-17/`,
+`run_cap_22/` (gitignored).
+
+| Scenario | Result | Iters | Wall | Calls | Total tok | $ @ Luna |
+|---|---|---|---|---|---|---|
+| 22 | **LANDED** | 4 | 905s | 34 | 139,421 | $0.065 |
+| 15 | escalated (`criteria_geometry`) | - | 1169s | 43 | 181,242 | $0.084 |
+| 16 | escalated (iteration cap) | - | 1866s | 54 | 269,493 | $0.116 |
+| 17 | escalated (proposal cap; AC5 -41.74) | - | 2085s | 71 | 345,668 | $0.150 |
+
+**22 landed** - it had escalated twice before (`draft_invalid`, then a
+convergence stall). First live proof that the config normalizer + capability
+workbench get a flight through. Cost: ~1h40m wall, ~$0.42 for the four.
+
+15/16/17 expose two gaps (full analysis in `docs/DESIGN_ASSESSMENT.md`):
+- **Coverage:** the envelope knows ~7 checks. 16's failing checks
+  (`elasticity_differential`, `post_change_revenue_decline`, `win_rate_flat`,
+  `activity_potential_misalignment`) and 17's (`revenue_concentration`,
+  `end_of_quarter_effect`, `deal_size_trend`) are uncovered -> no number ->
+  the workbench stays silent, and silence is read as "buildable". 17's snap
+  only touched AC2 (headline growth, covered); AC3/AC4/AC5 were never
+  assessed.
+- **Enforcement:** blocked checks have no `nearest`, so the system can only
+  advise (sheet + workbench + judge) and then escalate. 15 ignored all three.
