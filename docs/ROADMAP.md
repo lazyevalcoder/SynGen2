@@ -21,6 +21,8 @@
 > **As of 2026-09-12 (P15):** hosted-provider support hardened. DeepSeek ignores `reasoning.effort` but honors `thinking:{type:disabled}`; the client now merges configurable `thinking_disable_body`/`thinking_enable_body`. Per-flight usage is written to `<session>/usage.json` and printed; a stage crash now escalates instead of killing the CLI (scenario 14 exposed a pre-flight re-draft crash). First measured DeepSeek flight (scenario 14) LANDED 3/3 at 52 calls / 241,289 tokens. 498 tests green. See `MODEL_PROVIDERS.md`.
 >
 > **As of 2026-09-12 (P17):** closed the observed pipeline failures: cross-block unit + quota-attainment/dimension consistency, blocked-check replacement mapping, pseudo-unit detection at stage 2, non-tunable-lever early escalation, same-stage retry, critic re-check for proxy criteria, near-duplicate dedupe, invented-key rejection, claim-preserving menu re-draft. 512 tests green; no scenario runs after the fixes. See `P17_FIXES.md`.
+>
+> **As of 2026-09-12 (P18):** added a hard per-flight LLM budget (calls / tokens / seconds / USD) checked before every call; hosted backends get `40 calls / 150k tokens / 600s` by default, and exceeding it escalates `budget_exceeded` instead of running on. Stage-2 re-drafts share one budget (4). CLI flags `--max-calls/--max-tokens/--max-usd/--max-seconds/--allow-unbounded`. `usage.json` reports the budget. 520 tests green. See `RUNAWAY_GUARD.md`.
 
 ---
 

@@ -46,6 +46,7 @@ def cmd_new(args):
     from syngen.pipeline import ConsoleIO, run_new_story
 
     llm_cfg = load_llm_config(args.llm_config)
+    llm_cfg.update(_budget_config(args))
     story = _read_story_arg(args)
     if not story:
         print("Paste your business story (end with an empty line):")
@@ -90,6 +91,21 @@ def _stage_flags(args):
     return flags
 
 
+def _budget_config(args):
+    """P18: CLI overrides for the per-flight LLM budget."""
+    out = {}
+    for arg, key in (("max_calls", "max_calls"),
+                     ("max_tokens", "max_total_tokens"),
+                     ("max_usd", "max_usd"),
+                     ("max_seconds", "max_seconds")):
+        v = getattr(args, arg, None)
+        if v is not None:
+            out[key] = v
+    if getattr(args, "allow_unbounded", False):
+        out["allow_unbounded"] = True
+    return out
+
+
 def _finish_stage(result):
     print(f"\nResult: {result.get('status')}  "
           f"(next stage: {result.get('next_stage')})")
@@ -106,7 +122,9 @@ def cmd_run(args):
     from syngen.session import Session
 
     session = Session.open(args.session)
-    client = LLMClient(load_llm_config(args.llm_config))
+    llm_cfg = load_llm_config(args.llm_config)
+    llm_cfg.update(_budget_config(args))
+    client = LLMClient(llm_cfg)
     io = ConsoleIO() if not args.batch else _BatchIO()
     result = run_stages(session, client, io,
                         upto=args.stage, only=args.only,
@@ -135,7 +153,9 @@ def cmd_fly(args):
     if not story:
         print("fly needs --story or --story-file")
         return 2
-    client = LLMClient(load_llm_config(args.llm_config))
+    llm_cfg = load_llm_config(args.llm_config)
+    llm_cfg.update(_budget_config(args))
+    client = LLMClient(llm_cfg)
     report = run_fly(story, client, slug=args.slug,
                      stage23=getattr(args, "stage23", "classic"),
                      upto=getattr(args, "stage", None))
@@ -276,6 +296,21 @@ def main(argv=None):
 
     st = sub.add_parser("status", help="show stage progress for a session")
     st.add_argument("session", help="path to the session folder")
+
+    # P18: per-flight budget flags on every run-producing command.
+    for p in (n, rn, f):
+        p.add_argument("--max-calls", type=int, default=None, dest="max_calls",
+                       help="hard cap on LLM calls per flight (P18)")
+        p.add_argument("--max-tokens", type=int, default=None,
+                       dest="max_tokens",
+                       help="hard cap on total tokens per flight (P18)")
+        p.add_argument("--max-usd", type=float, default=None, dest="max_usd",
+                       help="hard cap on estimated spend (needs prices) (P18)")
+        p.add_argument("--max-seconds", type=int, default=None,
+                       dest="max_seconds",
+                       help="hard wall-clock cap per flight (P18)")
+        p.add_argument("--allow-unbounded", action="store_true",
+                       help="do NOT apply default hosted budget caps (P18)")
 
     args = parser.parse_args(_normalize_argv(argv))
     if args.command == "generate":

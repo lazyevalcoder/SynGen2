@@ -106,6 +106,25 @@ def stage_criteria(ctx):
     story, flags = ctx.story, ctx.flags
     claims = _claims(session)
 
+    # P18: one budget for ALL stage-2 re-drafts (coverage + critic +
+    # consistency + menu). Stops the stacking guards from multiplying calls.
+    redrafts = 0
+    MAX_REDRAFTS = 4
+
+    def _spend_redraft():
+        nonlocal redrafts
+        redrafts += 1
+        return redrafts <= MAX_REDRAFTS
+
+    def _budget_escalation():
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+        ev = _make_evidence(
+            "criteria_budget",
+            f"stage-2 re-draft budget ({MAX_REDRAFTS}) exhausted", doc,
+            detail="criteria kept churning without converging")
+        return StageResult(2, "escalated", reason="criteria_budget",
+                           evidence=ev, rewind_to=2)
+
     decisions_path = session.root / "decisions.md"
     if decisions_path.exists():
         decisions_text = decisions_path.read_text(encoding="utf-8")
@@ -127,6 +146,7 @@ def stage_criteria(ctx):
         return StageResult(2, "escalated", reason="criteria_coverage",
                            evidence=ev, rewind_to=2)
     if cov_status == "redrafted":
+        _spend_redraft()
         session.log("COVERAGE GUARD: criteria re-drafted to cover claims.")
     if cov_status == "proceeded_with_notes":
         session.log("COVERAGE GUARD: proceeding with noted vocabulary gaps.")
@@ -138,6 +158,9 @@ def stage_criteria(ctx):
             session.log("CRITIC (criteria) block findings:\n"
                         + render_issues(issues))
             log(f"Critic flagged {len(issues)} block issue(s) - one re-draft.")
+            if not _spend_redraft():
+                log("Stage-2 re-draft budget exhausted at critic.")
+                return _budget_escalation()
             doc = draft_criteria(client, story, decisions_text + "\n\n"
                                  + critic_brief(issues))
             doc, cov_status = enforce_coverage(client, story, doc, claims,
@@ -177,6 +200,9 @@ def stage_criteria(ctx):
     if lint_hard:
         session.log("CRITERION CONSISTENCY LINT:\n" + render_lint(lint_hard))
         log("Criterion consistency violations - one corrective re-draft.")
+        if not _spend_redraft():
+            log("Stage-2 re-draft budget exhausted at consistency lint.")
+            return _budget_escalation()
         doc = draft_criteria(client, story, decisions_text + "\n\n"
                              + corrective_brief(lint_hard))
         doc, cov_status2 = enforce_coverage(client, story, doc, claims,
@@ -217,6 +243,9 @@ def stage_criteria(ctx):
         session.log("MENU GATE: " + "; ".join(residual)[:500])
         log(f"Menu gate: {len(residual)} violation(s) - menu-constrained "
             "re-draft.")
+        if not _spend_redraft():
+            log("Stage-2 re-draft budget exhausted at menu gate.")
+            return _budget_escalation()
         brief = ((decisions_text or "")
                  + "\n\nMENU VIOLATIONS - fix ALL of these; use ONLY buildable "
                  "checks, and never duplicate a claim:\n- "

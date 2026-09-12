@@ -18,9 +18,9 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from syngen.stages import STAGE_NAMES, STAGES, StageContext
+from syngen.llm.client import BudgetExceeded
+from syngen.stages import STAGE_NAMES, STAGES, StageContext, StageResult
 from syngen.usage import render_usage, write_usage
-
 STATE_FILE = "flight_state.json"
 STATE_SCHEMA = 1
 
@@ -43,6 +43,7 @@ _REWIND = {
     "criteria_geometry": 2,
     "criteria_menu": 2,
     "criteria_intent": 2,
+    "criteria_budget": 2,
     "draft_invalid": 3,
     "stage3_buildability": 3,
     "preflight_structural": 3,
@@ -207,6 +208,15 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
         u = write_usage(session, client)
         result["llm_usage"] = u
         log(render_usage(u))
+        if hasattr(client, "budget_status"):
+            try:
+                b = client.budget_status()
+                log(f"Budget: {b['calls']}/{b['max_calls']} calls, "
+                    f"{b['total_tokens']}/{b['max_total_tokens']} tokens"
+                    + (f", ~${b['estimated_usd']}/{b['max_usd']}"
+                       if b.get("max_usd") else ""))
+            except Exception:  # noqa: BLE001
+                pass
         return result
 
     # --- decide the window ---
@@ -244,9 +254,14 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
                            guidance=state.data.get("guidance", ""))
         try:
             result = fn(ctx)
+        except BudgetExceeded as e:
+            # P18: never retry/rewind past a budget stop.
+            log(f"BUDGET EXCEEDED: {e}")
+            session.log(f"STAGE {n} BUDGET EXCEEDED: {e}")
+            result = StageResult(n, "escalated", reason="budget_exceeded",
+                                 detail=str(e))
         except Exception as e:  # noqa: BLE001 - a stage crash must escalate,
             # not lose the flight (and must still capture usage, P15)
-            from syngen.stages import StageResult
             log(f"Stage {n} ({name}) raised {type(e).__name__}: {e}")
             session.log(f"STAGE {n} ERROR: {type(e).__name__}: {e}")
             result = StageResult(n, "escalated", reason="stage_error",

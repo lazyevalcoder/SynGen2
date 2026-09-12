@@ -9,6 +9,7 @@ from pathlib import Path
 from syngen.config import (ConfigError, load_criteria, load_json,
                            validate_simulator_doc)
 from syngen.generator.engine import generate_to_workbook
+from syngen.llm.client import BudgetExceeded
 from syngen.linter import has_blocking, lint, structure_findings
 from syngen.phases.amend import (
     apply_amendments,
@@ -333,16 +334,23 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
     log = io.inform
     session.save_story(story)
     log(f"Session: {session.root}")
-    result = _run_pipeline(session, client, io, story, log,
-                           fresh_criteria=True,
-                           max_iterations=max_iterations,
-                           max_llm_proposals=max_llm_proposals,
-                           use_personas=use_personas,
-                           use_critic=use_critic,
-                           max_rework_rounds=max_rework_rounds,
-                           rework_strategy=rework_strategy,
-                           use_capability=use_capability,
-                           stage23=stage23)
+    try:
+        result = _run_pipeline(session, client, io, story, log,
+                               fresh_criteria=True,
+                               max_iterations=max_iterations,
+                               max_llm_proposals=max_llm_proposals,
+                               use_personas=use_personas,
+                               use_critic=use_critic,
+                               max_rework_rounds=max_rework_rounds,
+                               rework_strategy=rework_strategy,
+                               use_capability=use_capability,
+                               stage23=stage23)
+    except BudgetExceeded as e:
+        # P18: a budget stop is an honest escalation, not a crash.
+        log(f"BUDGET EXCEEDED: {e}")
+        session.log(f"ESCALATED: budget_exceeded - {e}")
+        result = {"status": "escalated", "reason": "budget_exceeded",
+                  "session": str(session.root)}
     from syngen.usage import render_usage, write_usage
     result["llm_usage"] = write_usage(session, client)
     log(render_usage(result["llm_usage"]))

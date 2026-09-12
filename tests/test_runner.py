@@ -242,6 +242,19 @@ def test_same_stage_failure_is_retried(run_in_tmp, monkeypatch):
     assert calls == [2, 3, 3, 4, 5]
 
 
+def test_runner_escalates_on_budget(run_in_tmp):
+    """P18: hitting the budget escalates honestly instead of running on."""
+    from syngen.llm.client import LLMResponse
+    client = FakeLLM([LLMResponse(content=json.dumps(PRECHECK))
+                      for _ in range(5)])
+    client.config["max_calls"] = 1
+    s = Session.create("sessions", slug="budget")
+    s.save_story("story")
+    result = run_stages(s, client, SilentIO(), upto=3)
+    assert result["status"] == "escalated"
+    assert result["reason"] == "budget_exceeded"
+
+
 def test_usage_written_to_session(run_in_tmp):
     """P15: the runner persists per-flight LLM usage (calls/tokens)."""
     result = create_session_and_run("story", _full_script(), SilentIO(),

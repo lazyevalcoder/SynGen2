@@ -61,7 +61,29 @@ DEFAULT_CONFIG = {
     # caps thinking at ~N tokens; budget=0 means UNLIMITED (use
     # enable_thinking=False to disable thinking). None = untouched.
     "reasoning_budget_scale": None,
+    # P18 runaway guard: hard per-flight caps. None = unlimited (local).
+    # Hosted backends get conservative defaults at construction unless
+    # allow_unbounded is set.
+    "max_calls": None,
+    "max_total_tokens": None,
+    "max_seconds": None,
+    "max_usd": None,
+    "price_per_mtok_in": None,
+    "price_per_mtok_out": None,
+    "allow_unbounded": False,
 }
+
+
+# Applied to any non-llamacpp backend that did not set its own caps.
+HOSTED_BUDGET_DEFAULTS = {
+    "max_calls": 40,
+    "max_total_tokens": 150000,
+    "max_seconds": 600,
+}
+
+
+class BudgetExceeded(RuntimeError):
+    """Raised when a flight hits its LLM budget. Callers escalate honestly."""
 
 
 def load_llm_config(path=None):
@@ -105,10 +127,70 @@ class LLMClient:
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "total_tokens": 0, "elapsed_s": 0.0,
                       "prompt_chars": 0, "completion_chars": 0}
+        # P18 runaway guard: wall clock + hosted defaults.
+        import time as _time
+        self._started = _time.monotonic()
+        backend = self.config.get("backend", "llamacpp")
+        if backend != "llamacpp" and not self.config.get("allow_unbounded"):
+            applied = []
+            for k, v in HOSTED_BUDGET_DEFAULTS.items():
+                if self.config.get(k) is None:
+                    self.config[k] = v
+                    applied.append(f"{k}={v}")
+            if applied and self.log_fn:
+                self.log_fn("[llm] hosted backend: applied default budget "
+                            + ", ".join(applied)
+                            + " (override in llm config or --max-* / "
+                            "--allow-unbounded)")
 
     def usage_totals(self):
         """Copy of the accumulated usage for this client (per-flight)."""
         return dict(self.usage)
+
+    def estimated_usd(self):
+        """Estimated spend so far, or None when no price table is set."""
+        pin = self.config.get("price_per_mtok_in")
+        pout = self.config.get("price_per_mtok_out")
+        if pin is None or pout is None:
+            return None
+        return (self.usage["prompt_tokens"] / 1e6 * float(pin)
+                + self.usage["completion_tokens"] / 1e6 * float(pout))
+
+    def budget_status(self):
+        """Current caps and remaining headroom (for logging/telemetry)."""
+        usd = self.estimated_usd()
+        return {
+            "max_calls": self.config.get("max_calls"),
+            "calls": self.usage["calls"],
+            "max_total_tokens": self.config.get("max_total_tokens"),
+            "total_tokens": self.usage["total_tokens"],
+            "max_seconds": self.config.get("max_seconds"),
+            "max_usd": self.config.get("max_usd"),
+            "estimated_usd": (round(usd, 4) if usd is not None else None),
+        }
+
+    def check_budget(self):
+        """Raise BudgetExceeded when a cap is reached. Called before a call."""
+        import time as _time
+        c = self.config
+        hits = []
+        if c.get("max_calls") is not None and \
+                self.usage["calls"] >= c["max_calls"]:
+            hits.append(f"calls {self.usage['calls']}/{c['max_calls']}")
+        if c.get("max_total_tokens") is not None and \
+                self.usage["total_tokens"] >= c["max_total_tokens"]:
+            hits.append(f"tokens {self.usage['total_tokens']}/"
+                        f"{c['max_total_tokens']}")
+        if c.get("max_seconds") is not None:
+            elapsed = _time.monotonic() - self._started
+            if elapsed >= c["max_seconds"]:
+                hits.append(f"seconds {elapsed:.0f}/{c['max_seconds']}")
+        usd = self.estimated_usd()
+        if c.get("max_usd") is not None and usd is not None and \
+                usd >= c["max_usd"]:
+            hits.append(f"usd {usd:.3f}/{c['max_usd']}")
+        if hits:
+            raise BudgetExceeded("LLM budget exceeded: " + "; ".join(hits))
 
     def _accumulate_usage(self, resp):
         u = resp.usage or {}
@@ -142,6 +224,7 @@ class LLMClient:
         Empty content triggers retry with doubled budget, capped at
         config['max_retry_tokens'].
         """
+        self.check_budget()   # P18: hard stop before any spend
         tokens = max_tokens or self.config["max_tokens"]
         temp = self.config["temperature"] if temperature is None else temperature
         effort = reasoning_effort or self.config["reasoning_effort"]

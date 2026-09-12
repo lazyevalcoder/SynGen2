@@ -13,6 +13,11 @@ def usage_totals(client):
 
 def write_usage(session, client):
     u = usage_totals(client)
+    if hasattr(client, "budget_status"):
+        try:
+            u = {**u, "budget": client.budget_status()}
+        except Exception:  # noqa: BLE001
+            pass
     try:
         session.write_artifact("usage.json", json.dumps(u, indent=2))
     except Exception:  # noqa: BLE001 - usage capture must never break a flight
