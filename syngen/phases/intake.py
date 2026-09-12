@@ -309,7 +309,7 @@ def _log_notes(gaps, log_fn):
 
 
 def draft_criteria(client, story, decisions_text="", criteria_path=None,
-                   log_fn=print, use_skills=True):
+                   log_fn=print, use_skills=True, claims=None, split=False):
     """LLM drafts criteria JSON; contract validation rejects malformed output.
 
     The check catalog and name list are GENERATED from the pack's claim
@@ -318,7 +318,23 @@ def draft_criteria(client, story, decisions_text="", criteria_path=None,
 
     use_skills toggles the P9.1 authoring guide (the A/B switch): False
     injects an empty guide so the draft is measured without it.
+
+    split=True (P11) divides stage 2 into claim-form selection + param fill
+    with a deterministic assembly; it needs the pre-check `claims` and falls
+    back to the classic single-prompt path when the split cannot proceed.
     """
+    if split and claims is not None:
+        from syngen.phases.stage2 import draft_criteria_split
+        split_doc = draft_criteria_split(client, story, claims, decisions_text,
+                                         log_fn=log_fn)
+        if split_doc is not None:
+            if criteria_path:
+                Path(criteria_path).write_text(json.dumps(split_doc, indent=2),
+                                               encoding="utf-8")
+            log_fn(f"Drafted {len(split_doc['criteria'])} criteria (split): "
+                   + ", ".join(c["id"] for c in split_doc["criteria"]))
+            return split_doc
+        log_fn("Split stage 2 could not proceed - using classic draft.")
     taxonomy = _pack_taxonomy()
     from syngen.capability import capability_sheet
     system = load_prompt(

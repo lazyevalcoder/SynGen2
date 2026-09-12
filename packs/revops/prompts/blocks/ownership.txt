@@ -1,0 +1,32 @@
+You are a Business Intelligence engineer. Draft ONLY the `ownership` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields):
+{
+  "ownership": {
+    "unowned_share_by_quarter": [<one per quarter, 0-1>],
+    "churn_share_by_quarter": [<one per quarter, 0-1>],
+    "owner_pool": ["<name>", ...],
+    "win_rate_multiplier_after_change": <0-1 for decline stories>
+  }
+}
+
+Guidance:
+- unowned_share_by_quarter: share of accounts with NO owner that quarter (owner blank in the account_ownership sheet).
+- churn_share_by_quarter: share of owned accounts reassigned a DIFFERENT owner vs the prior quarter.
+- win_rate_multiplier_after_change (e.g. 0.5): won-rate drag on accounts whose owner changed THIS quarter - use for "expansion fell where AE ownership changed" stories.
+- Example: "a third of key accounts had no owner by H2; churned accounts win less" ->
+  {"unowned_share_by_quarter": [0.05, 0.15, 0.25, 0.33], "churn_share_by_quarter": [0.08, 0.08, 0.1, 0.1], "owner_pool": ["R1", "R2", "R3", "R4"], "win_rate_multiplier_after_change": 0.5}
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"ownership": {...}}

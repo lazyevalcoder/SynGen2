@@ -54,7 +54,8 @@ def cmd_new(args):
     client = LLMClient(llm_cfg)
     io = ConsoleIO() if not args.batch else _BatchIO()
     result = run_new_story(client, story, io, slug=args.slug,
-                           use_personas=args.personas)
+                           use_personas=args.personas,
+                           stage23=getattr(args, "stage23", "classic"))
     return _finish(result)
 
 
@@ -80,7 +81,8 @@ def cmd_fly(args):
         print("fly needs --story or --story-file")
         return 2
     client = LLMClient(load_llm_config(args.llm_config))
-    report = run_fly(story, client, slug=args.slug)
+    report = run_fly(story, client, slug=args.slug,
+                     stage23=getattr(args, "stage23", "classic"))
     print(json.dumps({k: v for k, v in report.items()
                       if k != "telemetry"}, indent=2, default=str))
     return 0 if report["status"] == "converged" else 1
@@ -147,6 +149,10 @@ def main(argv=None):
     n.add_argument("--personas", action="store_true",
                    help="enable the persona-critique pass (off by default; "
                         "M4 A/B found no quality benefit at ~35s cost)")
+    n.add_argument("--stage23", default="classic",
+                   choices=("classic", "split"),
+                   help="stage 2/3 drafting: classic one-prompt or split "
+                        "block-by-block (P11)")
 
     r = sub.add_parser("resume", help="return to an existing session: "
                                       "regenerate or apply a story tweak")
@@ -169,6 +175,10 @@ def main(argv=None):
     f.add_argument("--story-file", default="", help="path to a .md/.txt story")
     f.add_argument("--slug", default="", help="session folder name hint")
     f.add_argument("--llm-config", default=None, help="path to llm.config.json")
+    f.add_argument("--stage23", default="classic",
+                   choices=("classic", "split"),
+                   help="stage 2/3 drafting: classic one-prompt or split "
+                        "block-by-block (P11)")
 
     args = parser.parse_args(argv)
     if args.command == "generate":

@@ -1,0 +1,28 @@
+You are a Business Intelligence engineer. Draft ONLY the `activity` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields):
+{
+  "activity": {
+    "mean_touches_per_account_by_quarter": [<one per quarter>],
+    "potential_tilt": <negative = activity aimed at LOW-potential accounts>
+  }
+}
+
+Guidance:
+- potential_tilt negative points activity at LOW-potential accounts ("activity up but aimed at the wrong accounts").
+- Example: "touches doubled but went at low-potential accounts" ->
+  {"mean_touches_per_account_by_quarter": [4, 5, 7, 9], "potential_tilt": -0.6}
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"activity": {...}}

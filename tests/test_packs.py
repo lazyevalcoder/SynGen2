@@ -298,6 +298,22 @@ def test_rework_judge_prompt_renders_authoring_guide():
     assert "SCOPE ONLY REAL UNITS" in text
 
 
+def test_repo_signatures_declare_required_blocks_for_every_check(revops):
+    sigs = revops.check_signatures["signatures"]
+    missing = [c for c in revops.checks if "required_blocks" not in sigs[c]]
+    assert missing == []
+
+
+def test_signature_required_blocks_must_name_known_blocks(tmp_path):
+    pack_dir = _write_pack(tmp_path)
+    sig_path = pack_dir / "check_signatures.json"
+    sig = json.loads(sig_path.read_text(encoding="utf-8"))
+    sig["signatures"]["win_rate_flat"]["required_blocks"] = ["not_a_block"]
+    sig_path.write_text(json.dumps(sig), encoding="utf-8")
+    with pytest.raises(PackValidationError, match="not a known engine block"):
+        ensure_valid(pack_dir)
+
+
 def test_intake_taxonomy_cache_returns_same_instance():
     from syngen.phases.intake import _pack_taxonomy
     assert _pack_taxonomy() is _pack_taxonomy()

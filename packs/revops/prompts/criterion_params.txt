@@ -1,0 +1,36 @@
+You are a senior Revenue Operations analyst. For each (claim, check) pair below, write ONE acceptance criterion with concrete params (a target and a tolerance). Use ONLY the checks given. Do not add checks, do not drop pairs.
+
+Parameter facts for these checks (scoping, signs, limits):
+{{check_facts}}
+
+Claim -> check mapping:
+{{forms}}
+
+User decisions: {{user_decisions}}
+
+Story:
+{{story}}
+
+Rules:
+- Every criterion MUST be computable from tabular data (accounts and opportunities). No subjective criteria.
+- Give each criterion a target value and a tolerance.
+- Scope only coordinates/units that exist in the data model; when the story implies tiers without naming them use entry/core/premium.
+- Margin claims are percentage-point changes (3 points = target_change_pct=-3), NOT percent changes.
+- realized_vs_list measures REVENUE RETAINED as a percentage of list (discounts rising 12%->18% means realized/list falls ~88%->~82%).
+- "depends_on" lists criteria whose targets are mathematically linked to this one (e.g. realized_vs_list depends on avg_discount_quarter for the same quarter).
+
+Respond with ONLY this JSON:
+{
+  "criteria": [
+    {
+      "id": "AC1",
+      "name": "short name",
+      "check": "<one of the mapped checks>",
+      "params": { ... },
+      "classification": "parametric|statistical",
+      "depends_on": [],
+      "source_claim": "the claim this verifies"
+    }
+  ],
+  "ambiguities": [{"issue": "...", "resolution": "..."}]
+}

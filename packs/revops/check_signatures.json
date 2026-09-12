@@ -1,5 +1,5 @@
 {
-  "_comment": "Coordinate signature registry (P5 WP1). For each proof check: which criterion params are COORDINATES into the data model's geometry (which legal unit space they address, and how the dimension is selected), plus directional-parameter sign conventions. This is normative pack data: Gate-1 lint, criteria x config cross-lint, solver preconditions, and proposer knowledge prompts all derive from this file. A check added without a signature entry is a pack-validation warning; a signature naming an unknown check is an error.",
+  "_comment": "Coordinate signature registry (P5 WP1). For each proof check: which criterion params are COORDINATES into the data model's geometry (which legal unit space they address, and how the dimension is selected), plus directional-parameter sign conventions. This is normative pack data: Gate-1 lint, criteria x config cross-lint, solver preconditions, and proposer knowledge prompts all derive from this file. A check added without a signature entry is a pack-validation warning; a signature naming an unknown check is an error. P11: required_blocks lists the config blocks a check needs (dotted entries are sub-key features); blocked/pinned mark paths the engine cannot move.",
   "unit_spaces": {
     "quarters": {
       "source": "time_model.quarter_labels",
@@ -31,29 +31,32 @@
     }
   },
   "signatures": {
-    "win_rate_flat": {"coordinates": []},
+    "win_rate_flat": {"coordinates": [], "required_blocks": []},
     "avg_discount_quarter": {
       "coordinates": [
         {"param": "quarter", "space": "quarters", "required": true}
-      ]
+      ],
+      "required_blocks": []
     },
-    "discount_trend_monotonic": {"coordinates": []},
+    "discount_trend_monotonic": {"coordinates": [], "required_blocks": []},
     "region_discount_premium": {
       "coordinates": [
         {"param": "region", "space": "regions", "required": true},
         {"param": "vs", "space": "regions", "required": true,
          "multi": true,
          "notes": "list of baseline regions the premium is measured against"}
-      ]
+      ],
+      "required_blocks": []
     },
-    "end_of_quarter_effect": {"coordinates": []},
+    "end_of_quarter_effect": {"coordinates": [], "required_blocks": []},
     "realized_vs_list": {
       "coordinates": [
         {"param": "quarter_start", "space": "quarters", "required": false},
         {"param": "quarter_end", "space": "quarters", "required": false}
-      ]
+      ],
+      "required_blocks": []
     },
-    "data_sanity": {"coordinates": []},
+    "data_sanity": {"coordinates": [], "required_blocks": []},
     "revenue_vs_plan": {
       "coordinates": [
         {"param": "segment", "space": "quota_units",
@@ -63,33 +66,39 @@
         {"param": "dimension", "space": null, "required": false,
          "notes": "selects which quota sub-block (by_segment/by_territory/by_motion) defines the unit space"}
       ],
-      "pinned_quantity": "raking pins realized revenue to attainment x plan exactly"
+      "pinned_quantity": "raking pins realized revenue to attainment x plan exactly",
+      "required_blocks": ["quota"],
+      "pinned": true
     },
-    "cycle_length_trend": {"coordinates": []},
+    "cycle_length_trend": {"coordinates": [], "required_blocks": []},
     "creation_volume_trend": {
       "coordinates": [],
       "directional_params": {
         "target_decline_pct": "SIGNED: positive value demands a DECLINE of that pct; negative value demands GROWTH of that magnitude (e.g. -12 means '+12% growth'). Tolerance is tolerance_pp."
-      }
+      },
+      "required_blocks": []
     },
     "deal_size_trend": {
       "coordinates": [],
       "directional_params": {
         "target_change_pct": "SIGNED: demanded Q1->Q4 change of average won deal size; negative = decline."
-      }
+      },
+      "required_blocks": []
     },
     "icp_creation_shift": {
       "coordinates": [],
       "directional_params": {
         "min_increase_pp": "minimum required RISE in low-ICP creation share, first quarter vs last."
-      }
+      },
+      "required_blocks": []
     },
-    "revenue_concentration": {"coordinates": []},
+    "revenue_concentration": {"coordinates": [], "required_blocks": []},
     "blended_margin_trend": {
       "coordinates": [],
       "directional_params": {
         "target_change_pct": "SIGNED: demanded change in blended margin percentage points, first quarter vs last."
-      }
+      },
+      "required_blocks": ["products"]
     },
     "tier_share_shift": {
       "coordinates": [
@@ -98,28 +107,32 @@
       "directional_params": {
         "from_share_pct": "entry revenue share in the FIRST quarter",
         "to_share_pct": "tier revenue share in the LAST quarter"
-      }
+      },
+      "required_blocks": ["products"]
     },
-    "discount_margin_link": {"coordinates": []},
+    "discount_margin_link": {"coordinates": [], "required_blocks": ["products"]},
     "avg_price_by_tier": {
       "coordinates": [
         {"param": "tier", "space": "tiers", "required": true}
-      ]
+      ],
+      "required_blocks": ["products"]
     },
     "gap_concentration": {
       "coordinates": [
         {"param": "dimension", "space": null, "required": false,
          "notes": "names the grouping dimension itself (segment|territory), not a unit - no unit lookup"}
-      ]
+      ],
+      "required_blocks": ["quota"]
     },
-    "stage_aging": {"coordinates": []},
-    "slippage_trend": {"coordinates": []},
+    "stage_aging": {"coordinates": [], "required_blocks": ["pipeline"]},
+    "slippage_trend": {"coordinates": [], "required_blocks": ["pipeline"]},
     "coverage_ratio": {
       "coordinates": [
         {"param": "quarter", "space": "quarters", "required": false}
-      ]
+      ],
+      "required_blocks": ["pipeline", "quota"]
     },
-    "pipeline_concentration": {"coordinates": []},
+    "pipeline_concentration": {"coordinates": [], "required_blocks": ["pipeline"]},
     "quota_vs_potential": {
       "coordinates": [
         {"param": "unit", "space": "quota_units",
@@ -131,48 +144,59 @@
         {"param": "dimension", "space": null, "required": false,
          "notes": "selects which quota sub-block (by_segment/by_territory/by_motion) defines the unit space"}
       ],
-      "pinned_quantity": "plan levels are plan-of-record; market potential is generated data - ATTAINMENT KNOBS CANNOT MOVE THIS RATIO (blocked path)"
+      "pinned_quantity": "plan levels are plan-of-record; market potential is generated data - ATTAINMENT KNOBS CANNOT MOVE THIS RATIO (blocked path)",
+      "required_blocks": ["quota", "accounts.market_potential_usd"],
+      "blocked": true
     },
     "effective_capacity": {
       "coordinates": [
         {"param": "unit", "space": "capacity_units", "allow_all": true,
          "required": false,
          "notes": "absent = every plan-unit row (worst row decides); when present it MUST name a capacity plan unit - narrative words ('headline', 'effective') are not units"}
-      ]
+      ],
+      "required_blocks": ["capacity"]
     },
     "potential_coverage_gap": {
       "coordinates": [
         {"param": "dimension", "space": null, "required": false,
          "notes": "grouping dimension name (segment|territory), not a unit"}
-      ]
+      ],
+      "required_blocks": ["accounts.market_potential_usd"]
     },
-    "headcount_growth_placement": {"coordinates": []},
+    "headcount_growth_placement": {"coordinates": [], "required_blocks": ["capacity"]},
     "unowned_account_share": {
       "coordinates": [
         {"param": "quarter", "space": "quarters", "required": false}
-      ]
+      ],
+      "required_blocks": ["ownership"]
     },
-    "post_change_revenue_decline": {"coordinates": []},
+    "post_change_revenue_decline": {"coordinates": [], "required_blocks": ["ownership"]},
     "forecast_vs_actual": {
       "coordinates": [],
       "directional_params": {
         "target_pct": "commit as pct of actual: >100 means commit ABOVE actual i.e. a MISS; <100 means commit below actual i.e. a BEAT."
-      }
+      },
+      "required_blocks": ["forecast"]
     },
-    "commit_no_engagement_share": {"coordinates": []},
+    "commit_no_engagement_share": {"coordinates": [], "required_blocks": ["forecast", "activity"]},
     "core_vs_headline_growth": {
       "coordinates": [],
       "directional_params": {
         "min_headline_growth_pct": "lower bound on TOTAL revenue growth",
         "max_core_growth_pct": "upper bound on EX-OUTLIER (core) revenue growth; core may decline while headline grows only if whales add revenue"
-      }
+      },
+      "required_blocks": ["opportunities.outlier_deals"]
     },
     "elasticity_differential": {
       "coordinates": [],
       "directional_params": {
         "min_gap_pp": "minimum discount-response DIFFERENTIAL between high- and low-potential cohorts (high-potential wr change minus low-potential); driven by pricing_response.elasticity/potential_mitigation"
-      }
+      },
+      "required_blocks": ["pricing_response", "accounts.market_potential_usd"]
     },
-    "activity_potential_misalignment": {"coordinates": []}
+    "activity_potential_misalignment": {
+      "coordinates": [],
+      "required_blocks": ["activity", "accounts.market_potential_usd"]
+    }
   }
 }

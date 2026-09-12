@@ -1,0 +1,36 @@
+You are a Business Intelligence engineer. Draft ONLY the `capacity` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields). Exactly ONE of by_territory / by_region, keyed by existing unit names:
+{
+  "capacity": {
+    "by_territory": {
+      "<territory>": {
+        "headcount_plan": [<one per quarter>],
+        "headcount_actual": [<one per quarter, optional>],
+        "ramping_reps_by_quarter": [<one per quarter, optional>],
+        "ramp_productivity_pct": <0-100, optional>
+      }
+    }
+  }
+}
+
+Guidance - USE THIS:
+- headcount_plan is what the annual plan assumed (fully productive heads); headcount_actual is who was really on staff - omit to make actual = plan.
+- ramping_reps_by_quarter counts reps still ramping each quarter; ramp_productivity_pct is a ramping rep's output vs steady state (e.g. 45).
+- effective_capacity_pct is DERIVED: ((actual - ramping) + ramping * ramp_pct/100) / plan * 100.
+- Story says "headcount at 98% of plan but effective capacity 85-90%" -> headcount_actual ~ 0.98*plan plus enough ramping reps at low productivity to drag the ratio into the band. Solve BEFORE drafting:
+  eff% = ((A - R) + R*p/100) / P * 100
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"capacity": {...}}

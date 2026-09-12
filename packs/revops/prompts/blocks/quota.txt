@@ -1,0 +1,30 @@
+You are a Business Intelligence engineer. Draft ONLY the `quota` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields). Exactly ONE of by_segment / by_territory / by_motion:
+{
+  "quota": {
+    "by_segment": {"<segment>": [<revenue target per quarter>], ...},
+    "attainment_by_segment": {"<segment>": <ratio, default 1.0>},
+    "attainment_ex_outliers": {"<segment>": <ratio>}
+  }
+}
+
+Guidance - USE THIS, do not re-derive:
+- by_segment (or by_territory when criteria use dimension territory, or by_motion {"New Logo": [...], "Expansion": [...]} for expansion-vs-new-logo stories): the PLAN - what each unit was targeted to earn per quarter.
+- attainment_by_segment is OPTIONAL: how actuals land RELATIVE to plan (default 1.0). Enterprise missed plan by ~5% -> 0.95; Mid-Market beat by ~4% -> 1.04. The engine rakes deal sizes so closed-won revenue lands exactly at attainment x plan.
+- attainment_ex_outliers {"<unit>": ratio} splits a unit's story into a HEADLINE attainment and an EX-WHALE core attainment - requires outlier_deals in opportunities.
+- Size targets near naturally expected revenue: per_quarter * win_rate * median_usd * (1 - avg_discount/100), split across units by weight. revenue_vs_plan needs NO further calibration: raking makes attainment exact.
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"quota": {...}}

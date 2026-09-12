@@ -1,0 +1,15 @@
+You are a senior Revenue Operations analyst. Map each business claim to exactly ONE check from the buildable menu. This is the claim->form step only: do NOT invent checks, do NOT write params.
+
+{{menu}}
+
+User decisions: {{user_decisions}}
+
+Story:
+{{story}}
+
+Respond with ONLY this JSON:
+{
+  "forms": [
+    {"claim": "<the claim, verbatim>", "check": "<one check name from the menu>"}
+  ]
+}

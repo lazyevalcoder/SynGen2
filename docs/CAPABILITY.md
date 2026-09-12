@@ -99,3 +99,7 @@ Ran 15/16/17 + 22 with `--use-capability` (classic rework):
 2. Expand the envelope to the recurring failures: `revenue_concentration`,
    `deal_size_trend`, `elasticity_differential`.
 3. Then consider flipping the default.
+
+**See also:** `docs/DIVIDE_AND_CONQUER.md` — P11 adds a buildable **menu**
+(`syngen/menu.py`) that drops blocked checks before they can become criteria,
+and splits stages 2-3 into small prompts consolidated in code.

@@ -192,7 +192,7 @@ def gate_lint(io, session, sim_cfg, log):
 
 
 def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
-                   sim_cfg, session, log):
+                   sim_cfg, session, log, checks=None, split=False):
     """Pre-flight calibration (F17): deterministic config-vs-criteria
     cross-check before any iteration burns. HARD findings trigger one
     corrective re-draft; persistent HARD findings abort the session
@@ -274,7 +274,8 @@ def calibrate_gate(client, io, story, crit_summary, spec_notes, doc,
         fix_notes = (spec_notes + "\n\nCORRECTIVE FINDINGS from pre-flight "
                      "calibration - fix ALL of these in the new draft:\n"
                      + render_findings(hard))
-        sim_cfg = draft_simulator(client, story, crit_summary, fix_notes)
+        sim_cfg = draft_simulator(client, story, crit_summary, fix_notes,
+                                  checks=checks, split=split)
         doc.setdefault("definitions", {})["quarter_end_dates"] = dict(
             zip(sim_cfg["time_model"]["quarter_labels"],
                 sim_cfg["time_model"]["quarter_end_dates"]))
@@ -301,7 +302,8 @@ def post_generate_structure_gate(workbook_path, log, cfg=None):
 def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                   max_iterations=10, max_llm_proposals=8, use_personas=False,
                   use_critic=True, max_rework_rounds=0,
-                  rework_strategy="classic", use_capability=False):
+                  rework_strategy="classic", use_capability=False,
+                  stage23="classic"):
     """use_personas defaults OFF: the M4 A/B (experiments/M4_persona_ab)
     found no measurable quality benefit and a consistent ~35s latency cost.
     The P5 critic (use_critic) defaults ON: two bounded verification calls
@@ -315,7 +317,10 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
 
     rework_strategy: "classic" (full re-draft with the whole prompt) or
     "defect_response" (work order -> runbook/fixer -> verify). The latter is
-    the experimental path; default stays classic."""
+    the experimental path; default stays classic.
+
+    stage23: "classic" (one big prompt per stage) or "split" (P11: stage 2
+    claim-form -> params; stage 3 core -> per-block, assembled in code)."""
     session = Session.create(sessions_dir, slug=slug or story[:40])
     log = io.inform
     session.save_story(story)
@@ -328,7 +333,8 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                          use_critic=use_critic,
                          max_rework_rounds=max_rework_rounds,
                          rework_strategy=rework_strategy,
-                         use_capability=use_capability)
+                         use_capability=use_capability,
+                         stage23=stage23)
 
 
 def run_resume(session_root, client, io, new_story=None,
@@ -596,7 +602,7 @@ def _is_structural_preflight(hard):
 def _delivery_attempt(session, client, io, story, doc, claims,
                       decisions_text, spec_notes, log, max_iterations,
                       max_llm_proposals, use_critic, guidance="",
-                      use_capability=False):
+                      use_capability=False, stage23="classic"):
     """One full post-criteria delivery attempt (P7): simulator draft ->
     critic B -> schema lint -> pre-flight calibration -> geometry lint ->
     converge -> structure gate -> deliver.
@@ -606,6 +612,8 @@ def _delivery_attempt(session, client, io, story, doc, claims,
     result carries an `evidence` packet for the rework judge.
     """
     crit_summary = criteria_summary(doc)
+    checks = [c["check"] for c in doc.get("criteria", [])]
+    split = (stage23 == "split")
     sim_notes = ((spec_notes + "\n\n" + guidance).strip()
                  if guidance else spec_notes)
 
@@ -620,7 +628,8 @@ def _delivery_attempt(session, client, io, story, doc, claims,
                 doc, evidence)
 
     try:
-        sim_cfg = draft_simulator(client, story, crit_summary, sim_notes)
+        sim_cfg = draft_simulator(client, story, crit_summary, sim_notes,
+                                  checks=checks, split=split)
     except ConfigError as e:
         return _draft_failed(e)
 
@@ -642,7 +651,8 @@ def _delivery_attempt(session, client, io, story, doc, claims,
                     client, story, crit_summary,
                     (sim_notes or "") + "\n\n"
                     + critic_corrective_brief(issues),
-                    corrective_findings=critic_corrective_brief(issues))
+                    corrective_findings=critic_corrective_brief(issues),
+                    checks=checks, split=split)
             except ConfigError as e:
                 return _draft_failed(e)
 
@@ -679,7 +689,8 @@ def _delivery_attempt(session, client, io, story, doc, claims,
 
     # --- Pre-flight calibration gate (F17) ---
     sim_cfg, status, hard = calibrate_gate(client, io, story, crit_summary,
-                                           sim_notes, doc, sim_cfg, session, log)
+                                           sim_notes, doc, sim_cfg, session, log,
+                                           checks=checks, split=split)
     if sim_cfg is None:
         # S10.2: a STRUCTURAL failure (rule PF0 = the config itself is invalid)
         # is not a criteria problem. Deterministic repair already ran inside
@@ -716,7 +727,7 @@ def _delivery_attempt(session, client, io, story, doc, claims,
 def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
                      spec_notes, log, max_iterations, max_llm_proposals,
                      use_critic, max_rework_rounds, rework_strategy="classic",
-                     use_capability=False):
+                     use_capability=False, stage23="classic"):
     """Bounded rework coordinator (P7): run the delivery attempt; when it
     escalates with evidence, ask the LLM judge to route the next attempt
     back to criteria or config drafting. Deterministic guards (coverage vs
@@ -729,7 +740,7 @@ def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
         result, cur_doc, evidence = _delivery_attempt(
             session, client, io, story, cur_doc, claims, decisions_text,
             spec_notes, log, max_iterations, max_llm_proposals, use_critic,
-            guidance=guidance, use_capability=use_capability)
+            guidance=guidance, use_capability=use_capability, stage23=stage23)
         guidance = ""
         if result.get("status") in ("converged", "delivered_unaccepted",
                                     "manual_edit"):
@@ -821,7 +832,8 @@ def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
 def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                   max_iterations=10, max_llm_proposals=8, use_personas=True,
                   use_critic=True, max_rework_rounds=0,
-                  rework_strategy="classic", use_capability=False):
+                  rework_strategy="classic", use_capability=False,
+                  stage23="classic"):
     """Fresh-story flow: pre-check, Gate 1, personas+draft, then the
     delivery tail wrapped in the bounded rework coordinator (P7)."""
     # --- Pre-check ---
@@ -844,7 +856,8 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
         "Answer any pre-check questions now (blank line to finish), "
         "or leave empty:"
     )
-    doc = draft_criteria(client, story, decisions_text)
+    doc = draft_criteria(client, story, decisions_text, claims=claims,
+                         split=(stage23 == "split"))
 
     # --- Coverage guard (M5 iter 5, R6): vacuous criteria never converge ---
     doc, cov_status = enforce_coverage(client, story, doc, claims,
@@ -994,7 +1007,7 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                             decisions_text, spec_notes, log,
                             max_iterations, max_llm_proposals,
                             use_critic, max_rework_rounds, rework_strategy,
-                            use_capability)
+                            use_capability, stage23)
 
 
 def run_validation_final(summary, criteria_path):

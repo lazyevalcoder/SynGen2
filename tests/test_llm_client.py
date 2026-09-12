@@ -88,7 +88,8 @@ def test_profiles_cover_all_registered_checks_tasks():
     assert set(PROFILES) == {"decompose", "precheck", "personas",
                              "simulator_draft", "knob_proposal", "story_diff",
                              "coverage_audit", "critic", "rework_judge",
-                             "fixer"}
+                             "fixer", "simulator_core", "simulator_block",
+                             "claim_forms", "criterion_params"}
     for name in PROFILES:
         p = profile_for(name)
         assert p["max_tokens"] <= 16384

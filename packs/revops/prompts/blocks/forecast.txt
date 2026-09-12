@@ -1,0 +1,29 @@
+You are a Business Intelligence engineer. Draft ONLY the `forecast` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields):
+{
+  "forecast": {
+    "commit_ratio_by_quarter": [<committed vs actual, one per quarter>],
+    "commit_share_of_won_by_quarter": [<share of won deals flagged as commit>],
+    "low_activity_bias": <0+; higher = commit biased toward zero-touch accounts>
+  }
+}
+
+Guidance:
+- commit_ratio_by_quarter IS the story's claim: 1.09 means committed ran 9% hot vs actual.
+- Example: "commit ran ~9% hot all year; half the commit got zero touches" ->
+  {"commit_ratio_by_quarter": [1.09, 1.09, 1.09, 1.09], "commit_share_of_won_by_quarter": [0.35, 0.35, 0.35, 0.35], "low_activity_bias": 2.0}
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"forecast": {...}}

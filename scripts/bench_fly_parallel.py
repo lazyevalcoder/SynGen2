@@ -29,12 +29,12 @@ from syngen.llm.client import LLMClient, load_llm_config  # noqa: E402
 def _fly_one(task):
     """Worker: fly one scenario in its own process. Returns the report."""
     (name, story, sessions_dir, out_dir, llm_config, rework_strategy,
-     use_capability) = task
+     use_capability, stage23) = task
     client = LLMClient(load_llm_config(llm_config))
     t0 = time.time()
     report = run_fly(story, client, sessions_dir=sessions_dir,
                      slug=f"bench_{name}", rework_strategy=rework_strategy,
-                     use_capability=use_capability)
+                     use_capability=use_capability, stage23=stage23)
     report["scenario"] = name
     report["elapsed_s"] = round(time.time() - t0, 1)
     (Path(out_dir) / f"{name}_report.json").write_text(
@@ -55,6 +55,8 @@ def main():
     ap.add_argument("--rework-strategy", default="classic",
                     choices=("classic", "defect_response"))
     ap.add_argument("--use-capability", action="store_true")
+    ap.add_argument("--stage23", default="classic",
+                    choices=("classic", "split"))
     args = ap.parse_args()
 
     stories = sorted(Path(args.stories_dir).glob("scenario_*"))
@@ -75,7 +77,8 @@ def main():
         if sf.exists():
             tasks.append((folder.name, sf.read_text(encoding="utf-8"),
                           sessions_dir, str(out_dir), args.llm_config,
-                          args.rework_strategy, args.use_capability))
+                          args.rework_strategy, args.use_capability,
+                          args.stage23))
     print(f"flying {len(tasks)} scenarios with {args.jobs} workers...")
 
     reports = []

@@ -129,3 +129,9 @@ vocabulary, fewer roles, smaller prompts.
   not a proven cure.
 - The envelope math can be wrong where it exists (17's snap was optimistic),
   so any expansion of coverage must ship with tests.
+
+## 10. Update (2026-09-12): option B is implemented, not yet A/B'd
+The mechanics of option B are built on `refactor/stage23-phases`, flag-gated
+and default OFF: `syngen/menu.py` enforces a buildable menu (a `blocked` check
+cannot be chosen), and stages 2-3 are split into small pieces consolidated in
+code. See `DIVIDE_AND_CONQUER.md`. 468 tests green; no scenario runs yet.

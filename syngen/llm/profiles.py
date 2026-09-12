@@ -47,10 +47,22 @@ PROFILES = {
     # criterion + its check facts + the judge's diagnosis) instead of the
     # full drafter prompt. Mechanical JSON patch; no thinking needed.
     "fixer": {"max_tokens": 4096, "enable_thinking": False},
+    # P11 split stage 2/3: small focused pieces instead of one giant prompt.
+    # The core block still carries the calibration recipe (a little thinking);
+    # optional blocks and the claim->form map are mechanical JSON.
+    "simulator_core": {"max_tokens": 8192, "reasoning_budget_tokens": 400,
+                       "max_attempts": 2},
+    "simulator_block": {"max_tokens": 4096, "enable_thinking": False},
+    "claim_forms": {"max_tokens": 4096, "enable_thinking": False},
+    "criterion_params": {"max_tokens": 8192, "reasoning_budget_tokens": 400,
+                         "max_attempts": 2},
 }
 
 
 def profile_for(task):
-    if task not in PROFILES:
-        raise KeyError(f"unknown task profile: {task}. Known: {sorted(PROFILES)}")
-    return dict(PROFILES[task])
+    if task in PROFILES:
+        return dict(PROFILES[task])
+    # Every optional config block shares the small mechanical profile.
+    if task.startswith("simulator_"):
+        return dict(PROFILES["simulator_block"])
+    raise KeyError(f"unknown task profile: {task}. Known: {sorted(PROFILES)}")

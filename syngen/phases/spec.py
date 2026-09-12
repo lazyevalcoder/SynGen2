@@ -19,7 +19,22 @@ def persona_critique(client, story, criteria_summary, log_fn=print):
 
 
 def draft_simulator(client, story, criteria_summary, spec_notes="", sim_path=None,
-                    log_fn=print, corrective_findings=None, max_redrafts=2):
+                    log_fn=print, corrective_findings=None, max_redrafts=2,
+                    checks=None, split=False):
+    if split and checks:
+        from syngen.phases.stage3 import split_simulator
+        validated = split_simulator(client, story, criteria_summary, checks,
+                                    spec_notes=spec_notes, log_fn=log_fn,
+                                    max_redrafts=1)
+        if sim_path:
+            Path(sim_path).write_text(json.dumps(validated, indent=2),
+                                      encoding="utf-8")
+        n_quarters = len(validated["time_model"]["quarter_labels"])
+        log_fn(f"Drafted simulator.json (split): "
+               f"{validated['accounts']['count']} accounts, "
+               f"{validated['opportunities']['per_quarter']}/qtr x "
+               f"{n_quarters} quarters, seed {validated['seed']}")
+        return validated
     spec_brief = (spec_notes or "none")[-1500:]
     if corrective_findings:
         spec_brief = (spec_brief + "\n\nCORRECTIVE FINDINGS - your previous "

@@ -1,0 +1,37 @@
+You are a Business Intelligence engineer. Draft ONLY the `products` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields):
+{
+  "products": {
+    "catalog": [{"id": "<sku>", "tier": "<entry|core|premium>", "share": <0-1 or {"weights_by_quarter":[...]}>}],
+    "margin_by_tier": {"entry": <0-1>, "core": <0-1>, "premium": <0-1>},
+    "price_multiplier_by_tier": {"entry": <mult>, "core": 1.0, "premium": <mult>},
+    "discount_delta_pp_by_tier": {"entry": 0, "core": 0, "premium": <-pp>},
+    "cogs_inflation_by_quarter": [<one multiplier per quarter>]
+  }
+}
+
+Guidance - USE THIS, do not re-derive:
+- margin_by_tier is gross margin at list price (e.g. premium 0.75, core 0.6, entry 0.45); discounts reduce realized margin below it.
+- price_multiplier_by_tier scales deal size by tier (entry ~0.35-0.5 of core; premium ~2-3x). Omit to keep all tiers at the base distribution.
+- discount_delta_pp_by_tier COUPLES discounting to tier margin: high-margin tier discounted harder -> {"premium": +4}; guardrail punishing premium discounting -> {"premium": -3}.
+- cogs_inflation_by_quarter multiplies every tier's cost each quarter ([1.0, 1.02, 1.04, 1.06] for steadily rising COGS).
+- product shares may be {"weights_by_quarter":[...]} curves for mix-shift stories; per-quarter sums must stay ~1.0.
+- COUPLING CALCULUS: blended_margin%(q) ~= 100 - avg_cogs/(1 - won_avg_discount(q)/100). If criteria demand both a big discount increase and only a small margin decline, pick HIGH margins (0.7-0.85) so the discount rise erodes margin by the claimed amount.
+- TIER SHARE CALCULUS: catalog 'share' values are DEAL-COUNT shares; tier_share_shift measures REVENUE share:
+  rev_share_tier ~= count_share_tier * price_mult_tier / sum_j(count_share_j * price_mult_j)
+  Work backwards from the criterion's revenue-share targets. E.g. entry 20%->35% of REVENUE with multipliers entry=0.4/core=1/premium=2.5 -> entry COUNT share must go roughly 40%->60%.
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"products": {...}}

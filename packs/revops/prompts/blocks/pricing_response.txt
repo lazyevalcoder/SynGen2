@@ -1,0 +1,30 @@
+You are a Business Intelligence engineer. Draft ONLY the `pricing_response` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields):
+{
+  "pricing_response": {
+    "price_change_pct_by_quarter": [<one per quarter>],
+    "elasticity": <negative>,
+    "potential_mitigation": <0-1>
+  }
+}
+
+Guidance:
+- Use for price-change elasticity stories. elasticity is per +1% price; potential_mitigation near 1 spares high-potential accounts so conversion damage concentrates in low-potential territories.
+- Pair with the elasticity_differential check.
+- Example: "+6% price rise, low-potential accounts hit hardest" ->
+  {"price_change_pct_by_quarter": [0, 2, 4, 6], "elasticity": -1.5, "potential_mitigation": 0.8}
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"pricing_response": {...}}

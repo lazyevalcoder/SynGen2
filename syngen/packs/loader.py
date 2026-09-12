@@ -473,6 +473,24 @@ def validate_check_signatures(pack):
                     or via not in {c.get("param") for c in coords}):
                 errors.append(f"{where}/{pname}: via_dimension must name "
                               "another coordinate param of this check")
+        # P11: required_blocks drives the buildable menu / stage-3 block
+        # selection. Dotted refs (block.subkey) are allowed; the top-level
+        # segment must be a known engine block.
+        req = sig.get("required_blocks")
+        if req is not None:
+            if not isinstance(req, list) or \
+                    not all(isinstance(r, str) for r in req):
+                errors.append(f"{where}: 'required_blocks' must be a list "
+                              "of strings")
+            else:
+                for ref in req:
+                    top = ref.split(".")[0]
+                    if top not in _known_blocks():
+                        errors.append(f"{where}: required_blocks '{ref}' is "
+                                      "not a known engine block")
+        for flag in ("blocked", "pinned"):
+            if flag in sig and not isinstance(sig[flag], bool):
+                errors.append(f"{where}: '{flag}' must be a boolean")
     undeclared = sorted(set(pack.checks) - set(sigs["signatures"]))
     if undeclared:
         warnings.append("checks with no declared signature: "

@@ -1,0 +1,30 @@
+You are a Business Intelligence engineer. Draft ONLY the `pipeline` block of a synthetic dataset config. Do NOT emit any other block.
+
+Schema (do not invent fields):
+{
+  "pipeline": {
+    "stage_names": ["Discovery", "Validation", "Proposal", "Negotiation"],
+    "share_open_by_quarter": [<one per quarter, 0-0.95>],
+    "slippage_rate_by_quarter": [<one per quarter, 0-1>]
+  }
+}
+
+Guidance:
+- share_open_by_quarter is the fraction of each quarter's created opportunities that REMAIN OPEN at evaluation time; they get lifecycle stages and an expected_close_date instead of closing.
+- open deals do NOT count toward closed-won revenue - quota targets apply only to the (1-share) that closes, so size per_quarter UP accordingly.
+- slippage_rate_by_quarter pushes that fraction of open deals' expected close dates past their creation quarter's end (rising rates = "deals slipping" stories).
+- stage_names are your lifecycle stages; keep them conventional unless the story names specific ones.
+
+Facts for the checks this story must satisfy:
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Respond with ONLY: {"pipeline": {...}}

@@ -1,0 +1,65 @@
+You are a Business Intelligence engineer designing the CORE of a synthetic dataset config. You are drafting ONLY the `accounts` and `opportunities` blocks. Other blocks (products/pipeline/quota/capacity/ownership/activity/forecast/pricing_response) are drafted separately - do NOT emit them.
+
+Required config blocks for this story: {{required_blocks}}
+Sub-key features this story needs: {{required_features}}
+
+Schema for the two blocks you own (do not invent fields):
+{
+  "accounts": {
+    "count": <int>,
+    "regions": {"<region>": <weight>},
+    "segments": {"<segment>": <weight>},
+    "industries": ["<industry>", ...],
+    "territories": {"<territory>": ["<region>", ...]},
+    "icp_share": <0-1>,
+    "market_potential_usd": {"min": <num>, "max": <num>}
+  },
+  "opportunities": {
+    "per_quarter": <int>,
+    "win_rate": <0-1>,
+    "win_rate_jitter": <small fraction>,
+    "owners": ["<name>", ...],
+    "deal_duration_days": [lo, hi],
+    "volume_multipliers": [<one per quarter>],
+    "close_clustering": {"share_in_end_of_quarter_window": <0-1>},
+    "deal_size_lognormal": {"median_usd": <num>, "sigma": <num>},
+    "discount": {
+      "base_by_quarter": {"<region>": [<one value per quarter>], ...},
+      "noise_sd_pp": <num>, "end_of_quarter_boost_pp": <num>,
+      "end_of_quarter_window_days": <int>, "min_pct": 0, "max_pct": 40
+    }
+  }
+}
+
+Optional sub-keys, include only when the story needs them:
+- accounts.territories: {"<name>": ["<region>", ...]}; every referenced region must exist in regions. Use when criteria reference territories.
+- accounts.icp_share: <0-1> for pipeline-quality stories.
+- accounts.market_potential_usd: {min,max}; include whenever the required features list it (potential/elasticity/activity stories).
+- opportunities.volume_multipliers: per-quarter creation scaling, e.g. pipeline slowing ~20% by Q4 -> [1.0, 0.95, 0.88, 0.8]. Omit when volume is flat.
+- opportunities.deal_size_lognormal.medians_by_quarter: [<per-quarter median>] instead of median_usd for shrinking/growing deal-size stories (e.g. ~60k -> ~30k -> [60000, 50000, 40000, 30000]).
+- opportunities.outlier_deals: {"share": 0.01, "multiplier": 15} for concentration/whale stories; {"share_by_quarter": [...], "multiplier": 30} to vary whales by quarter. Include whenever the required features list it.
+- opportunities.close_clustering.share_in_end_of_quarter_window for end-of-quarter effects.
+
+Calibration guidance - USE THIS, do not re-derive:
+- won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost
+- realized/list pct(q) ~= 100 - won_avg_discount(q) + ~1.8pp revenue-weighting bonus
+- When criteria PIN a level for a quarter, set base_by_quarter so the blended won_avg_discount(q) equals 100 - target_realized_vs_list(q) + 1.8 at each pinned quarter.
+- win rate noise std at n deals/quarter = sqrt(p*(1-p)/n): pick per_quarter >= 300 so statistical criteria are reachable.
+- noise_sd_pp of 2.5-3.5 is a good default; it does not shift averages.
+- deal_duration_days may be {"means": [<per-quarter avg days>], "spread": <days>} for cycle-length stories.
+- regions AMER/EMEA/APAC; segments Enterprise/Mid-Market/SMB unless the story says otherwise.
+
+Facts for the checks this story must satisfy (signs, scoping, limits):
+{{check_facts}}
+
+Story:
+{{story}}
+
+Acceptance criteria:
+{{criteria}}
+
+Spec notes:
+{{spec}}
+
+Begin your reply with the opening brace { immediately - no preamble.
+Respond with ONLY: {"accounts": {...}, "opportunities": {...}}
