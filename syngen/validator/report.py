@@ -6,11 +6,10 @@ import pandas as pd
 from syngen.config import load_criteria
 from syngen.validator.checks import CHECKS
 
-# Quality audit: a PASS by more than this is a red flag that the data
-# overshoots the story (e.g. coverage "healthy at 3.5x" landing at 65x).
-# Two-sided (target +/- band) checks can never exceed their band, so this
-# only ever flags one-sided (>=/<=) criteria that ran away.
-LOOSE_MARGIN = 20.0
+# "Loose" (quality audit) is decided PER CHECK, relative to that check's own
+# scale - see LOOSE_RATIO_FACTOR / LOOSE_PP_SLACK in the check library. An
+# absolute margin threshold is scale-blind: 15x coverage against a 3.5x floor
+# (margin 11.5) is an overshoot, while a 3.5pp miss is not.
 
 
 def load_workbook(path):
@@ -93,9 +92,7 @@ def run_validation(workbook_path, criteria_path):
             }
             if r.get("structural"):
                 entry["structural"] = True
-            entry["loose"] = (entry["verdict"] == "PASS"
-                              and entry["margin"] is not None
-                              and float(entry["margin"]) > LOOSE_MARGIN)
+            entry["loose"] = bool(r.get("loose", False))
             results.append(entry)
         except Exception as e:
             results.append({
@@ -145,7 +142,7 @@ def render_table(results, all_pass):
     loose = [r["id"] for r in results if r.get("loose")]
     if loose:
         lines.append(
-            f"WARNING: loose margins on {', '.join(loose)} - passed by more "
-            f"than {LOOSE_MARGIN:g}pp/multiple; the data may overshoot the "
-            "story (landed but not faithful)")
+            f"WARNING: loose margins on {', '.join(loose)} - passed well "
+            "beyond the target floor; the data may overshoot the story "
+            "(landed but not faithful)")
     return "\n".join(lines)

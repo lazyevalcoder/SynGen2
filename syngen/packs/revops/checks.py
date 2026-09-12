@@ -33,6 +33,14 @@ def _result(ok, actual_display, target_display, detail, margin):
     }
 
 
+# Quality audit: a one-sided (>=/<=) check that passes FAR beyond its floor is
+# "loose" - the data overshoots the story's stated magnitude. The test must be
+# RELATIVE to the check's own scale, not an absolute margin: 15x coverage
+# against a 3.5x floor is loose even though its margin (11.5) is modest.
+LOOSE_RATIO_FACTOR = 2.0    # ratio floors: loose if actual > factor * floor
+LOOSE_PP_SLACK = 20.0       # share/pp floors: loose if actual - floor > slack
+
+
 def quarter_start(date_str):
     return pd.Timestamp(date_str) - pd.DateOffset(months=3) + pd.Timedelta(days=1)
 
@@ -352,8 +360,10 @@ def check_icp_creation_shift(opp, accounts, params):
     shift = shares[last] - shares[first]
     needed = params["min_increase_pp"]
     detail = "; ".join(f"{k}: {v:.1f}% low-ICP" for k, v in shares.items())
-    return _result(shift >= needed, f"{shift:+.1f}pp shift",
-                   f">= +{needed:g}pp", detail, shift - needed)
+    r = _result(shift >= needed, f"{shift:+.1f}pp shift",
+                f">= +{needed:g}pp", detail, shift - needed)
+    r["loose"] = shift - needed > LOOSE_PP_SLACK
+    return r
 
 
 def check_revenue_concentration(opp, accounts, params):
@@ -379,8 +389,10 @@ def check_revenue_concentration(opp, accounts, params):
         return _result(needed <= top <= max_share, f"{top:.1f}% top-{n_top}",
                        f"{needed:g}-{max_share:g}%", detail,
                        min(top - needed, max_share - top))
-    return _result(top >= needed, f"{top:.1f}% top-{n_top}",
-                   f">= {needed}%", detail, top - needed)
+    r = _result(top >= needed, f"{top:.1f}% top-{n_top}",
+                f">= {needed}%", detail, top - needed)
+    r["loose"] = top - needed > LOOSE_PP_SLACK
+    return r
 
 
 # --- M5 iteration 2: products, margins, correlation, territories ----------
@@ -626,8 +638,10 @@ def check_slippage_trend(opp, accounts, params):
                        f"{delta:+.1f}pp slip-rate change",
                        f"+{need:g}..+{max_inc:g}pp", detail,
                        min(delta - need, max_inc - delta))
-    return _result(delta >= need, f"{delta:+.1f}pp slip-rate change",
-                   f">= +{need:g}pp", detail, delta - need)
+    r = _result(delta >= need, f"{delta:+.1f}pp slip-rate change",
+                f">= +{need:g}pp", detail, delta - need)
+    r["loose"] = delta - need > LOOSE_PP_SLACK
+    return r
 
 
 def check_coverage_ratio(opp, accounts, params):
@@ -677,8 +691,10 @@ def check_coverage_ratio(opp, accounts, params):
         return _result(need <= ratio <= max_mult, f"{ratio:.2f}x coverage",
                        f"{need:g}-{max_mult:g}x", detail,
                        min(ratio - need, max_mult - ratio))
-    return _result(ratio >= need, f"{ratio:.2f}x coverage",
-                   f">= {need:g}x", detail, ratio - need)
+    r = _result(ratio >= need, f"{ratio:.2f}x coverage",
+                f">= {need:g}x", detail, ratio - need)
+    r["loose"] = ratio > need * LOOSE_RATIO_FACTOR
+    return r
 
 
 def check_pipeline_concentration(opp, accounts, params):
@@ -705,8 +721,10 @@ def check_pipeline_concentration(opp, accounts, params):
                        f"{share:.1f}% top-{n_top}",
                        f"{needed:g}-{max_share:g}%", detail,
                        min(share - needed, max_share - share))
-    return _result(share >= needed, f"{share:.1f}% top-{n_top}",
-                   f">= {needed}%", detail, share - needed)
+    r = _result(share >= needed, f"{share:.1f}% top-{n_top}",
+                f">= {needed}%", detail, share - needed)
+    r["loose"] = share - needed > LOOSE_PP_SLACK
+    return r
 
 def _structural_no_capacity(what):
     r = _result(False, "no capacity_plan sheet", what,
@@ -895,8 +913,10 @@ def check_headcount_growth_placement(opp, accounts, params):
     detail = (f"strong units [{', '.join(sorted(strong))}] took "
               f"{share:.0f}% of +{total_add:.0f} added heads "
               f"(ranked by {first} booked revenue)")
-    return _result(share >= need, f"{share:.0f}% to strong units",
-                   f">= {need:g}% of additions", detail, share - need)
+    r = _result(share >= need, f"{share:.0f}% to strong units",
+                f">= {need:g}% of additions", detail, share - need)
+    r["loose"] = share - need > LOOSE_PP_SLACK
+    return r
 
 
 def check_effective_capacity(opp, accounts, params):

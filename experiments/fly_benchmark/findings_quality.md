@@ -122,10 +122,16 @@ So this audit covers landed flights from 7-12 and 19-21 only.
 Detection + optional bounding shipped (additive; no change to existing
 criteria that do not opt in):
 
-- **Loose-margin flag.** `syngen/validator/report.py` marks any PASS with
-  `margin > 20` as `loose`, renders `[LOOSE]` next to the row, and prints a
-  warning. Surfaced in `fly_report.json` (`loose_margins`) and the delivery
-  log. Re-validating scenario 21 now flags AC1/AC2/AC4 and warns.
+- **Loose-margin flag (per-check, relative).** Each one-sided check decides
+  looseness on its own scale, not by an absolute margin (which is
+  scale-blind): `coverage_ratio` is loose when `actual > 2 x floor` (so 15x
+  against a 3.5x floor IS flagged even though its margin is only 11.5);
+  share/pp checks (`pipeline_concentration`, `revenue_concentration`,
+  `slippage_trend`, `headcount_growth_placement`, `icp_creation_shift`) are
+  loose when `actual - floor > 20pp`. `render_table` marks `[LOOSE]` and
+  warns; surfaced in `fly_report.json` (`loose_margins`) and the delivery
+  log. Re-validating scenario 21 flags AC1/AC2/AC4; scenario 11's 5.96x vs
+  3x is correctly NOT flagged.
 - **Range-bound targets (opt-in upper bounds).** Added `max_multiple`
   (`coverage_ratio`), `max_top_share_pct` (`pipeline_concentration`,
   `revenue_concentration`), `max_increase_pp` (`slippage_trend`). When

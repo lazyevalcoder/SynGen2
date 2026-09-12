@@ -218,6 +218,23 @@ def test_coverage_ratio_structural_and_pass():
     assert no_quota.get("structural")
 
 
+def test_coverage_loose_is_relative_to_the_floor():
+    """A fixed margin threshold is scale-blind: 15x coverage against a 3.5x
+    floor (margin 11.5) is an overshoot and must be flagged LOOSE."""
+    quota = pd.DataFrame([
+        {"plan_unit_type": "segment", "plan_unit": "SMB",
+         "fiscal_quarter": "FY26-Q2", "target_realized_usd": 32000.0}])
+    opp = mk_opp()  # ~$480k in the Q2 window -> 15x
+    params = {**P, "_quota_df": quota, "quarter": "FY26-Q2",
+              "min_multiple": 3.5}
+    r = checks.check_coverage_ratio(opp, None, params)
+    assert r["ok"] and r["loose"], r
+    # same 15x, but a floor high enough that twice it exceeds the actual is
+    # not loose
+    r2 = checks.check_coverage_ratio(opp, None, {**params, "min_multiple": 10})
+    assert r2["ok"] and not r2["loose"], r2
+
+
 def test_pipeline_concentration():
     opp = mk_opp()
     # fixture spreads over 8 accounts evenly -> top-2 ~ 25%
