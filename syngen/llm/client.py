@@ -19,6 +19,8 @@ class LLMResponse:
     usage: dict = field(default_factory=dict)
     attempts: int = 1
     elapsed_s: float = 0.0
+    prompt_chars: int = 0
+    completion_chars: int = 0
 
 
 DEFAULT_CONFIG = {
@@ -81,7 +83,8 @@ class LLMClient:
         # models may bill hidden thinking tokens the endpoint reports in
         # completion_tokens; we take whatever the endpoint returns.
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
-                      "total_tokens": 0, "elapsed_s": 0.0}
+                      "total_tokens": 0, "elapsed_s": 0.0,
+                      "prompt_chars": 0, "completion_chars": 0}
 
     def usage_totals(self):
         """Copy of the accumulated usage for this client (per-flight)."""
@@ -99,6 +102,10 @@ class LLMClient:
         self.usage["total_tokens"] += int(total or 0)
         self.usage["elapsed_s"] = round(
             self.usage["elapsed_s"] + float(resp.elapsed_s or 0.0), 2)
+        # Signal-vs-noise instrumentation (defect-response experiment): the
+        # size of what the model actually read vs wrote.
+        self.usage["prompt_chars"] += int(resp.prompt_chars or 0)
+        self.usage["completion_chars"] += int(resp.completion_chars or 0)
 
     def chat(self, system, user, max_tokens=None, temperature=None,
              reasoning_effort=None, max_attempts=None, enable_thinking=None,
@@ -250,13 +257,17 @@ class LLMClient:
         with urllib.request.urlopen(req, timeout=self.config["timeout_s"]) as resp:
             body = json.loads(resp.read().decode("utf-8"))
         msg = body["choices"][0]["message"]
+        content = msg.get("content") or ""
+        reasoning = msg.get("reasoning_content") or ""
         return LLMResponse(
-            content=msg.get("content") or "",
-            reasoning=msg.get("reasoning_content") or "",
+            content=content,
+            reasoning=reasoning,
             finish_reason=body["choices"][0].get("finish_reason", ""),
             model=str(body.get("model", "")),
             usage=dict(body.get("usage", {})),
             attempts=attempt,
+            prompt_chars=len(system or "") + len(user or ""),
+            completion_chars=len(content) + len(reasoning),
         )
 
 

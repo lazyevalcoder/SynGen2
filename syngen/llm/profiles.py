@@ -43,6 +43,10 @@ PROFILES = {
     # (criteria / config / escalate). Deterministic guardrails re-check the
     # route, so a routing error is cheap and survivable.
     "rework_judge": {"max_tokens": 4096, "enable_thinking": False},
+    # Defect-response fixer: receives a MINIMAL work order (the target
+    # criterion + its check facts + the judge's diagnosis) instead of the
+    # full drafter prompt. Mechanical JSON patch; no thinking needed.
+    "fixer": {"max_tokens": 4096, "enable_thinking": False},
 }
 
 

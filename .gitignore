@@ -20,6 +20,9 @@ experiments/fly_benchmark/run_*/
 # Skills A/B raw outputs (regenerable)
 experiments/skills_ab/
 
+# Defect-response fixer A/B raw outputs (regenerable)
+experiments/fixer_ab/
+
 # OS / editor
 Thumbs.db
 .DS_Store

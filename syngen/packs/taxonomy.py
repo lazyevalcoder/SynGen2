@@ -83,6 +83,36 @@ class PackTaxonomy(ClaimTaxonomy):
         facts = self._generated_authoring_facts()
         return curated + ("\n\n" + facts if facts else "")
 
+    def check_facts(self, check_names):
+        """Compact facts for a SUBSET of checks (defect-response fixer).
+
+        The fixer must not receive the full guide/catalog - only the
+        coordinates, directional signs and pinned-quantity limits for the
+        checks it is allowed to touch."""
+        lines = []
+        for check in sorted(set(check_names)):
+            sig = self._signatures.get(check)
+            if not sig:
+                continue
+            lines.append(f"- {check}:")
+            for coord in sig.get("coordinates", []):
+                space = coord.get("space")
+                if space:
+                    allowed = " (or '_all_')" if coord.get("allow_all") else ""
+                    lines.append(f"    {coord.get('param')}: one of the "
+                                 f"config's {space}{allowed}")
+                if coord.get("notes"):
+                    lines.append(f"    {coord.get('param')} note: "
+                                 f"{coord.get('notes')}")
+            for key in ("directional_params", "pinned_quantity"):
+                note = sig.get(key)
+                if isinstance(note, dict):
+                    for pname, desc in note.items():
+                        lines.append(f"    {pname}: {desc}")
+                elif isinstance(note, str):
+                    lines.append(f"    {note}")
+        return "\n".join(lines)
+
     def _generated_authoring_facts(self):
         lines = ["GENERATED PARAMETER FACTS (from the check registry):"]
         scope = []

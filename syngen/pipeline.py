@@ -21,6 +21,7 @@ from syngen.phases.converge import LoopEscalation, run_convergence
 from syngen.phases.critic import (block_issues, critique_artifact,
                                   corrective_brief as critic_corrective_brief,
                                   render_issues)
+from syngen.phases.defect_response import defect_response
 from syngen.phases.criteria_lint import (corrective_brief, cross_lint,
                                          lint_criteria_internal,
                                          render_lint)
@@ -299,7 +300,8 @@ def post_generate_structure_gate(workbook_path, log, cfg=None):
 
 def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                   max_iterations=10, max_llm_proposals=8, use_personas=False,
-                  use_critic=True, max_rework_rounds=0):
+                  use_critic=True, max_rework_rounds=0,
+                  rework_strategy="classic"):
     """use_personas defaults OFF: the M4 A/B (experiments/M4_persona_ab)
     found no measurable quality benefit and a consistent ~35s latency cost.
     The P5 critic (use_critic) defaults ON: two bounded verification calls
@@ -309,7 +311,11 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
     max_rework_rounds: the flexible stage-rework budget (P7). 0 = rigid
     one-way pipeline (legacy behavior, tests depend on exact call counts);
     >0 lets an LLM judge route escalation evidence back to criteria or
-    config drafting before the flight ends. run_fly enables 2."""
+    config drafting before the flight ends. run_fly enables 2.
+
+    rework_strategy: "classic" (full re-draft with the whole prompt) or
+    "defect_response" (work order -> runbook/fixer -> verify). The latter is
+    the experimental path; default stays classic."""
     session = Session.create(sessions_dir, slug=slug or story[:40])
     log = io.inform
     session.save_story(story)
@@ -320,7 +326,8 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                          max_llm_proposals=max_llm_proposals,
                          use_personas=use_personas,
                          use_critic=use_critic,
-                         max_rework_rounds=max_rework_rounds)
+                         max_rework_rounds=max_rework_rounds,
+                         rework_strategy=rework_strategy)
 
 
 def run_resume(session_root, client, io, new_story=None,
@@ -648,7 +655,7 @@ def _delivery_attempt(session, client, io, story, doc, claims,
 
 def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
                      spec_notes, log, max_iterations, max_llm_proposals,
-                     use_critic, max_rework_rounds):
+                     use_critic, max_rework_rounds, rework_strategy="classic"):
     """Bounded rework coordinator (P7): run the delivery attempt; when it
     escalates with evidence, ask the LLM judge to route the next attempt
     back to criteria or config drafting. Deterministic guards (coverage vs
@@ -706,6 +713,25 @@ def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
             result["rework"] = {"rounds": rnd + 1, "directives": directives}
             return result
         if verdict["action"] == "rework_criteria":
+            if rework_strategy == "defect_response":
+                new_doc, ok, dr = defect_response(client, verdict, evidence,
+                                                  cur_doc, log_fn=log)
+                for key in ("defect_class", "targets", "resolver"):
+                    if key in dr:
+                        directive[key] = dr[key]
+                if not ok:
+                    log("Defect-response patch rejected by the guards "
+                        f"({dr.get('resolver')}: {dr.get('reason')}) - final "
+                        "escalation.")
+                    result["rework"] = {"rounds": rnd + 1,
+                                        "directives": directives}
+                    return result
+                cur_doc = new_doc
+                session.write_artifact("criteria.json",
+                                       json.dumps(cur_doc, indent=2))
+                log(f"Defect-response {dr.get('resolver')} patch applied "
+                    f"(round {rnd + 1}) - retrying delivery.")
+                continue
             new_doc, ok = redraft_criteria(client, story, cur_doc, claims,
                                            decisions_text,
                                            verdict["guidance"], log_fn=log)
@@ -733,7 +759,8 @@ def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
 
 def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                   max_iterations=10, max_llm_proposals=8, use_personas=True,
-                  use_critic=True, max_rework_rounds=0):
+                  use_critic=True, max_rework_rounds=0,
+                  rework_strategy="classic"):
     """Fresh-story flow: pre-check, Gate 1, personas+draft, then the
     delivery tail wrapped in the bounded rework coordinator (P7)."""
     # --- Pre-check ---
@@ -905,7 +932,7 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
     return _delivery_rework(session, client, io, story, doc, claims,
                             decisions_text, spec_notes, log,
                             max_iterations, max_llm_proposals,
-                            use_critic, max_rework_rounds)
+                            use_critic, max_rework_rounds, rework_strategy)
 
 
 def run_validation_final(summary, criteria_path):
