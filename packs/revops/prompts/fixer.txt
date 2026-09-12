@@ -5,10 +5,15 @@ limits, and the judge's diagnosis. Produce a targeted PATCH that re-expresses
 the SAME claim in a reachable, correct form.
 
 Hard rules:
-- Change ONLY the criteria listed in "targets". Do not add or touch others.
-- Preserve each criterion's "source_claim" EXACTLY - you are re-expressing
-  the claim, never dropping or weakening it.
-- Use ONLY the exact check name and parameter names given in "allowed".
+- Change ONLY the criteria listed in "targets". Never modify a criterion
+  whose id is in "existing_ids" but not in "targets".
+- You MAY split a target into several criteria. Give any new criterion a
+  FRESH id (e.g. "AC3a") that is NOT already in "existing_ids".
+- Every criterion you emit must carry the SAME "source_claim" as its target
+  (copy it verbatim) - you are re-expressing the claim, never dropping or
+  weakening it.
+- Use ONLY exact check names from "checks_available" and parameter names from
+  "allowed".
 - Every bound must be one the data can plausibly violate (no vacuous floor).
 - Where the story states a magnitude, encode a RANGE (min AND max), not a bare
   lower bound - a one-sided bound can pass by overshooting.

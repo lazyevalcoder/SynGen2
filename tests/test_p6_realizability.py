@@ -279,3 +279,29 @@ def test_cohort_criteria_do_not_conflict_in_consistency_lint():
     ]}
     hard, _ = lint_criteria_internal(doc)
     assert not hard, "different cohorts are different coordinates"
+
+
+def test_normalize_quota_keys_canonicalizes_motion_names():
+    """S-config: drafter variants ('New_Logo', 'expansion') must map to the
+    engine's known motions instead of dead-looping the draft repair."""
+    from syngen.phases.preflight import _normalize_quota_keys
+    cfg = {"accounts": {"segments": {"Enterprise": 0.5, "SMB": 0.5}},
+           "quota": {
+               "by_motion": {"New_Logo": [1, 1, 1, 1],
+                             "expansion": [2, 2, 2, 2]},
+               "attainment_ex_outliers": {"_all_": 0.9}}}
+    assert _normalize_quota_keys(cfg)
+    assert set(cfg["quota"]["by_motion"]) == {"New Logo", "Expansion"}
+    assert cfg["quota"]["attainment_ex_outliers"] == {
+        "Expansion": 0.9, "New Logo": 0.9}
+
+
+def test_normalize_quota_keys_expands_lone_all_segment():
+    from syngen.phases.preflight import _normalize_quota_keys
+    cfg = {"accounts": {"segments": {"Enterprise": 0.5, "SMB": 0.5}},
+           "quota": {"by_segment": {"_all_": [1, 1, 1, 1]},
+                     "attainment_ex_outliers": {"_all_": 0.9}}}
+    assert _normalize_quota_keys(cfg)
+    assert set(cfg["quota"]["by_segment"]) == {"Enterprise", "SMB"}
+    assert set(cfg["quota"]["attainment_ex_outliers"]) == {
+        "Enterprise", "SMB"}

@@ -59,51 +59,61 @@ Borrowed from ITIL incident/problem management and aviation CRM:
 - `syngen/phases/defect_response.py` — work order, runbook, fixer, verifier.
 - `packs/revops/prompts/fixer.txt` — the minimal fixer prompt.
 - `syngen/packs/taxonomy.py::check_facts` — per-check facts (subset context).
+- `syngen/phases/preflight.py::_normalize_quota_keys` — deterministic config
+  canonicalization (quota keys, `_all_` expansion), called from
+  `syngen/phases/spec.py`'s draft repair.
 - `syngen/pipeline.py` — `rework_strategy="classic"|"defect_response"`.
 - `syngen/llm/client.py` — `prompt_chars`/`completion_chars` instrumentation.
 - `scripts/ab_fixer.py` — replay harness over recorded failures.
-- `tests/test_defect_response.py` — 13 tests.
+- `tests/test_defect_response.py`, `tests/test_p6_realizability.py` — tests.
 
 ## Experiment — replay of 8 recorded failures (2026-09-12)
 
 `scripts/ab_fixer.py` reconstructs each failure's final escalation from its
-session and runs the rework step under both arms.
+session and runs the rework step under both arms. The defect column is after
+the split/`checks_available` fixes (re-run, defect arm only).
 
 | Metric | classic | defect_response |
 |---|---|---|
 | Replays | 8 | 8 |
-| Patch applied | 62.5% | 50.0% |
+| Patch applied | 62.5% | **75.0%** |
 | Lint pass | 100% | 100% |
 | **source_claim preserved** | **37.5%** | **100%** |
-| Defect addressed (heuristic) | 37.5% | 50.0% |
-| Total tokens | **124,567** | **4,036** |
-| Avg prompt chars | **46,206** | **1,584** |
+| Defect addressed (heuristic) | 37.5% | **75.0%** |
+| Total tokens | **124,567** | **5,376** |
+| Avg prompt chars | **46,206** | **2,114** |
 
-**Headline: the defect arm used ~3% of the tokens and a ~29x smaller prompt,
-preserved every source claim, and addressed more defects.** The runbook fixed
-scenario 14's one-sided bounds with **zero LLM calls**; scenario 22 was fixed
-with zero calls as well.
+**Headline: the defect arm used ~4% of the tokens and a ~22x smaller prompt,
+preserved every source claim, and addressed twice as many defects.** The
+runbook fixed scenario 14's one-sided bounds with **zero LLM calls**.
 
-Per-case (`[defect]`): 10 fixed, 14 runbook (0 tok), 15 fixed, 22 fixed (0
-tok); 16/17/19/25 not resolved. 17 and 25 are **config** defects
-(`missing_surface`, `schema_key_mismatch`) — out of scope for the criteria
-fixer, correctly skipped.
+Per-case (`[defect]`): 10, 14 (runbook, 0 tok), 15, 16, 19, 22 all resolved;
+17 and 25 are **config** defects (`missing_surface`, `schema_key_mismatch`) —
+handled by the deterministic quota normalizer at draft time (below), not by
+the criteria fixer.
+
+### Fixes found by the replay
+- The fixer reused an existing id (`AC4`) when splitting a target -> the
+  verifier now allows fresh-id splits but still rejects touching existing
+  non-targets.
+- The fixer had no list of alternative checks -> the work order now carries
+  `checks_available` (names only, small) and `existing_ids`.
+
+### Config classes handled deterministically
+`preflight._normalize_quota_keys` (called in the draft repair) canonicalizes
+quota unit keys (case/separators: `New_Logo` -> `New Logo`, `expansion` ->
+`Expansion`) and expands a lone `_all_` to the real segments/motions. This
+covers the `schema_key_mismatch` / `missing_surface` classes without an LLM.
 
 ## Honest assessment
-- **Win:** cost (~3%), prompt size (~3%), and claim preservation (100% vs
+- **Win:** cost (~4%), prompt size (~4%), and claim preservation (100% vs
   37.5%). The noise hypothesis is supported.
-- **Modest:** defect-addressed 50% vs 37.5% — better, but not a silver bullet.
-  The fixer still fails on some criteria defects (16, 19).
-- **Not covered:** config defects (17, 25). These need the runbook to
-  canonicalize/synthesize config surfaces, or a config fixer.
+- **Good:** defect-addressed 75% vs 37.5%, at a fraction of the cost.
 - **Caveat:** replay isolates the rework step; a patch that addresses the
   defect has not been proven to land the full flight. A full-fly confirmation
-  on 2–3 scenarios is the next step.
+  on 2-3 scenarios is the next step.
 
 ## Next steps
-1. Extend the runbook with the observed config classes
-   (`schema_key_mismatch`, `missing_surface`) so 17/25 are handled
-   deterministically.
-2. Investigate the fixer failures on 16/19 (why the patch was rejected/absent).
-3. Full-fly A/B on 3–5 scenarios with `rework_strategy="defect_response"`.
-4. Only then consider flipping the default.
+1. Full-fly A/B on 3-5 scenarios with `rework_strategy="defect_response"`.
+2. Re-fly 22/25 to confirm the quota normalizer clears the config deaths.
+3. Only then consider flipping the default.

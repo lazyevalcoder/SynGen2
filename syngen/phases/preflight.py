@@ -1750,3 +1750,77 @@ def _renormalize_product_shares_cfg(cfg):
         k = 1.0 / total
         for c in curves:
             c[qi] = float(c[qi]) * k
+
+
+def _canon_unit(name):
+    import re
+    return re.sub(r"[^a-z0-9]", "", str(name).lower())
+
+
+def _normalize_quota_keys(cfg):
+    """S-config canonicalization: quota unit keys must match the engine's
+    known units exactly ('New Logo', 'Expansion', the config's segments/
+    territories). Map drafter variants (case/separators, e.g. 'New_Logo' ->
+    'New Logo', 'expansion' -> 'Expansion') and expand a lone '_all_' to the
+    real units, so the deterministic repair fixes a whole class of
+    draft_invalid failures instead of re-drafting forever.
+
+    Returns True if anything changed."""
+    quota = cfg.get("quota")
+    if not isinstance(quota, dict):
+        return False
+    changed = False
+    for dim in ("by_segment", "by_territory", "by_motion"):
+        targets = quota.get(dim)
+        if not isinstance(targets, dict) or not targets:
+            continue
+        if dim == "by_motion":
+            known = {"New Logo", "Expansion"}
+        else:
+            src = (cfg.get("accounts") or {}).get(
+                "territories" if dim == "by_territory" else "segments", {})
+            known = set(src or {})
+        if not known:
+            continue
+        lookup = {_canon_unit(k): k for k in known}
+        new_targets = {}
+        for unit, curve in targets.items():
+            canon = lookup.get(_canon_unit(unit))
+            if canon is not None:
+                new_targets[canon] = curve
+            elif _canon_unit(unit) == "all":
+                for k in sorted(known):
+                    new_targets.setdefault(k, curve)
+            else:
+                new_targets[unit] = curve
+        if new_targets != targets:
+            quota[dim] = new_targets
+            changed = True
+
+    target_units = set()
+    for dim in ("by_segment", "by_territory", "by_motion"):
+        t = quota.get(dim)
+        if isinstance(t, dict):
+            target_units |= set(t)
+    if not target_units:
+        return changed
+    lookup = {_canon_unit(u): u for u in target_units}
+    for field in ("attainment", "attainment_by_segment",
+                  "attainment_ex_outliers"):
+        ratios = quota.get(field)
+        if not isinstance(ratios, dict):
+            continue
+        new_ratios = {}
+        for unit, ratio in ratios.items():
+            canon = lookup.get(_canon_unit(unit))
+            if canon is not None:
+                new_ratios[canon] = ratio
+            elif _canon_unit(unit) == "all":
+                for u in sorted(target_units):
+                    new_ratios.setdefault(u, ratio)
+            else:
+                new_ratios[unit] = ratio
+        if new_ratios != ratios:
+            quota[field] = new_ratios
+            changed = True
+    return changed

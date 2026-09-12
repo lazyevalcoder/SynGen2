@@ -92,12 +92,31 @@ def test_verify_patch_rejects_source_claim_change():
 
 
 def test_verify_patch_rejects_non_target():
-    doc = _doc(crit("AC1", "coverage_ratio", quarter="FY26-Q2",
-                    min_multiple=3.5))
-    patch = [{"id": "AC9", "check": "coverage_ratio", "params": {},
-              "source_claim": "AC9"}]
+    doc = _doc(_with_claim(crit("AC1", "coverage_ratio", quarter="FY26-Q2",
+                                min_multiple=3.5), "coverage healthy"),
+               _with_claim(crit("AC2", "data_sanity", max_discount_pct=40),
+                           "sanity"))
+    patch = [{"id": "AC2", "check": "data_sanity",
+              "params": {"max_discount_pct": 50}, "source_claim": "sanity"}]
     _, ok, why = dr.verify_patch(patch, doc, {"AC1"})
     assert not ok and "non-target" in why
+
+
+def test_verify_patch_allows_split_with_fresh_id():
+    doc = _doc(_with_claim(crit("AC3", "quota_vs_potential",
+                                target_ratio_pct=120, band_pp=5),
+                           "quotas over potential"))
+    patch = [
+        {"id": "AC3", "check": "headcount_growth_placement",
+         "params": {"min_growth_share_pct": 50},
+         "source_claim": "quotas over potential"},
+        {"id": "AC3a", "check": "effective_capacity",
+         "params": {"target_pct": 87, "band_pp": 3},
+         "source_claim": "quotas over potential"},
+    ]
+    new_doc, ok, why = dr.verify_patch(patch, doc, {"AC3"})
+    assert ok, why
+    assert {c["id"] for c in new_doc["criteria"]} == {"AC3", "AC3a"}
 
 
 def test_verify_patch_accepts_valid_range():

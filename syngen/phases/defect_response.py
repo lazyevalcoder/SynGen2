@@ -64,10 +64,12 @@ def build_work_order(verdict, evidence, doc, taxonomy=None):
     if not targets:
         targets = list(crit)
     checks = {crit[t].get("check") for t in targets if t in crit}
+    tax = taxonomy if taxonomy is not None else _taxonomy()
     order = {
         "defect_class": classify_defect(verdict, evidence),
         "artifact": "criteria",
         "targets": targets,
+        "existing_ids": list(crit),
         "observed": {
             t: {"check": crit[t].get("check"),
                 "params": crit[t].get("params", {}),
@@ -77,10 +79,13 @@ def build_work_order(verdict, evidence, doc, taxonomy=None):
         "root_cause": verdict.get("reason") or evidence.get("reason") or "",
         "fix_intent": verdict.get("guidance") or "",
     }
-    tax = taxonomy if taxonomy is not None else _taxonomy()
-    facts = tax.check_facts(checks) if tax is not None else ""
-    if facts:
-        order["allowed"] = facts
+    if tax is not None:
+        facts = tax.check_facts(checks)
+        if facts:
+            order["allowed"] = facts
+        # the fixer may need to SWITCH checks for a blocked path; give it the
+        # registered names (small) so it can pick a reachable one.
+        order["checks_available"] = tax.check_names(sep=", ")
     return order
 
 
@@ -132,27 +137,45 @@ def fixer_patch(client, work_order, log_fn=print):
 
 def verify_patch(patch, doc, targets):
     """Apply a patch to a COPY and verify it is claim-preserving and sound.
+
+    Allowed: modify a target in place, or SPLIT a target into new criteria
+    (fresh ids). Forbidden: touching an existing non-target criterion, or
+    introducing a claim that is not one of the targets' source claims.
     Returns (new_doc, ok, reason)."""
     crit = {c.get("id"): dict(c) for c in doc.get("criteria", [])}
+    existing = set(crit)
+    target_claims = {crit[t].get("source_claim") for t in targets if t in crit}
+    added = []
     for item in patch:
         if not isinstance(item, dict):
             return doc, False, "patch item is not an object"
         tid = item.get("id")
-        if tid not in targets:
-            return doc, False, f"patch touched non-target {tid!r}"
-        if tid not in crit:
-            return doc, False, f"patch names unknown criterion {tid!r}"
-        if item.get("source_claim") != crit[tid].get("source_claim"):
-            return doc, False, f"patch changed source_claim for {tid}"
         if not item.get("check"):
-            return doc, False, f"patch missing check for {tid}"
-        merged = dict(crit[tid])
-        for key in ("name", "check", "params", "classification", "depends_on"):
-            if key in item:
-                merged[key] = item[key]
-        crit[tid] = merged
+            return doc, False, f"patch missing check for {tid!r}"
+        if tid in existing and tid not in targets:
+            return doc, False, f"patch touched non-target {tid!r}"
+        if item.get("source_claim") not in target_claims:
+            return doc, False, (f"patch item {tid!r} does not preserve a "
+                                "target source_claim")
+        if tid in crit:
+            merged = dict(crit[tid])
+            for key in ("name", "check", "params", "classification",
+                        "depends_on"):
+                if key in item:
+                    merged[key] = item[key]
+            crit[tid] = merged
+        else:
+            crit[tid] = {"id": tid, "name": item.get("name", tid),
+                         "check": item["check"],
+                         "params": item.get("params", {}),
+                         "classification": item.get("classification",
+                                                    "parametric"),
+                         "source_claim": item["source_claim"],
+                         "depends_on": item.get("depends_on", [])}
+            added.append(tid)
     new_doc = {**doc,
-               "criteria": [crit[c["id"]] for c in doc.get("criteria", [])]}
+               "criteria": [crit[c["id"]] for c in doc.get("criteria", [])]
+               + [crit[a] for a in added]}
     hard, _ = lint_criteria_internal(new_doc)
     if hard:
         return new_doc, False, ("patched criteria still inconsistent: "

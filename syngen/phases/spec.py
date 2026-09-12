@@ -41,8 +41,10 @@ def draft_simulator(client, story, criteria_summary, spec_notes="", sim_path=Non
         # session here.
         log_fn(f"Draft invalid ({e}) - attempting deterministic repair.")
         try:
-            from syngen.phases.preflight import _renormalize_product_shares_cfg
+            from syngen.phases.preflight import (_normalize_quota_keys,
+                                                 _renormalize_product_shares_cfg)
             _renormalize_product_shares_cfg(doc)
+            _normalize_quota_keys(doc)
             validated = validate_simulator_doc(doc)
         except (ConfigError, Exception):
             # A drafter that keeps emitting the SAME invalid draft (e.g. a
