@@ -19,7 +19,7 @@ def persona_critique(client, story, criteria_summary, log_fn=print):
 
 
 def draft_simulator(client, story, criteria_summary, spec_notes="", sim_path=None,
-                    log_fn=print, corrective_findings=None):
+                    log_fn=print, corrective_findings=None, max_redrafts=2):
     spec_brief = (spec_notes or "none")[-1500:]
     if corrective_findings:
         spec_brief = (spec_brief + "\n\nCORRECTIVE FINDINGS - your previous "
@@ -37,18 +37,30 @@ def draft_simulator(client, story, criteria_summary, spec_notes="", sim_path=Non
     except ConfigError as e:
         # F19/F17 family: a schema-plausible draft can still be invalid
         # (share sums off, bad types). One deterministic repair attempt,
-        # then one corrective re-draft; never crash the session here.
+        # then a BOUNDED number of corrective re-drafts; never crash the
+        # session here.
         log_fn(f"Draft invalid ({e}) - attempting deterministic repair.")
         try:
             from syngen.phases.preflight import _renormalize_product_shares_cfg
             _renormalize_product_shares_cfg(doc)
             validated = validate_simulator_doc(doc)
         except (ConfigError, Exception):
+            # A drafter that keeps emitting the SAME invalid draft (e.g. a
+            # unit name the repair cannot fix) used to recurse forever and
+            # hang the flight. Fail honestly once the budget is spent so the
+            # runner escalates and moves on.
+            if max_redrafts <= 0:
+                log_fn("Repair failed after re-draft budget - giving up on "
+                       f"this draft: {e}")
+                raise ConfigError(
+                    f"simulator draft still invalid after {max_redrafts} "
+                    f"corrective re-drafts: {e}")
             log_fn("Repair failed - re-drafting with corrective findings.")
             return draft_simulator(client, story, criteria_summary,
                                    spec_notes, sim_path=sim_path,
                                    log_fn=log_fn,
-                                   corrective_findings=str(e))
+                                   corrective_findings=str(e),
+                                   max_redrafts=max_redrafts - 1)
 
     if sim_path:
         Path(sim_path).write_text(json.dumps(validated, indent=2), encoding="utf-8")

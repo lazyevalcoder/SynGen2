@@ -12,6 +12,19 @@ def llm_json(obj):
     return LLMResponse(content=json.dumps(obj))
 
 
+def test_draft_simulator_bounded_on_persistent_invalid_draft():
+    """Regression (scenario 22 hang): a drafter that keeps emitting the same
+    invalid draft used to recurse forever. It must raise after a bounded
+    budget so the flight escalates instead of hanging."""
+    from syngen.config import ConfigError
+    from syngen.phases.spec import draft_simulator
+    bad = json.dumps({"seed": 1})  # schema-plausible dict, invalid config
+    client = FakeLLM([LLMResponse(content=bad) for _ in range(10)])
+    with pytest.raises(ConfigError):
+        draft_simulator(client, "story", "criteria", max_redrafts=2)
+    assert len(client.calls) == 3   # initial + 2 redrafts, not unbounded
+
+
 PRECHECK = {
     "claims": [
         {"claim": "Q4 discounts deeper", "classification": "COMPUTABLE", "note": ""},

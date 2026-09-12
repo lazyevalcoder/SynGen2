@@ -550,7 +550,20 @@ def _delivery_attempt(session, client, io, story, doc, claims,
     sim_notes = ((spec_notes + "\n\n" + guidance).strip()
                  if guidance else spec_notes)
 
-    sim_cfg = draft_simulator(client, story, crit_summary, sim_notes)
+    def _draft_failed(e):
+        # S22: draft_simulator is bounded now - a spent budget is a normal
+        # escalation, not a crash/hang.
+        evidence = make_evidence("draft_invalid",
+                                 "simulator draft invalid after re-drafts",
+                                 doc, detail=str(e))
+        return ({"status": "escalated", "reason": "draft_invalid",
+                 "session": str(session.root), "evidence": evidence},
+                doc, evidence)
+
+    try:
+        sim_cfg = draft_simulator(client, story, crit_summary, sim_notes)
+    except ConfigError as e:
+        return _draft_failed(e)
 
     # --- Critic pass B (P5 WP9): config vs criteria semantics. Block
     # findings trigger exactly one corrective simulator re-draft.
@@ -565,11 +578,14 @@ def _delivery_attempt(session, client, io, story, doc, claims,
                         + render_issues(issues))
             log(f"Critic flagged {len(issues)} block issue(s) in the "
                 "drafted config - one corrective re-draft.")
-            sim_cfg = draft_simulator(
-                client, story, crit_summary,
-                (sim_notes or "") + "\n\n"
-                + critic_corrective_brief(issues),
-                corrective_findings=critic_corrective_brief(issues))
+            try:
+                sim_cfg = draft_simulator(
+                    client, story, crit_summary,
+                    (sim_notes or "") + "\n\n"
+                    + critic_corrective_brief(issues),
+                    corrective_findings=critic_corrective_brief(issues))
+            except ConfigError as e:
+                return _draft_failed(e)
 
     # Calendar flows from the generator's config into criteria so validation
     # stays consistent with what the engine actually generated (live-smoke bug).
