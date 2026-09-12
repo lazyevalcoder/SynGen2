@@ -146,7 +146,8 @@
       ],
       "pinned_quantity": "plan levels are plan-of-record; market potential is generated data - ATTAINMENT KNOBS CANNOT MOVE THIS RATIO (blocked path)",
       "required_blocks": ["quota", "accounts.market_potential_usd"],
-      "blocked": true
+      "blocked": true,
+      "replacement": "potential_coverage_gap"
     },
     "effective_capacity": {
       "coordinates": [

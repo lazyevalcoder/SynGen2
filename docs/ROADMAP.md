@@ -19,6 +19,8 @@
 > **As of 2026-09-12 (P14):** measuring the split prompts showed the full `menu_text()` (~10.2k chars) had become the new manual. Stage 2a now uses a compact `menu.pick_list()` (3.6k), dropping the form-selection prompt 11.0k → 4.4k; detail moved to the fill step. 494 tests green; no scenario runs yet. See `ENFORCEMENT.md`.
 >
 > **As of 2026-09-12 (P15):** hosted-provider support hardened. DeepSeek ignores `reasoning.effort` but honors `thinking:{type:disabled}`; the client now merges configurable `thinking_disable_body`/`thinking_enable_body`. Per-flight usage is written to `<session>/usage.json` and printed; a stage crash now escalates instead of killing the CLI (scenario 14 exposed a pre-flight re-draft crash). First measured DeepSeek flight (scenario 14) LANDED 3/3 at 52 calls / 241,289 tokens. 498 tests green. See `MODEL_PROVIDERS.md`.
+>
+> **As of 2026-09-12 (P17):** closed the observed pipeline failures: cross-block unit + quota-attainment/dimension consistency, blocked-check replacement mapping, pseudo-unit detection at stage 2, non-tunable-lever early escalation, same-stage retry, critic re-check for proxy criteria, near-duplicate dedupe, invented-key rejection, claim-preserving menu re-draft. 512 tests green; no scenario runs after the fixes. See `P17_FIXES.md`.
 
 ---
 

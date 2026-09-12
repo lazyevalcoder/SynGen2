@@ -68,6 +68,27 @@ def _tunable(path):
     return False
 
 
+# P17: checks whose levers are NOT in the tunable allowlist above. A failing
+# criterion from this set cannot be recovered by the convergence loop - it must
+# be re-drafted (config or criteria), not iterated.
+_NON_TUNABLE_CHECKS = {
+    "elasticity_differential",
+    "post_change_revenue_decline",
+    "activity_potential_misalignment",
+    "commit_no_engagement_share",
+    "unowned_account_share",
+}
+
+# P17: leaf keys a proposal MAY create when absent (known optional additions).
+# Anything else that does not already exist is rejected, so the proposer cannot
+# invent schema keys (e.g. market_potential_usd.high_pot_min).
+_KNOWN_NEW_LEAVES = {
+    "icp_share", "volume_multipliers", "outlier_deals", "medians_by_quarter",
+    "territories", "market_potential_usd", "icp_sampling_weights_by_quarter",
+    "attainment", "attainment_by_segment", "attainment_ex_outliers",
+}
+
+
 def _renormalize_product_shares(cfg):
     """Product catalog shares are RELATIVE weights; proposers routinely
     adjust one tier's curve without rebalancing siblings, which failed
@@ -115,9 +136,27 @@ def _apply_changes(cfg, changes):
         try:
             try:
                 old = get_at_path(cfg, path)
+                exists = True
             except (KeyError, IndexError, TypeError):
                 # null parents / missing containers: set_at_path creates them
                 old = None
+                exists = False
+            leaf = str(path).split(".")[-1].split("[")[0]
+            if not exists and leaf not in _KNOWN_NEW_LEAVES:
+                # Reject inventing a NEW key on an existing object (e.g.
+                # market_potential_usd.high_pot_min). Creating through a null
+                # / missing container stays allowed (M5 live lesson).
+                parent = str(path).rsplit(".", 1)[0] if "." in str(path) else ""
+                try:
+                    pval = get_at_path(cfg, parent) if parent else None
+                except (KeyError, IndexError, TypeError):
+                    pval = None
+                if pval is not None:
+                    applied.append({
+                        "path": path, "error":
+                            "new key on an existing object; only existing "
+                            "knobs may be tuned (or a known optional key)"})
+                    continue
             set_at_path(cfg, path, ch.get("to"))
             applied.append({"path": path, "from": old, "to": ch.get("to"),
                             "predicted_effect": ch.get("predicted_effect", "")})
@@ -753,6 +792,23 @@ def run_convergence(session, client, sim_path, criteria_path,
                 f"{_worst_margins(results)}",
                 results, history_lines)
 
+        # P17: all deterministic remedies have run. If EVERY failing criterion
+        # depends on a lever the tuning loop cannot change, no proposal can
+        # recover it - escalate with the real cause instead of burning the
+        # proposal budget.
+        id_to_check = {c["id"]: c["check"]
+                       for c in criteria_doc.get("criteria", [])}
+        non_tunable = [r["id"] for r in results
+                       if r["verdict"] == "FAIL"
+                       and id_to_check.get(r["id"]) in _NON_TUNABLE_CHECKS]
+        if failing and len(non_tunable) == len(failing):
+            raise LoopEscalation(
+                "not-loop-recoverable: failing criteria "
+                f"{sorted(non_tunable)} depend on config levers the tuning "
+                "loop cannot change (pricing_response/ownership/activity); "
+                "re-draft the config or the criteria instead",
+                results, history_lines)
+
         proposal = propose_knobs(client, cfg, results, history_lines)
         changes = proposal.get("changes", [])
         applied = _apply_changes(cfg, changes)
@@ -772,8 +828,13 @@ def run_convergence(session, client, sim_path, criteria_path,
         log_fn(f"Adjusting ({len(changes)} changes):\n{change_str}")
         session.log(f"### Proposal {iteration}\nDiagnosis: {diag_str}\n"
                     f"```json\n{json.dumps(applied, indent=2)}\n```")
-        history_lines.append(f"iter {iteration}: failed={failing}, "
-                             f"changed={[a['path'] for a in applied]}")
+        rejected = [f"{a['path']} ({a.get('error')})" for a in applied
+                    if "error" in a]
+        history_lines.append(
+            f"iter {iteration}: failed={failing}, "
+            f"changed={[a['path'] for a in applied if 'error' not in a]}"
+            + (f", REJECTED={rejected} (do NOT propose these again)"
+               if rejected else ""))
 
         Path(sim_path).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 

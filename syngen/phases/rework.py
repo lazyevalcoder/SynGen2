@@ -90,13 +90,15 @@ def judge_revision(client, story, evidence, doc, round_no, log_fn=print):
 
 
 def redraft_criteria(client, story, doc, claims, decisions_text, guidance,
-                     log_fn=print):
+                     log_fn=print, menu_constrained=False):
     """Claim-preserving criteria re-draft driven by judge guidance.
 
     Returns (doc, ok). The coverage guard re-runs against the ORIGINAL
     claims; dropping a claim is rejected (anti-goalpost). A re-draft that
     still fails internal consistency is also rejected. Both rejections
     return the unchanged doc with ok=False.
+
+    menu_constrained=True (P17) drafts from the buildable catalog only.
     """
     brief = (
         "REWORK - the previous attempt escalated because criteria misread "
@@ -106,7 +108,8 @@ def redraft_criteria(client, story, doc, claims, decisions_text, guidance,
         + (guidance or "(no specific guidance - use the story claims).")
     )
     notes = brief if not decisions_text else decisions_text + "\n\n" + brief
-    doc2 = draft_criteria(client, story, notes, log_fn=log_fn)
+    doc2 = draft_criteria(client, story, notes, log_fn=log_fn,
+                          menu_constrained=menu_constrained)
     doc2, cov = enforce_coverage(client, story, doc2, claims,
                                  decisions_text=decisions_text,
                                  log_fn=log_fn)

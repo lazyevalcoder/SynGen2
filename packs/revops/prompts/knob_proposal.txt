@@ -6,6 +6,15 @@ Current validation results (margin = distance from passing; negative = failing):
 Knob changes tried so far (oldest first):
 {{iteration_history}}
 
+TUNABLE KNOB PATHS (only these are accepted; everything else is REJECTED):
+- accounts.*  (count, regions, segments, market_potential_usd, ...)
+- opportunities.*  (deal_size_lognormal, discount.*, win_rate, volume_multipliers, ...)
+- products.*  (catalog shares, margin_by_tier, price_multiplier_by_tier, ...)
+- quota.attainment / quota.attainment_by_segment  (how actuals land vs plan)
+DO NOT propose: time_model.*, seed, output.*, quota.by_segment/by_territory (the
+plan is plan-of-record), pricing_response.*, ownership.*, activity.*, forecast.* -
+they are not tunable and will be rejected.
+
 Transfer function learned from experiments:
 won_avg_discount(q) = sum(region_weight * base[region][q]) + share_in_window * boost_pp
                       + sum_tier(rev_share_tier * discount_delta_pp_by_tier[tier])

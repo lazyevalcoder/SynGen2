@@ -55,6 +55,42 @@ def is_known(check):
     return check in _sigs()
 
 
+def replacement_for(check):
+    """A buildable check that can stand in for a blocked one (P17)."""
+    return _sigs().get(check, {}).get("replacement")
+
+
+# Narrative labels drafters put where a real unit name belongs (P17).
+_NARRATIVE_UNITS = {
+    "small", "large", "big", "high", "low", "top", "bottom",
+    "high-potential", "low-potential", "high_potential", "low_potential",
+}
+
+
+def _pseudo_unit_findings(c):
+    cid, check = c.get("id"), c.get("check")
+    sig = _sigs().get(check, {})
+    params = c.get("params", {}) or {}
+    out = []
+    for coord in sig.get("coordinates", []):
+        if not coord.get("space"):
+            continue
+        val = params.get(coord.get("param"))
+        if val is None:
+            continue
+        vals = val if isinstance(val, list) else [val]
+        for v in vals:
+            s = str(v)
+            if s == "_all_":
+                continue
+            if " " in s.strip() or s.lower() in _NARRATIVE_UNITS:
+                out.append(
+                    f"{cid}: {check}.{coord['param']}='{s}' is a narrative "
+                    f"label, not a real {coord['space']} unit - use a real "
+                    "unit name or a cohort subset, or drop this criterion.")
+    return out
+
+
 def required_blocks(checks):
     """Top-level config blocks a set of checks needs (deduped)."""
     out = set()
@@ -119,6 +155,11 @@ def _coord_key(c):
     return tuple(sorted(parts))
 
 
+def coordinate_key(c):
+    """Public coordinate identity for a criterion (P17)."""
+    return _coord_key(c)
+
+
 def menu_findings(doc):
     """Hard findings for criteria that violate the buildable menu (P13).
 
@@ -135,10 +176,13 @@ def menu_findings(doc):
                 "re-express the claim with a buildable check.")
             continue
         if is_blocked(check):
+            repl = replacement_for(check)
+            hint = f" Use '{repl}' instead." if repl else ""
             findings.append(
                 f"{cid}: check '{check}' is BLOCKED (the engine cannot move "
                 "this quantity) - re-express the SAME claim with a buildable "
-                "check.")
+                f"check.{hint}")
+        findings.extend(_pseudo_unit_findings(c))
         key = (check, _coord_key(c), _params_key(c), c.get("source_claim"))
         if key in seen:
             findings.append(f"{cid}: exact duplicate of {seen[key]} - merge "

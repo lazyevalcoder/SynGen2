@@ -16,6 +16,7 @@ invent NO others:
 Guidance - USE THIS, do not re-derive:
 - by_segment (or by_territory when criteria use dimension territory, or by_motion {"New Logo": [...], "Expansion": [...]} for expansion-vs-new-logo stories): the PLAN - what each unit was targeted to earn per quarter.
 - attainment_by_segment is OPTIONAL: how actuals land RELATIVE to plan (default 1.0). Enterprise missed plan by ~5% -> 0.95; Mid-Market beat by ~4% -> 1.04. The engine rakes deal sizes so closed-won revenue lands exactly at attainment x plan.
+- attainment maps (attainment / attainment_by_segment / attainment_ex_outliers) MUST be keyed by the SAME unit names as the by_* block you chose. If you use by_territory, attainment keys are TERRITORIES - never segment names.
 - attainment_ex_outliers {"<unit>": ratio} splits a unit's story into a HEADLINE attainment and an EX-WHALE core attainment - requires outlier_deals in opportunities.
 - Size targets near naturally expected revenue: per_quarter * win_rate * median_usd * (1 - avg_discount/100), split across units by weight. revenue_vs_plan needs NO further calibration: raking makes attainment exact.
 

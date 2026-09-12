@@ -70,7 +70,12 @@ def _normalize_audit_item(item, known_checks):
     mapped: a valid check name implies PARAMETRIC; anything else - including
     hallucinated names (benchmark F9.2) - degrades to VOCAB_GAP, which
     notes instead of blocking.
+
+    P17: a BLOCKED check is swapped for its buildable replacement (or
+    degraded to a note when none exists), so the auditor can no longer push
+    the drafter back onto an unbuildable check.
     """
+    from syngen.menu import is_blocked, replacement_for
     claim = item.get("claim", "?")
     reason = item.get("reason", "")
     classification = item.get("classification")
@@ -78,6 +83,17 @@ def _normalize_audit_item(item, known_checks):
     if classification not in ("PARAMETRIC", "VOCAB_GAP", "QUALIFIER"):
         classification = ("PARAMETRIC" if check in known_checks
                           else "VOCAB_GAP")
+    if classification == "PARAMETRIC" and check is not None and is_blocked(check):
+        repl = replacement_for(check)
+        if repl:
+            reason += (f" [auditor named blocked check '{check}'; "
+                       f"use '{repl}' instead]")
+            check = repl
+        else:
+            classification = "VOCAB_GAP"
+            reason += (f" [auditor named blocked check '{check}'; no "
+                       "buildable replacement]")
+            check = None
     if classification == "PARAMETRIC" and check not in known_checks:
         # auditor violated the naming contract - degrade to note, log loudly
         classification = "VOCAB_GAP"

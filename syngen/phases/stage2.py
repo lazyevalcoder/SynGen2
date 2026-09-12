@@ -72,16 +72,20 @@ def _to_doc(result):
 
 
 def _dedupe(doc, log_fn):
-    """Drop EXACT duplicate criteria (same check, params and source claim)."""
-    seen, out = set(), []
+    """Drop duplicate criteria: exact (check+params+claim) or the same
+    check+coordinate+claim (a redundant re-expression of one claim)."""
+    from syngen.menu import coordinate_key
+    seen_exact, seen_claim, out = set(), set(), []
     for c in doc.get("criteria", []):
-        key = (c.get("check"),
-               json.dumps(c.get("params"), sort_keys=True),
-               c.get("source_claim"))
-        if key in seen:
-            log_fn(f"Stage 2 split: dropped exact duplicate {c.get('id')}.")
+        exact = (c.get("check"),
+                 json.dumps(c.get("params"), sort_keys=True),
+                 c.get("source_claim"))
+        same_claim = (c.get("check"), coordinate_key(c), c.get("source_claim"))
+        if exact in seen_exact or same_claim in seen_claim:
+            log_fn(f"Stage 2 split: dropped duplicate {c.get('id')}.")
             continue
-        seen.add(key)
+        seen_exact.add(exact)
+        seen_claim.add(same_claim)
         out.append(c)
     return {**doc, "criteria": out}
 

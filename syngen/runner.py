@@ -42,6 +42,7 @@ _REWIND = {
     "criteria_consistency": 2,
     "criteria_geometry": 2,
     "criteria_menu": 2,
+    "criteria_intent": 2,
     "draft_invalid": 3,
     "stage3_buildability": 3,
     "preflight_structural": 3,
@@ -276,13 +277,15 @@ def run_stages(session, client, io, story=None, *, upto=None, only=None,
             state.data["guidance"] = guidance
         state.save()
 
-        if (auto_rewind and target is not None and target < n
+        if (auto_rewind and target is not None and target <= n
                 and rewind_rounds < max_rewind_rounds):
             rewind_rounds += 1
             _archive(session, target)
             state.mark_stale_from(target)
-            log(f"Rewind: stage {n} ({result.reason}) -> re-running from "
-                f"stage {target} (round {rewind_rounds}/{max_rewind_rounds}).")
+            kind = "retry" if target == n else "rewind"
+            log(f"{kind.capitalize()}: stage {n} ({result.reason}) -> "
+                f"re-running from stage {target} "
+                f"(round {rewind_rounds}/{max_rewind_rounds}).")
             n = target
             continue
 

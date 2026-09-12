@@ -212,6 +212,36 @@ def test_stage_histogram_counts_failures():
     assert h["escalations_by_stage"] == {3: 1}
 
 
+def test_same_stage_failure_is_retried(run_in_tmp, monkeypatch):
+    """P17: a stage that fails and points at ITSELF is retried (bounded),
+    instead of being terminal."""
+    from syngen import runner, stages
+
+    calls = []
+
+    def make(n, fail_first=False):
+        def fn(ctx):
+            calls.append(n)
+            if fail_first and calls.count(n) == 1:
+                return stages.StageResult(
+                    n, "escalated", reason="draft_invalid",
+                    evidence={"kind": "draft_invalid"}, rewind_to=n)
+            return stages.StageResult(n, "completed")
+        return fn
+
+    for i in (2, 4, 5):
+        monkeypatch.setitem(stages.STAGES, i, (stages.STAGE_NAMES[i], make(i)))
+    monkeypatch.setitem(stages.STAGES, 3,
+                        (stages.STAGE_NAMES[3], make(3, fail_first=True)))
+    s = Session.create("sessions", slug="retry")
+    s.save_story("story")
+    runner.FlightState.load(s).set_stage(1, "completed")
+    result = runner.run_stages(s, FakeLLM([]), SilentIO(), from_stage=2,
+                               upto=5, max_rewind_rounds=1)
+    assert result["status"] == "in_progress"
+    assert calls == [2, 3, 3, 4, 5]
+
+
 def test_usage_written_to_session(run_in_tmp):
     """P15: the runner persists per-flight LLM usage (calls/tokens)."""
     result = create_session_and_run("story", _full_script(), SilentIO(),

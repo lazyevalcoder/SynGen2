@@ -153,6 +153,23 @@ def stage_criteria(ctx):
                                    reason="criteria_coverage", evidence=ev,
                                    rewind_to=2)
             session.log("CRITIC: corrective criteria re-draft accepted.")
+            # P17: re-check the critic on the re-draft. A persistent block
+            # finding (e.g. a proxy criterion that measures the wrong thing)
+            # must escalate, not ship.
+            verdict2 = critique_artifact(client, story, "acceptance criteria",
+                                         doc)
+            issues2 = block_issues(verdict2)
+            if issues2:
+                session.log("CRITIC (criteria) STILL blocking after re-draft:\n"
+                            + render_issues(issues2))
+                log(f"Critic block findings persist ({len(issues2)}) - "
+                    "escalating rather than shipping proxy criteria.")
+                ev = _make_evidence(
+                    "criteria_intent",
+                    "critic block findings persist after re-draft", doc,
+                    detail=render_issues(issues2)[:500])
+                return StageResult(2, "escalated", reason="criteria_intent",
+                                   evidence=ev, rewind_to=2)
 
     lint_hard, lint_notes = lint_criteria_internal(doc)
     for note in lint_notes:
@@ -204,16 +221,19 @@ def stage_criteria(ctx):
                  + "\n\nMENU VIOLATIONS - fix ALL of these; use ONLY buildable "
                  "checks, and never duplicate a claim:\n- "
                  + "\n- ".join(residual))
-        doc = draft_criteria(client, story, brief, log_fn=log,
-                             menu_constrained=True)
-        doc, cov = enforce_coverage(client, story, doc, claims,
-                                    decisions_text=decisions_text, log_fn=log)
-        if cov == "uncovered":
+        # P17: claim-preserving (coverage re-checked against original claims).
+        from syngen.phases.rework import redraft_criteria
+        new_doc, ok = redraft_criteria(client, story, doc, claims,
+                                       decisions_text, brief, log_fn=log,
+                                       menu_constrained=True)
+        if not ok:
             session.write_artifact("criteria.json", json.dumps(doc, indent=2))
-            ev = _make_evidence("criteria_coverage",
-                                "menu re-draft lost claim coverage", doc)
-            return StageResult(2, "escalated", reason="criteria_coverage",
+            ev = _make_evidence("criteria_menu",
+                                "menu re-draft lost claim coverage or stayed "
+                                "inconsistent", doc)
+            return StageResult(2, "escalated", reason="criteria_menu",
                                evidence=ev, rewind_to=2)
+        doc = new_doc
     residual = menu_findings(doc)
     if residual:
         session.write_artifact("criteria.json", json.dumps(doc, indent=2))

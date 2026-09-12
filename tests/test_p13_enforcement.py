@@ -190,3 +190,83 @@ def test_map_effort_maps_medium_to_high():
     assert _map_effort("high") == "high"
     assert _map_effort("max") == "max"
     assert _map_effort(None) == "high"
+
+
+# --- P17 fixes --------------------------------------------------------------
+
+def test_blocked_check_has_a_buildable_replacement():
+    from syngen.menu import replacement_for
+    assert replacement_for("quota_vs_potential") == "potential_coverage_gap"
+    assert replacement_for("win_rate_flat") is None
+
+
+def test_menu_findings_flags_narrative_pseudo_unit():
+    from syngen.menu import menu_findings
+    doc = {"criteria": [{
+        "id": "AC1", "name": "x", "check": "region_discount_premium",
+        "params": {"region": "high-potential territory",
+                   "vs": ["low-potential territory"],
+                   "min_premium_pp": 5},
+        "source_claim": "c"}]}
+    findings = menu_findings(doc)
+    assert any("narrative label" in f for f in findings)
+
+
+def test_audit_item_maps_blocked_to_replacement():
+    from syngen.phases.intake import _normalize_audit_item
+    from syngen.validator.checks import CHECKS
+    item = {"claim": "quota over market", "classification": "PARAMETRIC",
+            "existing_check": "quota_vs_potential", "reason": "uncovered"}
+    out = _normalize_audit_item(item, set(CHECKS))
+    assert out["classification"] == "PARAMETRIC"
+    assert out["check"] == "potential_coverage_gap"
+
+
+def test_audit_item_degrades_when_no_replacement():
+    from syngen.phases.intake import _normalize_audit_item
+    from syngen.validator.checks import CHECKS
+    item = {"claim": "x", "classification": "PARAMETRIC",
+            "existing_check": "no_such_check", "reason": "uncovered"}
+    out = _normalize_audit_item(item, set(CHECKS))
+    assert out["classification"] == "VOCAB_GAP"
+    assert out["check"] is None
+
+
+def test_cross_block_flags_quota_attainment_dimension_mismatch():
+    from syngen.phases.buildability import cross_block_findings
+    cfg = {"accounts": {"territories": {"AMER-East": ["AMER"]}},
+           "quota": {"by_territory": {"AMER-East": [1, 2, 3, 4]},
+                     "attainment_by_segment": {"Enterprise": 0.95}}}
+    findings = cross_block_findings(cfg)
+    assert any("attainment" in f and "Enterprise" in f for f in findings)
+
+
+def test_apply_changes_rejects_invented_key():
+    from syngen.phases.converge import _apply_changes
+    cfg = {"accounts": {"market_potential_usd": {"min": 1, "max": 2}},
+           "opportunities": {}, "time_model": {"quarter_labels": ["Q"]},
+           "output": {}, "seed": 1}
+    applied = _apply_changes(cfg, [{
+        "path": "accounts.market_potential_usd.high_pot_min", "to": 5}])
+    assert any("error" in a for a in applied)
+    assert "high_pot_min" not in cfg["accounts"]["market_potential_usd"]
+
+
+def test_non_tunable_checks_set_covers_known_levers():
+    from syngen.phases.converge import _NON_TUNABLE_CHECKS
+    assert "elasticity_differential" in _NON_TUNABLE_CHECKS
+    assert "post_change_revenue_decline" in _NON_TUNABLE_CHECKS
+
+
+def test_dedupe_drops_same_claim_reexpression():
+    from syngen.phases.stage2 import _dedupe
+    doc = {"criteria": [
+        {"id": "AC1", "check": "win_rate_flat", "params": {"band_pp": 5},
+         "source_claim": "same"},
+        {"id": "AC2", "check": "win_rate_flat", "params": {"band_pp": 8},
+         "source_claim": "same"},
+        {"id": "AC3", "check": "win_rate_flat", "params": {"band_pp": 8},
+         "source_claim": "other"},
+    ]}
+    out = _dedupe(doc, lambda *a, **k: None)
+    assert [c["id"] for c in out["criteria"]] == ["AC1", "AC3"]

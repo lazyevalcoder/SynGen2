@@ -85,6 +85,25 @@ def cross_block_findings(cfg):
             findings.append(
                 f"block 'quota' references unknown motion units {sorted(bad)}; "
                 f"use exactly: {sorted(known)}")
+    # P17: attainment maps must key on the SAME units as the chosen quota
+    # dimension (scenario 15: attainment['Enterprise'] with by_territory).
+    chosen = None
+    for dim in ("by_segment", "by_territory", "by_motion"):
+        if isinstance(quota.get(dim), dict) and quota[dim]:
+            chosen = dim
+            break
+    if chosen:
+        chosen_units = set(quota[chosen])
+        for att_key in ("attainment", "attainment_by_segment",
+                        "attainment_ex_outliers"):
+            att = quota.get(att_key)
+            if not isinstance(att, dict) or not att:
+                continue
+            bad = [u for u in att if u not in chosen_units]
+            if bad:
+                findings.append(
+                    f"block 'quota' has {att_key} keys {sorted(bad)} that do "
+                    f"not match its {chosen} units {sorted(chosen_units)}")
     cap = cfg.get("capacity") or {}
     for dim, key in (("by_territory", "territory"), ("by_region", "region")):
         units = cap.get(dim)
