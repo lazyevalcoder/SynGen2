@@ -67,13 +67,35 @@ def draft_core(client, story, criteria_summary, checks, spec_notes="",
 
 
 def draft_block(client, block, story, criteria_summary, checks,
-                spec_notes="", log_fn=print):
+                spec_notes="", log_fn=print, corrective=""):
     """Draft one optional block; None means the block was omitted/failed."""
     system = _render(block, story, criteria_summary, checks, spec_notes)
+    if corrective:
+        system += ("\n\nCORRECTIVE FINDINGS - your previous block was missing "
+                   "or unusable; fix ALL of these:\n" + corrective)
     result = chat_json(client, f"simulator_{block}", system,
                        "Produce the block JSON now.")
     part = result.get(block) if isinstance(result, dict) else None
     return part if isinstance(part, dict) else None
+
+
+def _repair_missing(client, story, criteria_summary, checks, spec_notes,
+                    candidate, missing, log_fn):
+    """Targeted re-draft of whatever the buildability gate found missing."""
+    from syngen.phases.buildability import missing_blocks
+    names = missing_blocks(missing)
+    core_missing = any(b in ("accounts", "opportunities") for b in names)
+    if core_missing:
+        core = draft_core(client, story, criteria_summary, checks, spec_notes,
+                          log_fn, corrective="; ".join(missing))
+        candidate.update(core)
+    for block in names:
+        if block in OPTIONAL_BLOCKS:
+            part = draft_block(client, block, story, criteria_summary, checks,
+                               spec_notes, log_fn, corrective="; ".join(missing))
+            if part:
+                candidate[block] = part
+    return candidate
 
 
 def _normalize(cfg):
@@ -92,8 +114,13 @@ def _normalize(cfg):
 
 def split_simulator(client, story, criteria_summary, checks, spec_notes="",
                     log_fn=print, max_redrafts=1):
-    """Block-by-block stage 3. Returns a validated simulator config."""
+    """Block-by-block stage 3. Returns a validated simulator config.
+
+    Before the stage may complete, a deterministic buildability gate (P13)
+    checks that every criterion's required blocks/features are present; a
+    missing piece is re-drafted (bounded) or the stage fails honestly."""
     from syngen.menu import required_blocks
+    from syngen.phases.buildability import BuildabilityError, verify_config
     blocks = sorted(required_blocks(checks))
     log_fn(f"Stage 3 split: drafting core + {len(blocks)} optional block(s): "
            f"{blocks or ['none']}")
@@ -115,6 +142,19 @@ def split_simulator(client, story, criteria_summary, checks, spec_notes="",
             else:
                 log_fn(f"Stage 3 split: block '{block}' came back empty.")
         _normalize(candidate)
+
+        missing = verify_config(candidate, checks)
+        if missing:
+            log_fn(f"Stage 3 buildability: {len(missing)} missing item(s) - "
+                   "targeted re-draft.")
+            _repair_missing(client, story, criteria_summary, checks, spec_notes,
+                            candidate, missing, log_fn)
+            _normalize(candidate)
+            missing = verify_config(candidate, checks)
+        if missing:
+            raise BuildabilityError(
+                "stage-3 buildability failed: " + "; ".join(missing))
+
         try:
             validated = validate_simulator_doc(candidate)
         except ConfigError as e:
@@ -127,7 +167,8 @@ def split_simulator(client, story, criteria_summary, checks, spec_notes="",
         n_q = len(validated["time_model"]["quarter_labels"])
         log_fn(f"Stage 3 split assembled: {validated['accounts']['count']} "
                f"accounts, {validated['opportunities']['per_quarter']}/qtr x "
-               f"{n_q} quarters, blocks={[b for b in OPTIONAL_BLOCKS if b in validated]}")
+               f"{n_q} quarters, blocks="
+               f"{[b for b in OPTIONAL_BLOCKS if b in validated]}")
         return validated
     raise ConfigError(f"stage-3 split failed after {max_redrafts + 1} "
                       f"attempts: {last_err}")

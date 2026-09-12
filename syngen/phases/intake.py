@@ -108,9 +108,14 @@ def audit_coverage_structured(client, story, doc, computable_claims,
             + "\n".join(f"- {c}" for c in computable_claims)
             + f"\n\nCRITERIA:\n{crit_lines}")
     try:
+        from syngen.menu import blocked_checks, buildable_check_names
+        allowed = buildable_check_names()
+        blocked = blocked_checks()
+        if blocked:
+            allowed += ("\nNEVER recommend these checks - the engine cannot "
+                        "build them: " + ", ".join(blocked))
         result = chat_json(client, "coverage_audit",
-                           load_prompt("coverage_audit",
-                                       checks=_pack_taxonomy().check_names()),
+                           load_prompt("coverage_audit", checks=allowed),
                            user)
     except (ValueError, KeyError) as e:
         log_fn(f"WARN coverage audit unavailable ({e}); "
@@ -308,8 +313,30 @@ def _log_notes(gaps, log_fn):
         log_fn(f"  [note] {format_gap(g)}")
 
 
+def _menu_gate(client, story, decisions_text, doc, log_fn, use_skills):
+    """P13: if criteria violate the buildable menu, one menu-constrained
+    re-draft. Blocked/unknown checks and exact duplicates are walls, not
+    advice. The re-draft uses the buildable catalog so no blocked check can
+    be named; if it still violates, the caller escalates."""
+    from syngen.menu import menu_findings
+    findings = menu_findings(doc)
+    if not findings:
+        return doc
+    log_fn(f"Menu gate: {len(findings)} violation(s) - one menu-constrained "
+           "re-draft.")
+    for x in findings:
+        log_fn(f"  - {x}")
+    brief = ((decisions_text or "")
+             + "\n\nMENU VIOLATIONS - fix ALL of these. Use ONLY buildable "
+             "checks, and never duplicate a claim:\n- "
+             + "\n- ".join(findings))
+    return draft_criteria(client, story, brief, log_fn=log_fn,
+                          use_skills=use_skills, menu_constrained=True)
+
+
 def draft_criteria(client, story, decisions_text="", criteria_path=None,
-                   log_fn=print, use_skills=True, claims=None, split=False):
+                   log_fn=print, use_skills=True, claims=None, split=False,
+                   menu_constrained=False):
     """LLM drafts criteria JSON; contract validation rejects malformed output.
 
     The check catalog and name list are GENERATED from the pack's claim
@@ -322,12 +349,17 @@ def draft_criteria(client, story, decisions_text="", criteria_path=None,
     split=True (P11) divides stage 2 into claim-form selection + param fill
     with a deterministic assembly; it needs the pre-check `claims` and falls
     back to the classic single-prompt path when the split cannot proceed.
+
+    menu_constrained=True (P13) drafts from the BUILDABLE catalog only (no
+    blocked checks) and skips the menu gate (used for the corrective pass).
     """
     if split and claims is not None:
         from syngen.phases.stage2 import draft_criteria_split
         split_doc = draft_criteria_split(client, story, claims, decisions_text,
                                          log_fn=log_fn)
         if split_doc is not None:
+            split_doc = _menu_gate(client, story, decisions_text, split_doc,
+                                   log_fn, use_skills)
             if criteria_path:
                 Path(criteria_path).write_text(json.dumps(split_doc, indent=2),
                                                encoding="utf-8")
@@ -337,12 +369,17 @@ def draft_criteria(client, story, decisions_text="", criteria_path=None,
         log_fn("Split stage 2 could not proceed - using classic draft.")
     taxonomy = _pack_taxonomy()
     from syngen.capability import capability_sheet
+    from syngen.menu import buildable_catalog, buildable_check_names
+    catalog = (buildable_catalog() if menu_constrained
+               else taxonomy.check_catalog())
+    names = (buildable_check_names() if menu_constrained
+             else taxonomy.check_names())
     system = load_prompt(
         "decompose",
         user_decisions=decisions_text or "none",
         story=story,
-        check_catalog=taxonomy.check_catalog(),
-        check_names=taxonomy.check_names(),
+        check_catalog=catalog,
+        check_names=names,
         capability_sheet=(capability_sheet() if use_skills else ""),
     )
     doc = chat_json(client, "decompose", system, "Produce the criteria JSON now.")

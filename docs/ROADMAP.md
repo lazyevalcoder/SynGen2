@@ -13,6 +13,8 @@
 > **As of 2026-09-12 (P11):** the divide-and-conquer refactor is implemented on `refactor/stage23-phases` (flag-gated, default OFF): a **buildable menu** (`syngen/menu.py`) that drops blocked checks before they can become criteria, a **mechanism registry** (`syngen/mechanisms.py`), and split stages 2-3 (claim→form→params; core→per-block→assemble in code). 468 tests green; no scenario runs yet. Design: `DIVIDE_AND_CONQUER.md`.
 >
 > **As of 2026-09-12 (P12):** stage-based execution is implemented on the same branch: a flight is 7 resumable stages with a `flight_state.json` progress file, `run <session> --stage-3/--only/--from/--all`, resume-at-next, and bounded auto-rewind to the stage a failure is attributed to. A stage histogram in the fleet report makes "failures are in stages 2/3" measurable. 480 tests green; no scenario runs yet. Design: `STAGE_EXECUTION.md`.
+>
+> **As of 2026-09-12 (P13):** the 13-16 stage-3 experiment showed rules were given but not enforced (15 shipped blocked `quota_vs_potential`; 16 shipped a config missing `pricing_response` yet "completed"). P13 adds three deterministic walls: a **menu gate** on criteria (blocked/unknown/duplicate), a **stage-3 buildability gate** (required blocks/features; re-draft or fail honestly), and **reachable ranges** (win-rate noise floor; `elasticity_differential` requires `pricing_response`). 492 tests green; no scenario runs yet. Design: `ENFORCEMENT.md`.
 
 ---
 

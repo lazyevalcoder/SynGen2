@@ -85,6 +85,84 @@ def _vocab(check):
     return ""
 
 
+def buildable_check_names(sep=" | "):
+    """Registered check names with the blocked ones removed (P13)."""
+    return sep.join(e["check"] for e in menu_entries() if not e["blocked"])
+
+
+def buildable_catalog():
+    """The generated check catalog minus blocked checks (P13).
+
+    Every drafting/repair path that uses this can no longer even name a
+    blocked check - the enforcement gap seen in scenario 15."""
+    lines = []
+    for e in menu_entries():
+        if e["blocked"]:
+            continue
+        vocab = _vocab(e["check"])
+        lines.append(f"- {e['check']}: {vocab}" if vocab else f"- {e['check']}")
+    return "\n".join(lines)
+
+
+def _params_key(c):
+    import json
+    return json.dumps(c.get("params", {}) or {}, sort_keys=True)
+
+
+def _coord_key(c):
+    sig = _sigs().get(c.get("check"), {})
+    params = c.get("params", {}) or {}
+    parts = []
+    for coord in sig.get("coordinates", []):
+        pname = coord.get("param")
+        parts.append((pname, str(params.get(pname))))
+    return tuple(sorted(parts))
+
+
+def menu_findings(doc):
+    """Hard findings for criteria that violate the buildable menu (P13).
+
+    Catches: unknown checks, blocked checks (the engine cannot move the
+    quantity), and exact duplicate criteria. Deterministic - no LLM."""
+    findings = []
+    seen = {}
+    for c in doc.get("criteria", []):
+        cid = c.get("id")
+        check = c.get("check")
+        if not is_known(check):
+            findings.append(
+                f"{cid}: check '{check}' is not a registered engine check - "
+                "re-express the claim with a buildable check.")
+            continue
+        if is_blocked(check):
+            findings.append(
+                f"{cid}: check '{check}' is BLOCKED (the engine cannot move "
+                "this quantity) - re-express the SAME claim with a buildable "
+                "check.")
+        key = (check, _coord_key(c), _params_key(c), c.get("source_claim"))
+        if key in seen:
+            findings.append(f"{cid}: exact duplicate of {seen[key]} - merge "
+                            "them into one criterion.")
+        else:
+            seen[key] = cid
+    return findings
+
+
+def engine_limits_for(checks):
+    """Pinned-quantity / blocked notes for a SUBSET of checks (P13), so the
+    number-filling step sees the engine's hard limits for the checks it is
+    actually allowed to use."""
+    lines = []
+    for check in sorted(set(checks or [])):
+        sig = _sigs().get(check, {})
+        if sig.get("pinned_quantity"):
+            lines.append(f"- {check}: {sig['pinned_quantity']}")
+        if sig.get("blocked"):
+            lines.append(f"- {check}: BLOCKED - do not use.")
+    return "\n".join(lines)
+
+
+
 def menu_text(include_blocked=True):
     """Compact prompt context: the buildable forms, their config needs, and
     the directional signs that invert a claim when wrong."""

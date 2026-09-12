@@ -189,6 +189,43 @@ def stage_criteria(ctx):
                                evidence=ev, rewind_to=2)
         session.log("CRITERION CONSISTENCY: corrective re-draft accepted.")
 
+    # --- Final menu gate (P13): a wall, not advice. After every re-draft
+    # path has run, the finished criteria must be buildable. Bounded,
+    # menu-constrained re-draft; persistent violations escalate honestly.
+    from syngen.menu import menu_findings
+    for _ in range(2):
+        residual = menu_findings(doc)
+        if not residual:
+            break
+        session.log("MENU GATE: " + "; ".join(residual)[:500])
+        log(f"Menu gate: {len(residual)} violation(s) - menu-constrained "
+            "re-draft.")
+        brief = ((decisions_text or "")
+                 + "\n\nMENU VIOLATIONS - fix ALL of these; use ONLY buildable "
+                 "checks, and never duplicate a claim:\n- "
+                 + "\n- ".join(residual))
+        doc = draft_criteria(client, story, brief, log_fn=log,
+                             menu_constrained=True)
+        doc, cov = enforce_coverage(client, story, doc, claims,
+                                    decisions_text=decisions_text, log_fn=log)
+        if cov == "uncovered":
+            session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+            ev = _make_evidence("criteria_coverage",
+                                "menu re-draft lost claim coverage", doc)
+            return StageResult(2, "escalated", reason="criteria_coverage",
+                               evidence=ev, rewind_to=2)
+    residual = menu_findings(doc)
+    if residual:
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+        session.log("ESCALATED: criteria_menu - " + "; ".join(residual)[:500])
+        log("\nNEEDS YOUR ATTENTION: criteria violate the buildable menu even "
+            "after a menu-constrained re-draft (see criteria.json).")
+        ev = _make_evidence("criteria_menu",
+                            "criteria violate the buildable menu", doc,
+                            detail="; ".join(residual)[:500])
+        return StageResult(2, "escalated", reason="criteria_menu",
+                           evidence=ev, rewind_to=2)
+
     _print_criteria(io, doc)
     while not io.confirm("Sign off these criteria?", default=True):
         overrides = io.ask(
@@ -230,6 +267,7 @@ def _spec_notes(ctx, doc):
 
 def stage_config(ctx):
     from syngen.config import ConfigError
+    from syngen.phases.buildability import BuildabilityError
     from syngen.phases.critic import (block_issues, corrective_brief as critic_brief,
                                       critique_artifact, render_issues)
     from syngen.phases.spec import draft_simulator
@@ -247,6 +285,12 @@ def stage_config(ctx):
     try:
         sim_cfg = draft_simulator(client, ctx.story, crit_summary, spec_notes,
                                   checks=checks, split=split)
+    except BuildabilityError as e:
+        ev = _make_evidence("stage3_buildability",
+                            "config cannot express the criteria", doc,
+                            detail=str(e))
+        return StageResult(3, "escalated", reason="stage3_buildability",
+                           evidence=ev, rewind_to=3)
     except ConfigError as e:
         ev = _make_evidence("draft_invalid",
                             "simulator draft invalid after re-drafts", doc,
@@ -269,6 +313,13 @@ def stage_config(ctx):
                     spec_notes + "\n\n" + critic_brief(issues),
                     corrective_findings=critic_brief(issues),
                     checks=checks, split=split)
+            except BuildabilityError as e:
+                ev = _make_evidence("stage3_buildability",
+                                    "config cannot express the criteria", doc,
+                                    detail=str(e))
+                return StageResult(3, "escalated",
+                                   reason="stage3_buildability", evidence=ev,
+                                   rewind_to=3)
             except ConfigError as e:
                 ev = _make_evidence("draft_invalid",
                                     "simulator draft invalid after critic", doc,

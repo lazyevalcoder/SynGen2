@@ -136,6 +136,10 @@ def _assess_one(c, cfg):
         else:
             out["reachable"] = True
         return out
+    if check == "elasticity_differential":
+        out["note"] = ("requires a pricing_response block; without it the "
+                       "differential cannot be built")
+        return out
     if cfg is None:
         return out
     try:
@@ -176,6 +180,17 @@ def _assess_one(c, cfg):
                        predicted=est, nearest=est,
                        reachable=(cap is None or est is None or est <= 2.0 * cap),
                        note="raise the cap or lower the plan curves")
+        elif check == "win_rate_flat":
+            band = _num(p.get("band_pp"))
+            floor = envelope.win_rate_noise_pp(cfg)
+            out.update(param="band_pp", target=band, predicted=floor,
+                       nearest=(max(band, floor)
+                                if band is not None and floor is not None
+                                else None),
+                       reachable=(band is None or floor is None
+                                  or band >= floor - 1e-9),
+                       note=(f"win-rate noise floor ~{floor:.1f}pp"
+                             if floor is not None else ""))
     except Exception as e:  # noqa: BLE001
         out["note"] = f"capability estimate unavailable: {e}"
     return out

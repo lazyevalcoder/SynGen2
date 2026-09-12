@@ -274,6 +274,7 @@ def cross_lint(cfg, criteria_doc, feasibility=True):
         # unbounded, so a sigma-only "ceiling" would false-kill reachable
         # targets (cert s21).
         findings.extend(_growth_feasibility(cfg, criteria_doc))
+        findings.extend(_win_rate_feasibility(cfg, criteria_doc))
     return findings
 
 
@@ -385,6 +386,31 @@ def _growth_feasibility(cfg, criteria_doc):
                 f"unreachable - revenue is raked to plan, so headline growth "
                 f"tops out near {ceiling:.1f}%. Lower the target or drop the "
                 "criterion.")
+    return findings
+
+
+def _win_rate_feasibility(cfg, criteria_doc):
+    """P13: win_rate_flat band vs the engine's sampling noise floor.
+
+    A band narrower than ~2 standard errors of the quarterly win rate is not
+    deterministically landable - the seed alone moves it across the band."""
+    from syngen.packs.revops.envelope import win_rate_noise_pp
+    floor = win_rate_noise_pp(cfg)
+    if floor is None:
+        return []
+    findings = []
+    for c in criteria_doc.get("criteria", []):
+        if c["check"] != "win_rate_flat":
+            continue
+        band = c.get("params", {}).get("band_pp")
+        if band is None:
+            continue
+        if float(band) < floor - 1e-9:
+            findings.append(
+                f"{c['id']}: win_rate_flat band +/-{float(band):g}pp is below "
+                f"the engine's quarterly win-rate noise floor (~{floor:.1f}pp "
+                "at the drafted volume) - not deterministically landable; "
+                "widen the band or raise per_quarter.")
     return findings
 
 

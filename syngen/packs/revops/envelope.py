@@ -205,3 +205,84 @@ def avg_price_by_tier(cfg, tier):
     if denom <= 0:
         return None
     return avg_deal * float(mult.get(tier, 1.0)) / denom
+
+
+def win_rate_noise_pp(cfg, z=2.0):
+    """Two-sigma noise floor (percentage points) of a quarterly win rate.
+
+    `win_rate_flat` asks the win rate to stay within a band; with N deals in
+    a quarter the sample proportion has standard error sqrt(p(1-p)/N), so a
+    band below z*SE*100 is not deterministically landable (cert s16 drafted
+    +/-3pp on ~600 deals). Uses the SMALLEST quarter (most conservative).
+    Returns None when the inputs are unusable."""
+    import math
+    o = cfg.get("opportunities") or {}
+    labels = _labels(cfg)
+    p = float(o.get("win_rate", 0.3) or 0.3)
+    per_q = float(o.get("per_quarter", 0) or 0)
+    mults = o.get("volume_multipliers") or [1.0] * len(labels)
+    if per_q <= 0 or not (0.0 < p < 1.0) or not mults:
+        return None
+    n = min(per_q * float(m) for m in mults)
+    if n <= 0:
+        return None
+    return z * math.sqrt(p * (1.0 - p) / n) * 100.0
+
+
+def revenue_concentration_share(cfg, topn, sigma=None):
+    """Top-N account share of WON revenue (reference estimator, P13).
+
+    Mirrors the engine: per quarter draw lognormal won deals, scale an
+    outlier subset, assign accounts uniformly. Reference only - the outlier
+    multiplier is an unbounded lever, so this is not a hard ceiling."""
+    o = cfg.get("opportunities") or {}
+    labels = _labels(cfg)
+    n_acc = int((cfg.get("accounts") or {}).get("count", 0))
+    if n_acc < 10:
+        return None
+    per_q = float(o.get("per_quarter", 0) or 0)
+    mults = o.get("volume_multipliers") or [1.0] * len(labels)
+    wr = float(o.get("win_rate", 0.3) or 0.3)
+    sig = (sigma if sigma is not None else
+           float((o.get("deal_size_lognormal") or {}).get("sigma", 0.6) or 0.6))
+    out = o.get("outlier_deals") or {}
+    share_q = out.get("share_by_quarter") or []
+    if not share_q and out.get("share") is not None:
+        share_q = [out.get("share")] * len(labels)
+    om = float(out.get("multiplier", 1.0) or 1.0)
+    rng = np.random.default_rng(_OPEN_SEED)
+    tot = np.zeros(n_acc)
+    n_total = 0
+    for qi in range(len(labels)):
+        n = int(round(per_q * float(mults[qi])))
+        if n <= 0:
+            continue
+        sizes = rng.lognormal(0.0, sig, n)
+        s = float(share_q[qi]) if qi < len(share_q) else 0.0
+        if om > 1.0 and s > 0:
+            k = max(1, int(round(n * s)))
+            idx = rng.choice(n, size=min(k, n), replace=False)
+            sizes[idx] *= om
+        kw = min(int(round(n * wr)), n)
+        if kw <= 0:
+            continue
+        wi = rng.choice(n, size=kw, replace=False)
+        acc = rng.integers(0, n_acc, kw)
+        np.add.at(tot, acc, sizes[wi])
+        n_total += kw
+    if n_total < 10:
+        return None
+    ssum = float(tot.sum())
+    if ssum <= 0:
+        return None
+    return float(np.sort(tot)[::-1][:int(topn)].sum() / ssum)
+
+
+def deal_size_ratio(cfg):
+    """Q4/Q1 median won deal-size ratio the config implies, or None."""
+    o = cfg.get("opportunities") or {}
+    ls = o.get("deal_size_lognormal") or {}
+    med = ls.get("medians_by_quarter")
+    if isinstance(med, list) and len(med) >= 2 and float(med[0]) > 0:
+        return float(med[-1]) / float(med[0])
+    return None

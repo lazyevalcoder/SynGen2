@@ -3,6 +3,9 @@ You are a senior Revenue Operations analyst. For each (claim, check) pair below,
 Parameter facts for these checks (scoping, signs, limits):
 {{check_facts}}
 
+Engine hard limits for these checks (never exceed):
+{{engine_limits}}
+
 Claim -> check mapping:
 {{forms}}
 
