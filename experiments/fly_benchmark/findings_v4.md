@@ -340,3 +340,45 @@ scenarios that currently land. Instead, batch: wait until >= 4 flights fail,
 then look for a COMMON DENOMINATOR across those failures and fix that root
 cause once, with tests. A lone failure is recorded here as an observation
 (like S10.4) and left alone until it recurs or joins a pattern.
+
+---
+
+## Addendum 5 - scenarios 19-25 re-fly (2026-09-12): 4/7 landed
+
+Local Ornith-35B, 1 worker (`run_19-25/`; 22/23 first errored on a server
+restart and were re-run clean into `run_22-23/`). First batch after the
+loose-margin flag and the bounded draft retry.
+
+| Scenario | Result | Iters | Rework | Wall | Calls | In | Out | Total |
+|---|---|---|---|---|---|---|---|---|
+| 19 | escalated (stalled) | - | 1 | 627s | 23 | 74,177 | 25,246 | 99,423 |
+| 20 | LANDED | 5 | 1 | 1158s | 37 | 145,033 | 44,996 | 190,029 |
+| 21 | LANDED [loose] | 2 | 1 | 807s | 32 | 115,923 | 31,122 | 147,045 |
+| 22 | escalated (draft_invalid) | - | 2 | 1086s | 37 | 120,876 | 46,166 | 167,042 |
+| 23 | LANDED | 6 | 0 | 364s | 16 | 51,833 | 13,750 | 65,583 |
+| 24 | LANDED | 4 | 0 | 278s | 11 | 32,815 | 9,495 | 42,310 |
+| 25 | escalated (draft_invalid) | - | 2 | 678s | 25 | 91,808 | 29,223 | 121,031 |
+
+4/7 landed (57%): 20, 21, 23, 24. Landed batch ~$0.188 at Luna rates.
+Scenario 21 landed but is flagged **LOOSE** (65-83x coverage vs "3.5x") -
+landed but not faithful (see `findings_quality.md`).
+
+### The bound worked
+Scenario 22 previously hung the runner forever (unbounded draft recursion). It
+now escalates honestly as `draft_invalid` in ~18 min. **No hangs.**
+
+### Common denominator in 2 of 3 failures: quota-block key mismatch
+Both `draft_invalid` escalations are the drafter writing quota keys that do not
+match the config's known units:
+- **22:** `quota.by_motion['expansion']` / `['New_Logo']` vs known
+  `['Expansion', 'New Logo']` (case + separator).
+- **25:** `quota.attainment_ex_outliers['_all_']` with no matching
+  `by_segment`, and `quota.by_segment['_all_']` (not a known segment).
+
+Both are deterministic-normalizable (canonicalize keys: case-insensitive,
+strip separators; map `_all_` correctly). The current repair
+(`_renormalize_product_shares_cfg`) does not touch quota keys. **Candidate for
+the next batched fix** (2 failures so far; policy waits for >= 4).
+
+Scenario 19's failure is a different class (convergence stall; AC2 -45.05,
+AC3 -160.00).
