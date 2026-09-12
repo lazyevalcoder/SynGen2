@@ -132,3 +132,76 @@ def headline_growth_ceiling(cfg):
     if first <= 0:
         return 0.0
     return (last / first - 1.0) * 100.0
+
+
+def tier_share_ceiling(count_shares, mult, tier, floor=0.05):
+    """Max achievable REVENUE share (%) for a tier at the drafted price
+    multipliers (P6 P1.4). Shared by the acceptance lint and the capability
+    service so both agree by construction."""
+    if not count_shares or tier not in count_shares or not mult:
+        return None
+    others = [t for t in count_shares if t != tier]
+    if not others:
+        return 100.0
+    count_c = max(0.0, 1.0 - floor * len(others))
+    denom = count_c * float(mult.get(tier, 1.0)) + sum(
+        floor * float(mult.get(t, 1.0)) for t in others)
+    if denom <= 0:
+        return 0.0
+    return count_c * float(mult.get(tier, 1.0)) / denom * 100.0
+
+
+def avg_price_by_tier(cfg, tier):
+    """Estimated average realized price for a tier under raking (P5 WP6).
+
+    With a quota block, closed-won revenue is raked to plan x attainment, so
+    a tier's average realized price ~= (attained total / won count) scaled by
+    the tier's relative price position. Returns None when the config lacks
+    the inputs. Shared with the acceptance lint."""
+    quota = cfg.get("quota")
+    products = cfg.get("products") or {}
+    catalog = products.get("catalog")
+    opps = cfg.get("opportunities") or {}
+    if not quota or not isinstance(catalog, list) or not catalog:
+        return None
+    labels = _labels(cfg)
+    qi = len(labels) - 1
+    by_seg, dim_name = None, "segment"
+    for sub, dn in (("by_segment", "segment"), ("by_territory", "territory"),
+                    ("by_motion", "motion")):
+        if isinstance(quota.get(sub), dict):
+            by_seg, dim_name = quota[sub], dn
+            break
+    if not isinstance(by_seg, dict):
+        return None
+    try:
+        plan_total = sum(float(curve[qi]) for curve in by_seg.values()
+                         if isinstance(curve, list) and qi < len(curve))
+        att = quota.get("attainment_by_segment") or quota.get("attainment") or {}
+        attained = sum(float(curve[qi]) * float(att.get(u, 1.0))
+                       for u, curve in by_seg.items()
+                       if isinstance(curve, list) and qi < len(curve))
+        won_n = float(opps["per_quarter"]) * \
+            float(opps.get("volume_multipliers", [1.0] * len(labels))[qi]) * \
+            float(opps.get("win_rate", 0.3))
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    if won_n <= 0:
+        return None
+    avg_deal = attained / won_n if attained else plan_total / won_n
+    mult = products.get("price_multiplier_by_tier") or {}
+    shares = {}
+    for e in catalog:
+        t = e.get("tier")
+        s = e.get("share")
+        if isinstance(t, str) and isinstance(s, (int, float)):
+            shares[t] = shares.get(t, 0.0) + float(s)
+    if not shares or not mult or tier not in shares:
+        return None
+    total = sum(shares.values()) or 1.0
+    count_shares = {t: s / total for t, s in shares.items()}
+    denom = sum(count_shares.get(t, 0.0) * float(mult.get(t, 1.0))
+                for t in count_shares)
+    if denom <= 0:
+        return None
+    return avg_deal * float(mult.get(tier, 1.0)) / denom

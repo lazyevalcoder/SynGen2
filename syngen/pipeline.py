@@ -301,7 +301,7 @@ def post_generate_structure_gate(workbook_path, log, cfg=None):
 def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                   max_iterations=10, max_llm_proposals=8, use_personas=False,
                   use_critic=True, max_rework_rounds=0,
-                  rework_strategy="classic"):
+                  rework_strategy="classic", use_capability=False):
     """use_personas defaults OFF: the M4 A/B (experiments/M4_persona_ab)
     found no measurable quality benefit and a consistent ~35s latency cost.
     The P5 critic (use_critic) defaults ON: two bounded verification calls
@@ -327,7 +327,8 @@ def run_new_story(client, story, io, sessions_dir="sessions", slug=None,
                          use_personas=use_personas,
                          use_critic=use_critic,
                          max_rework_rounds=max_rework_rounds,
-                         rework_strategy=rework_strategy)
+                         rework_strategy=rework_strategy,
+                         use_capability=use_capability)
 
 
 def run_resume(session_root, client, io, new_story=None,
@@ -490,6 +491,56 @@ def _converge_and_deliver(session, client, io, doc, sim_path, log,
             "loose_margins": loose_margins}
 
 
+def _capability_workbench(session, client, story, doc, claims, decisions_text,
+                          sim_cfg, log, max_rounds=3):
+    """Give the drafter the engine's numbers, then clamp what it still misses.
+
+    Bounded by construction: at most `max_rounds` LLM re-drafts (claim-
+    preserving), then a single deterministic snap pass - it can never loop.
+    Returns (doc, adjustments)."""
+    from syngen.capability import assess_config, snap_criteria
+    adjustments = []
+    for rnd in range(max(0, max_rounds)):
+        findings = assess_config(sim_cfg, doc)
+        bad = [f for f in findings if f.get("reachable") is False]
+        if not bad:
+            return doc, adjustments
+        lines = []
+        for f in bad:
+            if f.get("param") and f.get("nearest") is not None:
+                lines.append(
+                    f"- {f['id']} ({f['check']}): target {f['target']} is out "
+                    f"of range - {f['note']}. Use {f['nearest']} instead.")
+            else:
+                lines.append(
+                    f"- {f['id']} ({f['check']}): not buildable - {f['note']}. "
+                    "Re-express the SAME claim with a reachable check.")
+        log(f"Capability workbench round {rnd + 1}/{max_rounds}: "
+            f"{len(bad)} unbuildable criterion(s) - re-drafting with numbers.")
+        session.log("## Capability workbench\n" + "\n".join(lines))
+        new_doc, ok = redraft_criteria(
+            client, story, doc, claims, decisions_text,
+            "CAPABILITY CORRECTIONS (the engine cannot build these as "
+            "drafted - fix them using the numbers):\n" + "\n".join(lines),
+            log_fn=log)
+        if not ok:
+            log("Capability workbench re-draft lost coverage - stopping the "
+                "loop and clamping instead.")
+            break
+        doc = new_doc
+    # Deterministic clamp for whatever is still unreachable (one pass).
+    doc, adjustments = snap_criteria(doc, sim_cfg)
+    if adjustments:
+        log(f"Capability snap: {len(adjustments)} target(s) clamped to the "
+            "nearest buildable value (recorded for Gate-1 review).")
+        session.log("## Capability snap (buildable by construction)\n"
+                    + "\n".join(f"- {a['id']}.{a['param']}: {a['from']} -> "
+                                f"{a['to']} ({a['reason']})"
+                                for a in adjustments))
+        session.write_artifact("criteria.json", json.dumps(doc, indent=2))
+    return doc, adjustments
+
+
 def _geometry_corrective(session, client, story, doc, claims, decisions_text,
                          sim_cfg, log, feasibility=True):
     """P5 WP3 / P6 P1.3 / P8: one bounded corrective criteria re-draft for
@@ -544,7 +595,8 @@ def _is_structural_preflight(hard):
 
 def _delivery_attempt(session, client, io, story, doc, claims,
                       decisions_text, spec_notes, log, max_iterations,
-                      max_llm_proposals, use_critic, guidance=""):
+                      max_llm_proposals, use_critic, guidance="",
+                      use_capability=False):
     """One full post-criteria delivery attempt (P7): simulator draft ->
     critic B -> schema lint -> pre-flight calibration -> geometry lint ->
     converge -> structure gate -> deliver.
@@ -607,6 +659,14 @@ def _delivery_attempt(session, client, io, story, doc, claims,
     if sim_cfg is None:
         return {"status": "manual_edit", "session": str(session.root)}, doc, None
 
+    # --- Capability workbench (stage 2/3): give the drafter the engine's
+    # numbers, then clamp what it still misses (bounded; can never loop).
+    if use_capability:
+        doc, cap_adjust = _capability_workbench(
+            session, client, story, doc, claims, decisions_text, sim_cfg, log,
+            max_rounds=3)
+        crit_summary = criteria_summary(doc)
+
     # --- Criteria x config COORDINATE geometry (P8): run BEFORE calibration
     # so a criterion referencing a non-existent unit (e.g. a pseudo-cohort
     # like `segment: core_ex_whales`) is re-drafted as CRITERIA instead of
@@ -655,7 +715,8 @@ def _delivery_attempt(session, client, io, story, doc, claims,
 
 def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
                      spec_notes, log, max_iterations, max_llm_proposals,
-                     use_critic, max_rework_rounds, rework_strategy="classic"):
+                     use_critic, max_rework_rounds, rework_strategy="classic",
+                     use_capability=False):
     """Bounded rework coordinator (P7): run the delivery attempt; when it
     escalates with evidence, ask the LLM judge to route the next attempt
     back to criteria or config drafting. Deterministic guards (coverage vs
@@ -668,7 +729,7 @@ def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
         result, cur_doc, evidence = _delivery_attempt(
             session, client, io, story, cur_doc, claims, decisions_text,
             spec_notes, log, max_iterations, max_llm_proposals, use_critic,
-            guidance=guidance)
+            guidance=guidance, use_capability=use_capability)
         guidance = ""
         if result.get("status") in ("converged", "delivered_unaccepted",
                                     "manual_edit"):
@@ -760,7 +821,7 @@ def _delivery_rework(session, client, io, story, doc, claims, decisions_text,
 def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
                   max_iterations=10, max_llm_proposals=8, use_personas=True,
                   use_critic=True, max_rework_rounds=0,
-                  rework_strategy="classic"):
+                  rework_strategy="classic", use_capability=False):
     """Fresh-story flow: pre-check, Gate 1, personas+draft, then the
     delivery tail wrapped in the bounded rework coordinator (P7)."""
     # --- Pre-check ---
@@ -932,7 +993,8 @@ def _run_pipeline(session, client, io, story, log, fresh_criteria=True,
     return _delivery_rework(session, client, io, story, doc, claims,
                             decisions_text, spec_notes, log,
                             max_iterations, max_llm_proposals,
-                            use_critic, max_rework_rounds, rework_strategy)
+                            use_critic, max_rework_rounds, rework_strategy,
+                            use_capability)
 
 
 def run_validation_final(summary, criteria_path):

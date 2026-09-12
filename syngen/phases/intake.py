@@ -320,13 +320,14 @@ def draft_criteria(client, story, decisions_text="", criteria_path=None,
     injects an empty guide so the draft is measured without it.
     """
     taxonomy = _pack_taxonomy()
+    from syngen.capability import capability_sheet
     system = load_prompt(
         "decompose",
         user_decisions=decisions_text or "none",
         story=story,
         check_catalog=taxonomy.check_catalog(),
         check_names=taxonomy.check_names(),
-        authoring_guide=(taxonomy.authoring_guide() if use_skills else ""),
+        capability_sheet=(capability_sheet() if use_skills else ""),
     )
     doc = chat_json(client, "decompose", system, "Produce the criteria JSON now.")
 

@@ -45,11 +45,13 @@ def test_usage_totals_defaults_to_zero():
 
 
 def test_draft_criteria_skills_toggle_changes_prompt():
+    """use_skills now injects the numeric CAPABILITY SHEET (the rulebook was
+    replaced): present when on, absent when off."""
     for use_skills, expected in ((True, True), (False, False)):
         client = FakeLLM([llm_json(CRITERIA)])
         draft_criteria(client, "story", "", use_skills=use_skills)
         system = client.calls[-1]["system"]
-        assert ("SCOPE ONLY REAL UNITS" in system) is expected
+        assert ("CAPABILITY SHEET" in system) is expected
 
 
 # --- step 2: criteria probe --------------------------------------------------

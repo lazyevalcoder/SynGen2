@@ -63,7 +63,8 @@ def _session_for_slug(sessions_dir, slug):
 
 def run_fly(story, client, sessions_dir="sessions", slug=None,
             max_iterations=10, max_llm_proposals=8, use_critic=True,
-            max_rework_rounds=2):
+            max_rework_rounds=2, rework_strategy="classic",
+            use_capability=False):
     """Fly one story end-to-end without human input. Returns the report.
 
     The report ALWAYS contains: status ('converged' | 'escalated' |
@@ -83,7 +84,9 @@ def run_fly(story, client, sessions_dir="sessions", slug=None,
                                max_iterations=max_iterations,
                                max_llm_proposals=max_llm_proposals,
                                use_critic=use_critic,
-                               max_rework_rounds=max_rework_rounds)
+                               max_rework_rounds=max_rework_rounds,
+                               rework_strategy=rework_strategy,
+                               use_capability=use_capability)
     except Exception as e:  # noqa: BLE001 - the harness must ALWAYS emit a
         # report; a crash mid-flight is itself a finding for maintenance
         # F8.2: the Session is created before any LLM traffic, so even a

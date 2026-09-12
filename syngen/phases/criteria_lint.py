@@ -348,7 +348,10 @@ def _feasibility_findings(cfg, criteria_doc):
         tier = p.get("tier")
         if cap is None or tier not in count_shares:
             continue
-        est = avg_deal * float(mult.get(tier, 1.0)) / denom
+        from syngen.packs.revops.envelope import avg_price_by_tier
+        est = avg_price_by_tier(cfg, tier)
+        if est is None:
+            continue
         if est > 2.0 * float(cap):
             findings.append(
                 f"{c['id']}: avg realized price cap ${float(cap):,.0f} for "
@@ -401,7 +404,7 @@ def _tier_share_feasibility(cfg, criteria_doc, mult, count_shares):
     tiers = list(count_shares)
     if len(tiers) < 2:
         return []
-    floor = 0.05  # other tiers must retain a residual presence
+    from syngen.packs.revops.envelope import tier_share_ceiling
     findings = []
     for c in criteria_doc.get("criteria", []):
         if c["check"] != "tier_share_shift":
@@ -411,11 +414,9 @@ def _tier_share_feasibility(cfg, criteria_doc, mult, count_shares):
         target = p.get("to_share_pct")
         if tier not in count_shares or target is None:
             continue
-        others = [t for t in tiers if t != tier]
-        count_c = max(0.0, 1.0 - floor * len(others))
-        denom = count_c * float(mult.get(tier, 1.0)) + \
-            sum(floor * float(mult.get(t, 1.0)) for t in others)
-        ceiling = count_c * float(mult.get(tier, 1.0)) / denom * 100.0
+        ceiling = tier_share_ceiling(count_shares, mult, tier)
+        if ceiling is None:
+            continue
         if float(target) > ceiling + 1e-9:
             findings.append(
                 f"{c['id']}: tier_share_shift target {float(target):g}% "

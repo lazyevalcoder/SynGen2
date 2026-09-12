@@ -23,6 +23,9 @@ experiments/skills_ab/
 # Defect-response fixer A/B raw outputs (regenerable)
 experiments/fixer_ab/
 
+# Capability workbench A/B raw outputs (regenerable)
+experiments/capability_ab/
+
 # OS / editor
 Thumbs.db
 .DS_Store
