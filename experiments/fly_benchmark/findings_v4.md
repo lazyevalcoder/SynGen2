@@ -382,3 +382,51 @@ the next batched fix** (2 failures so far; policy waits for >= 4).
 
 Scenario 19's failure is a different class (convergence stall; AC2 -45.05,
 AC3 -160.00).
+
+---
+
+## Addendum 6 - scenarios 13-18 re-fly (2026-09-12): 1/6 landed
+
+Local Ornith-35B, 1 worker (`run_13-18/`).
+
+| Scenario | Result | Iters | Rework | Wall | Calls | In | Out | Total |
+|---|---|---|---|---|---|---|---|---|
+| 13 | LANDED | 1 | 2 | 1025s | 44 | 151,150 | 39,811 | 190,961 |
+| 14 | escalated (stalled) | - | 2 | 1238s | 50 | 192,813 | 46,989 | 239,802 |
+| 15 | escalated (iteration cap 10) | - | 1 | 1179s | 33 | 111,910 | 48,227 | 160,137 |
+| 16 | escalated (structural AC4) | - | 2 | 1166s | 41 | 152,136 | 42,158 | 194,294 |
+| 17 | escalated (criteria_geometry) | - | 2 | 994s | 35 | 113,970 | 42,299 | 156,269 |
+| 18 | escalated (criteria_coverage) | - | 0 | 486s | 11 | 29,544 | 21,475 | 51,019 |
+
+1/6 (17%); the one landing (13) needed **2 criteria reworks**; fleet ~$0.44 at
+Luna rates.
+
+### Common denominator: unreachable targets the preflight does not catch
+4 of the 5 failures (14, 15, 16, 17) are criteria the ENGINE cannot realize.
+The rework judge diagnoses them correctly, but the 2-round budget expires:
+- **15:** `quota_vs_potential` ratio is a **blocked path** (plan-of-record
+  quota + generated potential; attainment knobs cannot move it).
+- **16:** AC3 deal-size -15% (above ceiling); AC5 one-sided elasticity bound;
+  AC4 concentration min 60% unreachable.
+- **17:** headline growth +3% unreachable (raking pins headline to plan); plus
+  a `draft_invalid` (`pipeline.stage_names`).
+- **14:** AC6 engagement-share floor unreachable (-29pp); AC1 forecast and AC4
+  slippage are one-sided bounds the judge calls inert.
+
+The judge's own language: "one-sided ... can pass by overshooting ... violating
+drafting rule 3 and rule 6", and "blocked path". So the range-bound guidance is
+reaching the judge, but the drafter keeps emitting unreachable/one-sided
+targets, and P8 feasibility does not flag them at preflight - they reach the
+convergence loop and exhaust the rework budget.
+
+**18** is a different class: `criteria_coverage` (the criteria do not cover the
+story's computable claims) - terminal, no rework round.
+
+### Candidate batched fix (now >= 4 failures)
+The dominant denominator (14, 15, 16, 17) is a **feasibility gap**. Add
+preflight feasibility ceilings / blocked-path detection for:
+- `quota_vs_potential` (ratio cannot be moved by knobs),
+- headline-growth targets above the raking ceiling,
+- one-sided bounds on overshoot-prone checks (require or auto-bound them),
+so the drafter is corrected BEFORE the loop, not after 10 iterations. Also
+consider raising `max_rework_rounds` (13 needed 2; 14/16/17 exhausted 2).
